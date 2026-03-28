@@ -40,11 +40,7 @@ import {
   type UserInputQuestion,
   ClaudeCodeEffort,
 } from "@t3tools/contracts";
-import {
-  applyClaudePromptEffortPrefix,
-  resolveEffort,
-  trimOrNull,
-} from "@t3tools/shared/model";
+import { applyClaudePromptEffortPrefix, resolveEffort, trimOrNull } from "@t3tools/shared/model";
 import {
   Cause,
   DateTime,
