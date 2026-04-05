@@ -4,6 +4,7 @@ import { type CxOptions, cx } from "class-variance-authority";
 import { twMerge } from "tailwind-merge";
 import * as Random from "effect/Random";
 import * as Effect from "effect/Effect";
+import { resolvePrimaryEnvironmentBootstrapUrl } from "../environmentBootstrap";
 
 export function cn(...inputs: CxOptions) {
   return twMerge(cx(inputs));
@@ -54,7 +55,7 @@ export const resolveServerUrl = (options?: {
 }): string => {
   const rawUrl = firstNonEmptyString(
     options?.url,
-    window.desktopBridge?.getWsUrl(),
+    resolvePrimaryEnvironmentBootstrapUrl(),
     import.meta.env.VITE_WS_URL,
     window.location.origin,
   );

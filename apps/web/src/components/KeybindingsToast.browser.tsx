@@ -2,6 +2,7 @@ import "../index.css";
 
 import {
   DEFAULT_SERVER_SETTINGS,
+  EnvironmentId,
   ORCHESTRATION_WS_METHODS,
   type MessageId,
   type OrchestrationReadModel,
@@ -49,6 +50,13 @@ const wsLink = ws.link(/ws(s)?:\/\/.*/);
 
 function createBaseServerConfig(): ServerConfig {
   return {
+    environment: {
+      environmentId: EnvironmentId.makeUnsafe("environment-local"),
+      label: "Local environment",
+      platform: { os: "darwin" as const, arch: "arm64" as const },
+      serverVersion: "0.0.0-test",
+      capabilities: { repositoryIdentity: true },
+    },
     cwd: "/repo/project",
     keybindingsConfigPath: "/repo/project/.t3code-keybindings.json",
     keybindings: [],
@@ -155,6 +163,13 @@ function buildFixture(): TestFixture {
     snapshot: createMinimalSnapshot(),
     serverConfig: createBaseServerConfig(),
     welcome: {
+      environment: {
+        environmentId: EnvironmentId.makeUnsafe("environment-local"),
+        label: "Local environment",
+        platform: { os: "darwin" as const, arch: "arm64" as const },
+        serverVersion: "0.0.0-test",
+        capabilities: { repositoryIdentity: true },
+      },
       cwd: "/repo/project",
       projectName: "Project",
       bootstrapProjectId: PROJECT_ID,

@@ -38,6 +38,8 @@ import { ProjectionThreadMessage } from "../../persistence/Services/ProjectionTh
 import { ProjectionThreadProposedPlan } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import { ProjectionThreadSession } from "../../persistence/Services/ProjectionThreadSessions.ts";
 import { ProjectionThread } from "../../persistence/Services/ProjectionThreads.ts";
+import { RepositoryIdentityResolverLive } from "../../project/Layers/RepositoryIdentityResolver.ts";
+import { RepositoryIdentityResolver } from "../../project/Services/RepositoryIdentityResolver.ts";
 import { ORCHESTRATION_PROJECTOR_NAMES } from "./ProjectionPipeline.ts";
 import {
   ProjectionSnapshotQuery,
@@ -163,6 +165,8 @@ function toPersistenceSqlOrDecodeError(sqlOperation: string, decodeOperation: st
 
 const makeProjectionSnapshotQuery = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const repositoryIdentityResolver = yield* RepositoryIdentityResolver;
+  const repositoryIdentityResolutionConcurrency = 4;
 
   const listProjectRows = SqlSchema.findAll({
     Request: Schema.Void,
@@ -652,10 +656,22 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             });
           }
 
+          const repositoryIdentities = new Map(
+            yield* Effect.forEach(
+              projectRows,
+              (row) =>
+                repositoryIdentityResolver
+                  .resolve(row.workspaceRoot)
+                  .pipe(Effect.map((identity) => [row.projectId, identity] as const)),
+              { concurrency: repositoryIdentityResolutionConcurrency },
+            ),
+          );
+
           const projects: ReadonlyArray<OrchestrationProject> = projectRows.map((row) => ({
             id: row.projectId,
             title: row.title,
             workspaceRoot: row.workspaceRoot,
+            repositoryIdentity: repositoryIdentities.get(row.projectId) ?? null,
             defaultModelSelection: row.defaultModelSelection,
             scripts: row.scripts,
             createdAt: row.createdAt,
@@ -732,19 +748,25 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             "ProjectionSnapshotQuery.getActiveProjectByWorkspaceRoot:decodeRow",
           ),
         ),
-        Effect.map(
-          Option.map(
-            (row): OrchestrationProject => ({
-              id: row.projectId,
-              title: row.title,
-              workspaceRoot: row.workspaceRoot,
-              defaultModelSelection: row.defaultModelSelection,
-              scripts: row.scripts,
-              createdAt: row.createdAt,
-              updatedAt: row.updatedAt,
-              deletedAt: row.deletedAt,
-            }),
-          ),
+        Effect.map((option) => option),
+        Effect.flatMap((option) =>
+          Option.isNone(option)
+            ? Effect.succeed(Option.none<OrchestrationProject>())
+            : repositoryIdentityResolver.resolve(option.value.workspaceRoot).pipe(
+                Effect.map((repositoryIdentity) =>
+                  Option.some({
+                    id: option.value.projectId,
+                    title: option.value.title,
+                    workspaceRoot: option.value.workspaceRoot,
+                    repositoryIdentity,
+                    defaultModelSelection: option.value.defaultModelSelection,
+                    scripts: option.value.scripts,
+                    createdAt: option.value.createdAt,
+                    updatedAt: option.value.updatedAt,
+                    deletedAt: option.value.deletedAt,
+                  } satisfies OrchestrationProject),
+                ),
+              ),
         ),
       );
 
@@ -816,4 +838,4 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
 export const OrchestrationProjectionSnapshotQueryLive = Layer.effect(
   ProjectionSnapshotQuery,
   makeProjectionSnapshotQuery,
-);
+).pipe(Layer.provideMerge(RepositoryIdentityResolverLive));

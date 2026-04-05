@@ -105,8 +105,14 @@ export interface DesktopUpdateCheckResult {
   state: DesktopUpdateState;
 }
 
+export interface DesktopEnvironmentBootstrap {
+  label: string;
+  wsUrl: string | null;
+}
+
 export interface DesktopBridge {
   getWsUrl: () => string | null;
+  getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;

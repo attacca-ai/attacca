@@ -4,6 +4,7 @@ import "../index.css";
 import {
   EventId,
   ORCHESTRATION_WS_METHODS,
+  EnvironmentId,
   type MessageId,
   type OrchestrationEvent,
   type OrchestrationReadModel,
@@ -128,6 +129,13 @@ function isoAt(offsetSeconds: number): string {
 
 function createBaseServerConfig(): ServerConfig {
   return {
+    environment: {
+      environmentId: EnvironmentId.makeUnsafe("environment-local"),
+      label: "Local environment",
+      platform: { os: "darwin" as const, arch: "arm64" as const },
+      serverVersion: "0.0.0-test",
+      capabilities: { repositoryIdentity: true },
+    },
     cwd: "/repo/project",
     keybindingsConfigPath: "/repo/project/.t3code-keybindings.json",
     keybindings: [],
@@ -313,6 +321,13 @@ function buildFixture(snapshot: OrchestrationReadModel): TestFixture {
     snapshot,
     serverConfig: createBaseServerConfig(),
     welcome: {
+      environment: {
+        environmentId: EnvironmentId.makeUnsafe("environment-local"),
+        label: "Local environment",
+        platform: { os: "darwin" as const, arch: "arm64" as const },
+        serverVersion: "0.0.0-test",
+        capabilities: { repositoryIdentity: true },
+      },
       cwd: "/repo/project",
       projectName: "Project",
       bootstrapProjectId: PROJECT_ID,

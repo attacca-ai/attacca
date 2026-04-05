@@ -1,7 +1,9 @@
 import type {
+  EnvironmentId,
   ModelSelection,
   OrchestrationLatestTurn,
   OrchestrationProposedPlanId,
+  RepositoryIdentity,
   OrchestrationSessionStatus,
   OrchestrationThreadActivity,
   ProjectScript as ContractProjectScript,
@@ -80,8 +82,10 @@ export interface TurnDiffSummary {
 
 export interface Project {
   id: ProjectId;
+  environmentId?: EnvironmentId | null;
   name: string;
   cwd: string;
+  repositoryIdentity?: RepositoryIdentity | null;
   defaultModelSelection: ModelSelection | null;
   createdAt?: string | undefined;
   updatedAt?: string | undefined;
@@ -90,6 +94,7 @@ export interface Project {
 
 export interface Thread {
   id: ThreadId;
+  environmentId?: EnvironmentId | null;
   codexThreadId: string | null;
   projectId: ProjectId;
   title: string;
@@ -134,6 +139,7 @@ export interface ThreadTurnState {
 
 export interface SidebarThreadSummary {
   id: ThreadId;
+  environmentId?: EnvironmentId | null;
   projectId: ProjectId;
   title: string;
   interactionMode: ProviderInteractionMode;

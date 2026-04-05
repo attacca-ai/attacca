@@ -2,6 +2,7 @@ import {
   CommandId,
   DEFAULT_SERVER_SETTINGS,
   type DesktopBridge,
+  EnvironmentId,
   EventId,
   type GitStatusResult,
   ProjectId,
@@ -121,6 +122,7 @@ function getWindowForTest(): Window & typeof globalThis & { desktopBridge?: unkn
 function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
   return {
     getWsUrl: () => null,
+    getLocalEnvironmentBootstrap: () => null,
     pickFolder: async () => null,
     confirm: async () => true,
     setTheme: async () => undefined,
@@ -157,7 +159,21 @@ const defaultProviders: ReadonlyArray<ServerProvider> = [
   },
 ];
 
+const baseEnvironment = {
+  environmentId: EnvironmentId.makeUnsafe("environment-local"),
+  label: "Local environment",
+  platform: {
+    os: "darwin" as const,
+    arch: "arm64" as const,
+  },
+  serverVersion: "0.0.0-test",
+  capabilities: {
+    repositoryIdentity: true,
+  },
+};
+
 const baseServerConfig: ServerConfig = {
+  environment: baseEnvironment,
   cwd: "/tmp/workspace",
   keybindingsConfigPath: "/tmp/workspace/.config/keybindings.json",
   keybindings: [],

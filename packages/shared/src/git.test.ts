@@ -1,7 +1,11 @@
 import type { GitStatusRemoteResult, GitStatusResult } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
-import { applyGitStatusStreamEvent } from "./git";
+import {
+  applyGitStatusStreamEvent,
+  normalizeGitRemoteUrl,
+  parseGitHubRepositoryNameWithOwnerFromRemoteUrl,
+} from "./git";
 
 describe("applyGitStatusStreamEvent", () => {
   it("treats a remote-only update as a repository when local state is missing", () => {
@@ -63,5 +67,30 @@ describe("applyGitStatusStreamEvent", () => {
       behindCount: 1,
       pr: null,
     });
+  });
+});
+
+describe("normalizeGitRemoteUrl", () => {
+  it("canonicalizes equivalent GitHub remotes across protocol variants", () => {
+    expect(normalizeGitRemoteUrl("git@github.com:T3Tools/T3Code.git")).toBe(
+      "github.com/t3tools/t3code",
+    );
+    expect(normalizeGitRemoteUrl("https://github.com/T3Tools/T3Code.git")).toBe(
+      "github.com/t3tools/t3code",
+    );
+    expect(normalizeGitRemoteUrl("ssh://git@github.com/T3Tools/T3Code")).toBe(
+      "github.com/t3tools/t3code",
+    );
+  });
+});
+
+describe("parseGitHubRepositoryNameWithOwnerFromRemoteUrl", () => {
+  it("extracts the owner and repository from common GitHub remote shapes", () => {
+    expect(
+      parseGitHubRepositoryNameWithOwnerFromRemoteUrl("git@github.com:T3Tools/T3Code.git"),
+    ).toBe("T3Tools/T3Code");
+    expect(
+      parseGitHubRepositoryNameWithOwnerFromRemoteUrl("https://github.com/T3Tools/T3Code.git"),
+    ).toBe("T3Tools/T3Code");
   });
 });
