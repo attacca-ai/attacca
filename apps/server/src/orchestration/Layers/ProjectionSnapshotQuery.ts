@@ -748,7 +748,6 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             "ProjectionSnapshotQuery.getActiveProjectByWorkspaceRoot:decodeRow",
           ),
         ),
-        Effect.map((option) => option),
         Effect.flatMap((option) =>
           Option.isNone(option)
             ? Effect.succeed(Option.none<OrchestrationProject>())

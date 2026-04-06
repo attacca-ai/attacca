@@ -2603,6 +2603,79 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("enriches replayed project events only once before streaming them to subscribers", () =>
+    Effect.gen(function* () {
+      let resolveCalls = 0;
+      const repositoryIdentity = {
+        canonicalKey: "github.com/t3tools/t3code",
+        locator: {
+          source: "git-remote" as const,
+          remoteName: "origin",
+          remoteUrl: "git@github.com:t3tools/t3code.git",
+        },
+        displayName: "t3tools/t3code",
+        provider: "github" as const,
+        owner: "t3tools",
+        name: "t3code",
+      };
+
+      yield* buildAppUnderTest({
+        layers: {
+          orchestrationEngine: {
+            getReadModel: () =>
+              Effect.succeed({
+                ...makeDefaultOrchestrationReadModel(),
+                snapshotSequence: 0,
+              }),
+            readEvents: () =>
+              Stream.make({
+                sequence: 1,
+                eventId: EventId.makeUnsafe("event-1"),
+                aggregateKind: "project",
+                aggregateId: defaultProjectId,
+                occurredAt: "2026-04-06T00:00:00.000Z",
+                commandId: null,
+                causationEventId: null,
+                correlationId: null,
+                metadata: {},
+                type: "project.meta-updated",
+                payload: {
+                  projectId: defaultProjectId,
+                  title: "Replayed Project",
+                  updatedAt: "2026-04-06T00:00:00.000Z",
+                },
+              } satisfies Extract<OrchestrationEvent, { type: "project.meta-updated" }>),
+            streamDomainEvents: Stream.empty,
+          },
+          repositoryIdentityResolver: {
+            resolve: () => {
+              resolveCalls += 1;
+              return Effect.succeed(repositoryIdentity);
+            },
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const events = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.subscribeOrchestrationDomainEvents]({}).pipe(
+            Stream.take(1),
+            Stream.runCollect,
+          ),
+        ),
+      );
+
+      const event = Array.from(events)[0];
+      assert.equal(resolveCalls, 1);
+      assert.equal(event?.type, "project.meta-updated");
+      assert.deepEqual(
+        event && event.type === "project.meta-updated" ? event.payload.repositoryIdentity : null,
+        repositoryIdentity,
+      );
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("enriches subscribed project meta updates with repository identity metadata", () =>
     Effect.gen(function* () {
       const repositoryIdentity = {

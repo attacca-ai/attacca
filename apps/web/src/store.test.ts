@@ -14,8 +14,14 @@ import { describe, expect, it } from "vitest";
 import {
   applyOrchestrationEvent,
   applyOrchestrationEvents,
+<<<<<<< HEAD
   selectProjects,
   selectThreads,
+=======
+  getProjectScopedId,
+  getThreadScopedId,
+  selectThreadIdsByProjectId,
+>>>>>>> 2540f09bb (Treat explicit null environments distinctly)
   syncServerReadModel,
   type AppState,
 } from "./store";
@@ -405,6 +411,56 @@ describe("store read model sync", () => {
     const next = syncServerReadModel(initialState, readModel);
 
     expect(projectsOf(next).map((project) => project.id)).toEqual([project1, project2, project3]);
+  });
+
+  it("treats an explicit null environment as distinct from the active environment", () => {
+    const remoteThread = makeThread({
+      id: ThreadId.makeUnsafe("thread-remote"),
+      projectId: ProjectId.makeUnsafe("project-remote"),
+      environmentId: remoteEnvironmentId,
+      title: "Remote thread",
+    });
+    const initialState: AppState = {
+      ...makeState(remoteThread),
+      activeEnvironmentId: remoteEnvironmentId,
+    };
+
+    const next = syncServerReadModel(
+      initialState,
+      makeReadModel(
+        makeReadModelThread({
+          id: ThreadId.makeUnsafe("thread-null-environment"),
+          title: "Null environment thread",
+        }),
+      ),
+      null,
+    );
+
+    expect(next.threads).toHaveLength(2);
+    expect(next.threads.find((thread) => thread.environmentId === remoteEnvironmentId)?.title).toBe(
+      "Remote thread",
+    );
+    expect(next.threads.find((thread) => thread.environmentId === null)?.title).toBe(
+      "Null environment thread",
+    );
+  });
+
+  it("returns a stable thread id array for unchanged project thread inputs", () => {
+    const projectId = ProjectId.makeUnsafe("project-1");
+    const syncedState = syncServerReadModel(
+      makeState(makeThread()),
+      makeReadModel(makeReadModelThread({ projectId })),
+      localEnvironmentId,
+    );
+    const selectThreadIds = selectThreadIdsByProjectId(projectId);
+
+    const first = selectThreadIds(syncedState);
+    const second = selectThreadIds({
+      ...syncedState,
+      bootstrapComplete: false,
+    });
+
+    expect(first).toBe(second);
   });
 });
 

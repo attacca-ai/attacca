@@ -509,7 +509,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
               Effect.catch(() => Effect.succeed([] as Array<OrchestrationEvent>)),
             );
             const replayStream = Stream.fromIterable(replayEvents);
-            const source = Stream.merge(replayStream, orchestrationEngine.streamDomainEvents);
+            const liveStream = orchestrationEngine.streamDomainEvents.pipe(
+              Stream.mapEffect(enrichProjectEvent),
+            );
+            const source = Stream.merge(replayStream, liveStream);
             type SequenceState = {
               readonly nextSequence: number;
               readonly pendingBySequence: Map<number, OrchestrationEvent>;
@@ -521,43 +524,33 @@ const WsRpcLayer = WsRpcGroup.toLayer(
 
             return source.pipe(
               Stream.mapEffect((event) =>
-                enrichProjectEvent(event).pipe(
-                  Effect.flatMap((enrichedEvent) =>
-                    Ref.modify(
-                      state,
-                      ({
-                        nextSequence,
-                        pendingBySequence,
-                      }): [Array<OrchestrationEvent>, SequenceState] => {
-                        if (
-                          enrichedEvent.sequence < nextSequence ||
-                          pendingBySequence.has(enrichedEvent.sequence)
-                        ) {
-                          return [[], { nextSequence, pendingBySequence }];
-                        }
+                Ref.modify(
+                  state,
+                  ({
+                    nextSequence,
+                    pendingBySequence,
+                  }): [Array<OrchestrationEvent>, SequenceState] => {
+                    if (event.sequence < nextSequence || pendingBySequence.has(event.sequence)) {
+                      return [[], { nextSequence, pendingBySequence }];
+                    }
 
-                        const updatedPending = new Map(pendingBySequence);
-                        updatedPending.set(enrichedEvent.sequence, enrichedEvent);
+                    const updatedPending = new Map(pendingBySequence);
+                    updatedPending.set(event.sequence, event);
 
-                        const emit: Array<OrchestrationEvent> = [];
-                        let expected = nextSequence;
-                        for (;;) {
-                          const expectedEvent = updatedPending.get(expected);
-                          if (!expectedEvent) {
-                            break;
-                          }
-                          emit.push(expectedEvent);
-                          updatedPending.delete(expected);
-                          expected += 1;
-                        }
+                    const emit: Array<OrchestrationEvent> = [];
+                    let expected = nextSequence;
+                    for (;;) {
+                      const expectedEvent = updatedPending.get(expected);
+                      if (!expectedEvent) {
+                        break;
+                      }
+                      emit.push(expectedEvent);
+                      updatedPending.delete(expected);
+                      expected += 1;
+                    }
 
-                        return [
-                          emit,
-                          { nextSequence: expected, pendingBySequence: updatedPending },
-                        ];
-                      },
-                    ),
-                  ),
+                    return [emit, { nextSequence: expected, pendingBySequence: updatedPending }];
+                  },
                 ),
               ),
               Stream.flatMap((events) => Stream.fromIterable(events)),

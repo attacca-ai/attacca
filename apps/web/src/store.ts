@@ -947,6 +947,7 @@ function buildThreadState(
   const turnDiffSummaryByThreadId: Record<ThreadId, Record<TurnId, TurnDiffSummary>> = {};
   const sidebarThreadSummaryById: Record<ThreadId, SidebarThreadSummary> = {};
 
+<<<<<<< HEAD
   for (const thread of threads) {
     threadIds.push(thread.id);
     threadIdsByProjectId[thread.projectId] = [
@@ -987,6 +988,13 @@ function buildThreadState(
     turnDiffSummaryByThreadId,
     sidebarThreadSummaryById,
   };
+=======
+function resolveTargetEnvironmentId(
+  state: AppState,
+  environmentId?: EnvironmentId | null,
+): EnvironmentId | null {
+  return environmentId !== undefined ? environmentId : (state.activeEnvironmentId ?? null);
+>>>>>>> 2540f09bb (Treat explicit null environments distinctly)
 }
 
 export function syncServerReadModel(state: AppState, readModel: OrchestrationReadModel): AppState {
@@ -1501,11 +1509,60 @@ export const selectThreadById =
 export const selectSidebarThreadSummaryById =
   (threadId: ThreadId | null | undefined) =>
   (state: AppState): SidebarThreadSummary | undefined =>
+<<<<<<< HEAD
     threadId ? state.sidebarThreadSummaryById[threadId] : undefined;
 export const selectThreadIdsByProjectId =
   (projectId: ProjectId | null | undefined) =>
   (state: AppState): ThreadId[] =>
     projectId ? (state.threadIdsByProjectId[projectId] ?? EMPTY_THREAD_IDS) : EMPTY_THREAD_IDS;
+=======
+    threadId
+      ? state.sidebarThreadsByScopedId[
+          getThreadScopedId({
+            environmentId: state.activeEnvironmentId,
+            id: threadId,
+          })
+        ]
+      : undefined;
+
+export const selectThreadIdsByProjectId = (projectId: ProjectId | null | undefined) => {
+  let cachedProjectScopedId: string | null = null;
+  let cachedScopedIds: string[] | undefined;
+  let cachedSidebarThreadsByScopedId: Record<string, SidebarThreadSummary> | undefined;
+  let cachedResult: ThreadId[] = EMPTY_THREAD_IDS;
+
+  return (state: AppState): ThreadId[] => {
+    if (!projectId) {
+      return EMPTY_THREAD_IDS;
+    }
+
+    const projectScopedId = getProjectScopedId({
+      environmentId: state.activeEnvironmentId,
+      id: projectId,
+    });
+    const scopedIds = state.threadScopedIdsByProjectScopedId[projectScopedId] ?? EMPTY_SCOPED_IDS;
+    const sidebarThreadsByScopedId = state.sidebarThreadsByScopedId;
+
+    if (
+      cachedProjectScopedId === projectScopedId &&
+      cachedScopedIds === scopedIds &&
+      cachedSidebarThreadsByScopedId === sidebarThreadsByScopedId
+    ) {
+      return cachedResult;
+    }
+
+    const result = scopedIds
+      .map((scopedId) => sidebarThreadsByScopedId[scopedId]?.id ?? null)
+      .filter((threadId): threadId is ThreadId => threadId !== null);
+
+    cachedProjectScopedId = projectScopedId;
+    cachedScopedIds = scopedIds;
+    cachedSidebarThreadsByScopedId = sidebarThreadsByScopedId;
+    cachedResult = result;
+    return result;
+  };
+};
+>>>>>>> 2540f09bb (Treat explicit null environments distinctly)
 
 export function setError(state: AppState, threadId: ThreadId, error: string | null): AppState {
   return updateThreadState(state, threadId, (thread) => {
