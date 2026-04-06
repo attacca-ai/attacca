@@ -23,11 +23,10 @@ import { Throttler } from "@tanstack/react-pacer";
 
 import { APP_DISPLAY_NAME } from "../branding";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
-import { BootShell } from "../components/BootShell";
+import { SplashScreen } from "../components/SplashScreen";
 import {
   SlowRpcAckToastCoordinator,
   WebSocketConnectionCoordinator,
-  WebSocketConnectionSurface,
 } from "../components/WebSocketConnectionSurface";
 import { Button } from "../components/ui/button";
 import { AnchoredToastProvider, ToastProvider, toastManager } from "../components/ui/toast";
@@ -80,7 +79,6 @@ export const Route = createRootRouteWithContext<{
   }),
   component: RootRouteView,
   errorComponent: RootRouteErrorView,
-  pendingComponent: RootRoutePendingView,
   head: () => ({
     meta: [{ name: "title", content: APP_DISPLAY_NAME }],
   }),
@@ -88,6 +86,7 @@ export const Route = createRootRouteWithContext<{
 
 function RootRouteView() {
   const pathname = useLocation({ select: (location) => location.pathname });
+  const bootstrapComplete = useStore((store) => store.bootstrapComplete);
   const { authGateState } = Route.useRouteContext();
 
   if (pathname === "/pair") {
@@ -97,11 +96,6 @@ function RootRouteView() {
   if (authGateState.status !== "authenticated") {
     return <Outlet />;
   }
-
-  if (!readLocalApi()) {
-    return <RootRoutePendingView />;
-  }
-
   return (
     <ToastProvider>
       <AnchoredToastProvider>
@@ -110,23 +104,15 @@ function RootRouteView() {
         <EventRouter />
         <WebSocketConnectionCoordinator />
         <SlowRpcAckToastCoordinator />
-        <WebSocketConnectionSurface>
+        {bootstrapComplete ? (
           <AppSidebarLayout>
             <Outlet />
           </AppSidebarLayout>
-        </WebSocketConnectionSurface>
+        ) : (
+          <SplashScreen />
+        )}
       </AnchoredToastProvider>
     </ToastProvider>
-  );
-}
-
-function RootRoutePendingView() {
-  return (
-    <BootShell
-      eyebrow="Starting Session"
-      title={`Connecting to ${APP_DISPLAY_NAME}`}
-      copy={`Opening the WebSocket connection to the ${APP_DISPLAY_NAME} server and waiting for the initial config snapshot.`}
-    />
   );
 }
 
