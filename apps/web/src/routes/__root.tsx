@@ -611,11 +611,7 @@ function EventRouter() {
         return;
       }
       const thread = selectThreadById(ThreadId.makeUnsafe(event.threadId))(useStore.getState());
-      if (
-        thread &&
-        thread.environmentId === currentEnvironmentId &&
-        thread.archivedAt !== null
-      ) {
+      if (thread && thread.environmentId === currentEnvironmentId && thread.archivedAt !== null) {
         return;
       }
       applyTerminalEvent(event);

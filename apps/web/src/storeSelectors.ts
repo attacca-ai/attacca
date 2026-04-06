@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { type MessageId, type ProjectId, type ThreadId, type TurnId } from "@t3tools/contracts";
 import { type AppState } from "./store";
 import {
@@ -11,12 +10,6 @@ import {
   type ThreadTurnState,
   type TurnDiffSummary,
 } from "./types";
-=======
-import { type ThreadId } from "@t3tools/contracts";
-import { useMemo } from "react";
-import { selectProjectById, selectThreadById, useStore } from "./store";
-import { type Project, type Thread } from "./types";
->>>>>>> 412c520d1 (Preserve remote scoped state across snapshot syncs)
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
 const EMPTY_ACTIVITIES: Thread["activities"] = [];
@@ -42,7 +35,6 @@ export function createProjectSelector(
 ): (state: AppState) => Project | undefined {
   return (state) => (projectId ? state.projectById[projectId] : undefined);
 }
-<<<<<<< HEAD
 
 export function createSidebarThreadSummarySelector(
   threadId: ThreadId | null | undefined,
@@ -152,5 +144,3 @@ export function createThreadSelector(
     return previousThread;
   };
 }
-=======
->>>>>>> 412c520d1 (Preserve remote scoped state across snapshot syncs)

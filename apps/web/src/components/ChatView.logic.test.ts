@@ -212,10 +212,12 @@ const makeThread = (input?: {
 function setStoreThreads(threads: ReadonlyArray<ReturnType<typeof makeThread>>) {
   const projectId = ProjectId.makeUnsafe("project-1");
   useStore.setState({
+    activeEnvironmentId: localEnvironmentId,
     projectIds: [projectId],
     projectById: {
       [projectId]: {
         id: projectId,
+        environmentId: localEnvironmentId,
         name: "Project",
         cwd: "/tmp/project",
         defaultModelSelection: {
@@ -236,6 +238,7 @@ function setStoreThreads(threads: ReadonlyArray<ReturnType<typeof makeThread>>) 
         thread.id,
         {
           id: thread.id,
+          environmentId: thread.environmentId,
           codexThreadId: thread.codexThreadId,
           projectId: thread.projectId,
           title: thread.title,
@@ -304,6 +307,7 @@ function setStoreThreads(threads: ReadonlyArray<ReturnType<typeof makeThread>>) 
     ),
     sidebarThreadSummaryById: {},
     bootstrapComplete: true,
+    environmentStateById: {},
   });
 }
 
