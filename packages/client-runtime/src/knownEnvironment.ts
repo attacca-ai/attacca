@@ -1,4 +1,4 @@
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, ExecutionEnvironmentDescriptor } from "@t3tools/contracts";
 
 export interface KnownEnvironmentConnectionTarget {
   readonly type: "ws";
@@ -36,4 +36,36 @@ export function getKnownEnvironmentBaseUrl(
   environment: KnownEnvironment | null | undefined,
 ): string | null {
   return environment?.target.wsUrl ?? null;
+}
+
+export function getKnownEnvironmentHttpBaseUrl(
+  environment: KnownEnvironment | null | undefined,
+): string | null {
+  const baseUrl = getKnownEnvironmentBaseUrl(environment);
+  if (!baseUrl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(baseUrl);
+    if (url.protocol === "ws:") {
+      url.protocol = "http:";
+    } else if (url.protocol === "wss:") {
+      url.protocol = "https:";
+    }
+    return url.toString();
+  } catch {
+    return baseUrl;
+  }
+}
+
+export function attachEnvironmentDescriptor(
+  environment: KnownEnvironment,
+  descriptor: ExecutionEnvironmentDescriptor,
+): KnownEnvironment {
+  return {
+    ...environment,
+    environmentId: descriptor.environmentId,
+    label: descriptor.label,
+  };
 }
