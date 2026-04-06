@@ -388,8 +388,22 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
         yield* Effect.logInfo("Authentication required. Open T3 Code using the pairing URL.", {
           pairingUrl,
         });
+        if (!serverConfig.noBrowser) {
+          const { openBrowser } = yield* Open;
+          yield* runStartupPhase(
+            "browser.open",
+            openBrowser(pairingUrl).pipe(
+              Effect.catch(() =>
+                Effect.logInfo("browser auto-open unavailable", {
+                  hint: `Open ${pairingUrl} in your browser.`,
+                }),
+              ),
+            ),
+          );
+        }
+      } else {
+        yield* runStartupPhase("browser.open", maybeOpenBrowser);
       }
-      yield* runStartupPhase("browser.open", maybeOpenBrowser);
       yield* Effect.logDebug("startup phase: complete");
     }),
   );
