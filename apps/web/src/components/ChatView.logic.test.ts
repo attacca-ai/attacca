@@ -1,4 +1,4 @@
-import { ProjectId, ThreadId, TurnId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, ThreadId, TurnId } from "@t3tools/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useStore } from "../store";
 import { type Thread } from "../types";
@@ -12,6 +12,8 @@ import {
   reconcileMountedTerminalThreadIds,
   waitForStartedServerThread,
 } from "./ChatView.logic";
+
+const localEnvironmentId = EnvironmentId.makeUnsafe("environment-local");
 
 describe("deriveComposerSendState", () => {
   it("treats expired terminal pills as non-sendable content", () => {
@@ -181,6 +183,7 @@ const makeThread = (input?: {
   } | null;
 }): Thread => ({
   id: input?.id ?? ThreadId.makeUnsafe("thread-1"),
+  environmentId: localEnvironmentId,
   codexThreadId: null,
   projectId: ProjectId.makeUnsafe("project-1"),
   title: "Thread",
@@ -414,6 +417,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
   it("does not clear local dispatch before server state changes", () => {
     const localDispatch = createLocalDispatchSnapshot({
       id: ThreadId.makeUnsafe("thread-1"),
+      environmentId: localEnvironmentId,
       codexThreadId: null,
       projectId,
       title: "Thread",
@@ -450,6 +454,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
   it("clears local dispatch when a new turn is already settled", () => {
     const localDispatch = createLocalDispatchSnapshot({
       id: ThreadId.makeUnsafe("thread-1"),
+      environmentId: localEnvironmentId,
       codexThreadId: null,
       projectId,
       title: "Thread",
@@ -495,6 +500,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
   it("clears local dispatch when the session changes without an observed running phase", () => {
     const localDispatch = createLocalDispatchSnapshot({
       id: ThreadId.makeUnsafe("thread-1"),
+      environmentId: localEnvironmentId,
       codexThreadId: null,
       projectId,
       title: "Thread",

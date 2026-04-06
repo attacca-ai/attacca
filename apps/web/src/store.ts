@@ -1,4 +1,5 @@
 import {
+  type EnvironmentId,
   type MessageId,
   type OrchestrationCheckpointSummary,
   type OrchestrationEvent,
@@ -35,7 +36,7 @@ import {
 } from "./types";
 import { sanitizeThreadErrorMessage } from "./rpc/transportError";
 
-export interface AppState {
+export interface EnvironmentState {
   projectIds: ProjectId[];
   projectById: Record<ProjectId, Project>;
   threadIds: ThreadId[];
@@ -55,7 +56,12 @@ export interface AppState {
   bootstrapComplete: boolean;
 }
 
-const initialState: AppState = {
+export interface AppState extends EnvironmentState {
+  activeEnvironmentId: EnvironmentId | null;
+  environmentStateById: Record<string, EnvironmentState>;
+}
+
+const initialEnvironmentState: EnvironmentState = {
   projectIds: [],
   projectById: {},
   threadIds: [],
@@ -73,6 +79,12 @@ const initialState: AppState = {
   turnDiffSummaryByThreadId: {},
   sidebarThreadSummaryById: {},
   bootstrapComplete: false,
+};
+
+const initialState: AppState = {
+  activeEnvironmentId: null,
+  environmentStateById: {},
+  ...initialEnvironmentState,
 };
 
 const MAX_THREAD_MESSAGES = 2_000;
@@ -169,9 +181,13 @@ function mapTurnDiffSummary(checkpoint: OrchestrationCheckpointSummary): TurnDif
   };
 }
 
-function mapProject(project: OrchestrationReadModel["projects"][number]): Project {
+function mapProject(
+  project: OrchestrationReadModel["projects"][number],
+  environmentId: EnvironmentId,
+): Project {
   return {
     id: project.id,
+    environmentId,
     name: project.title,
     cwd: project.workspaceRoot,
     defaultModelSelection: project.defaultModelSelection
@@ -183,9 +199,10 @@ function mapProject(project: OrchestrationReadModel["projects"][number]): Projec
   };
 }
 
-function mapThread(thread: OrchestrationThread): Thread {
+function mapThread(thread: OrchestrationThread, environmentId: EnvironmentId): Thread {
   return {
     id: thread.id,
+    environmentId,
     codexThreadId: null,
     projectId: thread.projectId,
     title: thread.title,
@@ -211,6 +228,7 @@ function mapThread(thread: OrchestrationThread): Thread {
 function toThreadShell(thread: Thread): ThreadShell {
   return {
     id: thread.id,
+    environmentId: thread.environmentId,
     codexThreadId: thread.codexThreadId,
     projectId: thread.projectId,
     title: thread.title,
@@ -251,6 +269,7 @@ function getLatestUserMessageAt(messages: ReadonlyArray<ChatMessage>): string | 
 function buildSidebarThreadSummary(thread: Thread): SidebarThreadSummary {
   return {
     id: thread.id,
+    environmentId: thread.environmentId,
     projectId: thread.projectId,
     title: thread.title,
     interactionMode: thread.interactionMode,
@@ -298,6 +317,7 @@ function threadShellsEqual(left: ThreadShell | undefined, right: ThreadShell): b
   return (
     left !== undefined &&
     left.id === right.id &&
+    left.environmentId === right.environmentId &&
     left.codexThreadId === right.codexThreadId &&
     left.projectId === right.projectId &&
     left.title === right.title &&
@@ -377,7 +397,7 @@ function buildTurnDiffSlice(thread: Thread): {
   };
 }
 
-function selectThreadMessages(state: AppState, threadId: ThreadId): ChatMessage[] {
+function selectThreadMessages(state: EnvironmentState, threadId: ThreadId): ChatMessage[] {
   const ids = state.messageIdsByThreadId[threadId] ?? EMPTY_MESSAGE_IDS;
   const byId = state.messageByThreadId[threadId] ?? EMPTY_MESSAGE_MAP;
   if (ids.length === 0) {
@@ -390,7 +410,7 @@ function selectThreadMessages(state: AppState, threadId: ThreadId): ChatMessage[
 }
 
 function selectThreadActivities(
-  state: AppState,
+  state: EnvironmentState,
   threadId: ThreadId,
 ): OrchestrationThreadActivity[] {
   const ids = state.activityIdsByThreadId[threadId] ?? EMPTY_ACTIVITY_IDS;
@@ -404,7 +424,7 @@ function selectThreadActivities(
   });
 }
 
-function selectThreadProposedPlans(state: AppState, threadId: ThreadId): ProposedPlan[] {
+function selectThreadProposedPlans(state: EnvironmentState, threadId: ThreadId): ProposedPlan[] {
   const ids = state.proposedPlanIdsByThreadId[threadId] ?? EMPTY_PROPOSED_PLAN_IDS;
   const byId = state.proposedPlanByThreadId[threadId] ?? EMPTY_PROPOSED_PLAN_MAP;
   if (ids.length === 0) {
@@ -416,7 +436,10 @@ function selectThreadProposedPlans(state: AppState, threadId: ThreadId): Propose
   });
 }
 
-function selectThreadTurnDiffSummaries(state: AppState, threadId: ThreadId): TurnDiffSummary[] {
+function selectThreadTurnDiffSummaries(
+  state: EnvironmentState,
+  threadId: ThreadId,
+): TurnDiffSummary[] {
   const ids = state.turnDiffIdsByThreadId[threadId] ?? EMPTY_TURN_IDS;
   const byId = state.turnDiffSummaryByThreadId[threadId] ?? EMPTY_TURN_DIFF_MAP;
   if (ids.length === 0) {
@@ -428,7 +451,7 @@ function selectThreadTurnDiffSummaries(state: AppState, threadId: ThreadId): Tur
   });
 }
 
-function getThread(state: AppState, threadId: ThreadId): Thread | undefined {
+function getThread(state: EnvironmentState, threadId: ThreadId): Thread | undefined {
   const shell = state.threadShellById[threadId];
   if (!shell) {
     return undefined;
@@ -446,21 +469,25 @@ function getThread(state: AppState, threadId: ThreadId): Thread | undefined {
   };
 }
 
-function getProjects(state: AppState): Project[] {
+function getProjects(state: EnvironmentState): Project[] {
   return state.projectIds.flatMap((projectId) => {
     const project = state.projectById[projectId];
     return project ? [project] : [];
   });
 }
 
-function getThreads(state: AppState): Thread[] {
+function getThreads(state: EnvironmentState): Thread[] {
   return state.threadIds.flatMap((threadId) => {
     const thread = getThread(state, threadId);
     return thread ? [thread] : [];
   });
 }
 
-function writeThreadState(state: AppState, nextThread: Thread, previousThread?: Thread): AppState {
+function writeThreadState(
+  state: EnvironmentState,
+  nextThread: Thread,
+  previousThread?: Thread,
+): EnvironmentState {
   const nextShell = toThreadShell(nextThread);
   const nextTurnState = toThreadTurnState(nextThread);
   const previousShell = state.threadShellById[nextThread.id];
@@ -613,7 +640,7 @@ function writeThreadState(state: AppState, nextThread: Thread, previousThread?: 
   return nextState;
 }
 
-function removeThreadState(state: AppState, threadId: ThreadId): AppState {
+function removeThreadState(state: EnvironmentState, threadId: ThreadId): EnvironmentState {
   const shell = state.threadShellById[threadId];
   if (!shell) {
     return state;
@@ -887,10 +914,10 @@ function attachmentPreviewRoutePath(attachmentId: string): string {
 }
 
 function updateThreadState(
-  state: AppState,
+  state: EnvironmentState,
   threadId: ThreadId,
   updater: (thread: Thread) => Thread,
-): AppState {
+): EnvironmentState {
   const currentThread = getThread(state, threadId);
   if (!currentThread) {
     return state;
@@ -904,7 +931,7 @@ function updateThreadState(
 
 function buildProjectState(
   projects: ReadonlyArray<Project>,
-): Pick<AppState, "projectIds" | "projectById"> {
+): Pick<EnvironmentState, "projectIds" | "projectById"> {
   return {
     projectIds: projects.map((project) => project.id),
     projectById: Object.fromEntries(
@@ -916,7 +943,7 @@ function buildProjectState(
 function buildThreadState(
   threads: ReadonlyArray<Thread>,
 ): Pick<
-  AppState,
+  EnvironmentState,
   | "threadIds"
   | "threadIdsByProjectId"
   | "threadShellById"
@@ -947,7 +974,6 @@ function buildThreadState(
   const turnDiffSummaryByThreadId: Record<ThreadId, Record<TurnId, TurnDiffSummary>> = {};
   const sidebarThreadSummaryById: Record<ThreadId, SidebarThreadSummary> = {};
 
-<<<<<<< HEAD
   for (const thread of threads) {
     threadIds.push(thread.id);
     threadIdsByProjectId[thread.projectId] = [
@@ -988,20 +1014,66 @@ function buildThreadState(
     turnDiffSummaryByThreadId,
     sidebarThreadSummaryById,
   };
-=======
-function resolveTargetEnvironmentId(
-  state: AppState,
-  environmentId?: EnvironmentId | null,
-): EnvironmentId | null {
-  return environmentId !== undefined ? environmentId : (state.activeEnvironmentId ?? null);
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
 }
 
-export function syncServerReadModel(state: AppState, readModel: OrchestrationReadModel): AppState {
+function getStoredEnvironmentState(
+  state: AppState,
+  environmentId: EnvironmentId,
+): EnvironmentState {
+  return state.environmentStateById[environmentId] ?? initialEnvironmentState;
+}
+
+function projectActiveEnvironmentState(input: {
+  activeEnvironmentId: EnvironmentId | null;
+  environmentStateById: Record<string, EnvironmentState>;
+}): AppState {
+  const projectedState =
+    input.activeEnvironmentId === null
+      ? initialEnvironmentState
+      : (input.environmentStateById[input.activeEnvironmentId] ?? initialEnvironmentState);
+
+  return {
+    activeEnvironmentId: input.activeEnvironmentId,
+    environmentStateById: input.environmentStateById,
+    ...projectedState,
+  };
+}
+
+function commitEnvironmentState(
+  state: AppState,
+  environmentId: EnvironmentId,
+  nextEnvironmentState: EnvironmentState,
+): AppState {
+  const currentEnvironmentState = state.environmentStateById[environmentId];
+  const environmentStateById =
+    currentEnvironmentState === nextEnvironmentState
+      ? state.environmentStateById
+      : {
+          ...state.environmentStateById,
+          [environmentId]: nextEnvironmentState,
+        };
+
+  if (environmentStateById === state.environmentStateById) {
+    return state;
+  }
+
+  return projectActiveEnvironmentState({
+    activeEnvironmentId: state.activeEnvironmentId,
+    environmentStateById,
+  });
+}
+
+function syncEnvironmentReadModel(
+  state: EnvironmentState,
+  readModel: OrchestrationReadModel,
+  environmentId: EnvironmentId,
+): EnvironmentState {
   const projects = readModel.projects
     .filter((project) => project.deletedAt === null)
-    .map(mapProject);
-  const threads = readModel.threads.filter((thread) => thread.deletedAt === null).map(mapThread);
+    .map((project) => mapProject(project, environmentId));
+  const threads = readModel.threads
+    .filter((thread) => thread.deletedAt === null)
+    .map((thread) => mapThread(thread, environmentId));
   return {
     ...state,
     ...buildProjectState(projects),
@@ -1010,7 +1082,23 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
   };
 }
 
-export function applyOrchestrationEvent(state: AppState, event: OrchestrationEvent): AppState {
+export function syncServerReadModel(
+  state: AppState,
+  readModel: OrchestrationReadModel,
+  environmentId: EnvironmentId,
+): AppState {
+  return commitEnvironmentState(
+    state,
+    environmentId,
+    syncEnvironmentReadModel(getStoredEnvironmentState(state, environmentId), readModel, environmentId),
+  );
+}
+
+function applyEnvironmentOrchestrationEvent(
+  state: EnvironmentState,
+  event: OrchestrationEvent,
+  environmentId: EnvironmentId,
+): EnvironmentState {
   switch (event.type) {
     case "project.created": {
       const nextProject = mapProject({
@@ -1022,7 +1110,7 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
         createdAt: event.payload.createdAt,
         updatedAt: event.payload.updatedAt,
         deletedAt: null,
-      });
+      }, environmentId);
       const existingProjectId =
         state.projectIds.find(
           (projectId) =>
@@ -1122,7 +1210,7 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
         activities: [],
         checkpoints: [],
         session: null,
-      });
+      }, environmentId);
       return writeThreadState(state, nextThread, previousThread);
     }
 
@@ -1489,11 +1577,17 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
 export function applyOrchestrationEvents(
   state: AppState,
   events: ReadonlyArray<OrchestrationEvent>,
+  environmentId: EnvironmentId,
 ): AppState {
   if (events.length === 0) {
     return state;
   }
-  return events.reduce((nextState, event) => applyOrchestrationEvent(nextState, event), state);
+  const currentEnvironmentState = getStoredEnvironmentState(state, environmentId);
+  const nextEnvironmentState = events.reduce(
+    (nextState, event) => applyEnvironmentOrchestrationEvent(nextState, event, environmentId),
+    currentEnvironmentState,
+  );
+  return commitEnvironmentState(state, environmentId, nextEnvironmentState);
 }
 
 export const selectProjects = (state: AppState): Project[] => getProjects(state);
@@ -1509,65 +1603,55 @@ export const selectThreadById =
 export const selectSidebarThreadSummaryById =
   (threadId: ThreadId | null | undefined) =>
   (state: AppState): SidebarThreadSummary | undefined =>
-<<<<<<< HEAD
     threadId ? state.sidebarThreadSummaryById[threadId] : undefined;
 export const selectThreadIdsByProjectId =
   (projectId: ProjectId | null | undefined) =>
   (state: AppState): ThreadId[] =>
     projectId ? (state.threadIdsByProjectId[projectId] ?? EMPTY_THREAD_IDS) : EMPTY_THREAD_IDS;
-=======
-    threadId
-      ? state.sidebarThreadsByScopedId[
-          getThreadScopedId({
-            environmentId: state.activeEnvironmentId,
-            id: threadId,
-          })
-        ]
-      : undefined;
-
-export const selectThreadIdsByProjectId = (projectId: ProjectId | null | undefined) => {
-  let cachedProjectScopedId: string | null = null;
-  let cachedScopedIds: string[] | undefined;
-  let cachedSidebarThreadsByScopedId: Record<string, SidebarThreadSummary> | undefined;
-  let cachedResult: ThreadId[] = EMPTY_THREAD_IDS;
-
-  return (state: AppState): ThreadId[] => {
-    if (!projectId) {
-      return EMPTY_THREAD_IDS;
-    }
-
-    const projectScopedId = getProjectScopedId({
-      environmentId: state.activeEnvironmentId,
-      id: projectId,
-    });
-    const scopedIds = state.threadScopedIdsByProjectScopedId[projectScopedId] ?? EMPTY_SCOPED_IDS;
-    const sidebarThreadsByScopedId = state.sidebarThreadsByScopedId;
-
-    if (
-      cachedProjectScopedId === projectScopedId &&
-      cachedScopedIds === scopedIds &&
-      cachedSidebarThreadsByScopedId === sidebarThreadsByScopedId
-    ) {
-      return cachedResult;
-    }
-
-    const result = scopedIds
-      .map((scopedId) => sidebarThreadsByScopedId[scopedId]?.id ?? null)
-      .filter((threadId): threadId is ThreadId => threadId !== null);
-
-    cachedProjectScopedId = projectScopedId;
-    cachedScopedIds = scopedIds;
-    cachedSidebarThreadsByScopedId = sidebarThreadsByScopedId;
-    cachedResult = result;
-    return result;
-  };
-};
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
 
 export function setError(state: AppState, threadId: ThreadId, error: string | null): AppState {
-  return updateThreadState(state, threadId, (thread) => {
-    if (thread.error === error) return thread;
-    return { ...thread, error };
+  if (state.activeEnvironmentId === null) {
+    return state;
+  }
+
+  const nextEnvironmentState = updateThreadState(
+    getStoredEnvironmentState(state, state.activeEnvironmentId),
+    threadId,
+    (thread) => {
+      if (thread.error === error) return thread;
+      return { ...thread, error };
+    },
+  );
+  return commitEnvironmentState(state, state.activeEnvironmentId, nextEnvironmentState);
+}
+
+export function applyOrchestrationEvent(
+  state: AppState,
+  event: OrchestrationEvent,
+  environmentId: EnvironmentId,
+): AppState {
+  return commitEnvironmentState(
+    state,
+    environmentId,
+    applyEnvironmentOrchestrationEvent(
+      getStoredEnvironmentState(state, environmentId),
+      event,
+      environmentId,
+    ),
+  );
+}
+
+export function setActiveEnvironmentId(
+  state: AppState,
+  environmentId: EnvironmentId,
+): AppState {
+  if (state.activeEnvironmentId === environmentId) {
+    return state;
+  }
+
+  return projectActiveEnvironmentState({
+    activeEnvironmentId: environmentId,
+    environmentStateById: state.environmentStateById,
   });
 }
 
@@ -1577,31 +1661,49 @@ export function setThreadBranch(
   branch: string | null,
   worktreePath: string | null,
 ): AppState {
-  return updateThreadState(state, threadId, (thread) => {
-    if (thread.branch === branch && thread.worktreePath === worktreePath) return thread;
-    const cwdChanged = thread.worktreePath !== worktreePath;
-    return {
-      ...thread,
-      branch,
-      worktreePath,
-      ...(cwdChanged ? { session: null } : {}),
-    };
-  });
+  if (state.activeEnvironmentId === null) {
+    return state;
+  }
+
+  const nextEnvironmentState = updateThreadState(
+    getStoredEnvironmentState(state, state.activeEnvironmentId),
+    threadId,
+    (thread) => {
+      if (thread.branch === branch && thread.worktreePath === worktreePath) return thread;
+      const cwdChanged = thread.worktreePath !== worktreePath;
+      return {
+        ...thread,
+        branch,
+        worktreePath,
+        ...(cwdChanged ? { session: null } : {}),
+      };
+    },
+  );
+  return commitEnvironmentState(state, state.activeEnvironmentId, nextEnvironmentState);
 }
 
 interface AppStore extends AppState {
-  syncServerReadModel: (readModel: OrchestrationReadModel) => void;
-  applyOrchestrationEvent: (event: OrchestrationEvent) => void;
-  applyOrchestrationEvents: (events: ReadonlyArray<OrchestrationEvent>) => void;
+  setActiveEnvironmentId: (environmentId: EnvironmentId) => void;
+  syncServerReadModel: (readModel: OrchestrationReadModel, environmentId: EnvironmentId) => void;
+  applyOrchestrationEvent: (event: OrchestrationEvent, environmentId: EnvironmentId) => void;
+  applyOrchestrationEvents: (
+    events: ReadonlyArray<OrchestrationEvent>,
+    environmentId: EnvironmentId,
+  ) => void;
   setError: (threadId: ThreadId, error: string | null) => void;
   setThreadBranch: (threadId: ThreadId, branch: string | null, worktreePath: string | null) => void;
 }
 
 export const useStore = create<AppStore>((set) => ({
   ...initialState,
-  syncServerReadModel: (readModel) => set((state) => syncServerReadModel(state, readModel)),
-  applyOrchestrationEvent: (event) => set((state) => applyOrchestrationEvent(state, event)),
-  applyOrchestrationEvents: (events) => set((state) => applyOrchestrationEvents(state, events)),
+  setActiveEnvironmentId: (environmentId) =>
+    set((state) => setActiveEnvironmentId(state, environmentId)),
+  syncServerReadModel: (readModel, environmentId) =>
+    set((state) => syncServerReadModel(state, readModel, environmentId)),
+  applyOrchestrationEvent: (event, environmentId) =>
+    set((state) => applyOrchestrationEvent(state, event, environmentId)),
+  applyOrchestrationEvents: (events, environmentId) =>
+    set((state) => applyOrchestrationEvents(state, events, environmentId)),
   setError: (threadId, error) => set((state) => setError(state, threadId, error)),
   setThreadBranch: (threadId, branch, worktreePath) =>
     set((state) => setThreadBranch(state, threadId, branch, worktreePath)),

@@ -58,11 +58,7 @@ import { isElectron } from "../env";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { isLinuxPlatform, isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
-<<<<<<< HEAD
 import { useStore } from "../store";
-=======
-import { getProjectScopedId, useStore } from "../store";
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { useUiStateStore } from "../uiStateStore";
 import {
@@ -132,11 +128,7 @@ import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "../rpc/serverState";
-<<<<<<< HEAD
 import type { Project } from "../types";
-=======
-import type { Project, SidebarThreadSummary } from "../types";
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
 const THREAD_PREVIEW_LIMIT = 6;
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: "Last user message",
@@ -263,12 +255,8 @@ function resolveThreadPr(
 }
 
 interface SidebarThreadRowProps {
-<<<<<<< HEAD
   threadId: ThreadId;
   projectCwd: string | null;
-=======
-  thread: SidebarThreadSummary;
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
   orderedProjectThreadIds: readonly ThreadId[];
   routeThreadId: ThreadId | null;
   selectedThreadIds: ReadonlySet<ThreadId>;
@@ -291,7 +279,7 @@ interface SidebarThreadRowProps {
   navigateToThread: (threadId: ThreadId) => void;
   handleMultiSelectContextMenu: (position: { x: number; y: number }) => Promise<void>;
   handleThreadContextMenu: (
-    thread: SidebarThreadSummary,
+    threadId: ThreadId,
     position: { x: number; y: number },
   ) => Promise<void>;
   clearSelection: () => void;
@@ -302,19 +290,18 @@ interface SidebarThreadRowProps {
 }
 
 function SidebarThreadRow(props: SidebarThreadRowProps) {
-<<<<<<< HEAD
   const thread = useStore((state) => state.sidebarThreadSummaryById[props.threadId]);
   const lastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[props.threadId]);
-=======
-  const { thread } = props;
-  const lastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[thread.id]);
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
   const runningTerminalIds = useTerminalStateStore(
     (state) =>
-      selectThreadTerminalState(state.terminalStateByThreadId, thread.id).runningTerminalIds,
+      selectThreadTerminalState(state.terminalStateByThreadId, props.threadId).runningTerminalIds,
   );
   const gitCwd = thread?.worktreePath ?? props.projectCwd;
   const gitStatus = useGitStatus(thread?.branch != null ? gitCwd : null);
+
+  if (!thread) {
+    return null;
+  }
 
   const isActive = props.routeThreadId === thread.id;
   const isSelected = props.selectedThreadIds.has(thread.id);
@@ -382,7 +369,7 @@ function SidebarThreadRow(props: SidebarThreadRowProps) {
             if (props.selectedThreadIds.size > 0) {
               props.clearSelection();
             }
-            void props.handleThreadContextMenu(thread, {
+            void props.handleThreadContextMenu(thread.id, {
               x: event.clientX,
               y: event.clientY,
             });
@@ -691,18 +678,10 @@ function SortableProjectItem({
 }
 
 export default function Sidebar() {
-<<<<<<< HEAD
   const projectIds = useStore((store) => store.projectIds);
   const projectById = useStore((store) => store.projectById);
   const sidebarThreadsById = useStore((store) => store.sidebarThreadSummaryById);
   const threadIdsByProjectId = useStore((store) => store.threadIdsByProjectId);
-=======
-  const projects = useStore((store) => store.projects);
-  const sidebarThreadsByScopedId = useStore((store) => store.sidebarThreadsByScopedId);
-  const threadScopedIdsByProjectScopedId = useStore(
-    (store) => store.threadScopedIdsByProjectScopedId,
-  );
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
   const { projectExpandedById, projectOrder, threadLastVisitedAtById } = useUiStateStore(
     useShallow((store) => ({
       projectExpandedById: store.projectExpandedById,
@@ -791,27 +770,6 @@ export default function Sidebar() {
     () => new Map(projects.map((project) => [project.id, project.cwd] as const)),
     [projects],
   );
-<<<<<<< HEAD
-=======
-  const getProjectThreads = useCallback(
-    (project: Pick<(typeof projects)[number], "id" | "environmentId">) =>
-      (
-        threadScopedIdsByProjectScopedId[
-          getProjectScopedId({
-            environmentId: project.environmentId ?? null,
-            id: project.id,
-          })
-        ] ?? []
-      )
-        .map((scopedId) => sidebarThreadsByScopedId[scopedId])
-        .filter((thread): thread is NonNullable<typeof thread> => thread !== undefined),
-    [sidebarThreadsByScopedId, threadScopedIdsByProjectScopedId],
-  );
-  const sidebarThreadById = useMemo(
-    () => new Map(sidebarThreads.map((thread) => [thread.id, thread] as const)),
-    [sidebarThreads],
-  );
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
   const routeTerminalOpen = routeThreadId
     ? selectThreadTerminalState(terminalStateByThreadId, routeThreadId).terminalOpen
     : false;
@@ -1071,15 +1029,11 @@ export default function Sidebar() {
     },
   });
   const handleThreadContextMenu = useCallback(
-    async (thread: SidebarThreadSummary, position: { x: number; y: number }) => {
+    async (threadId: ThreadId, position: { x: number; y: number }) => {
       const api = readNativeApi();
       if (!api) return;
-<<<<<<< HEAD
       const thread = sidebarThreadsById[threadId];
       if (!thread) return;
-=======
-      const threadId = thread.id;
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
       const threadWorkspacePath =
         thread.worktreePath ?? projectCwdById.get(thread.projectId) ?? null;
       const clicked = await api.contextMenu.show(
@@ -1140,12 +1094,8 @@ export default function Sidebar() {
       copyThreadIdToClipboard,
       deleteThread,
       markThreadUnread,
-<<<<<<< HEAD
       projectCwdById,
       sidebarThreadsById,
-=======
-      projectCwdByScopedId,
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
     ],
   );
 
@@ -1167,11 +1117,7 @@ export default function Sidebar() {
 
       if (clicked === "mark-unread") {
         for (const id of ids) {
-<<<<<<< HEAD
           const thread = sidebarThreadsById[id];
-=======
-          const thread = sidebarThreadById.get(id);
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
           markThreadUnread(id, thread?.latestTurn?.completedAt);
         }
         clearSelection();
@@ -1202,12 +1148,8 @@ export default function Sidebar() {
       deleteThread,
       markThreadUnread,
       removeFromSelection,
-      sidebarThreadById,
       selectedThreadIds,
-<<<<<<< HEAD
       sidebarThreadsById,
-=======
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
     ],
   );
 
@@ -1264,15 +1206,11 @@ export default function Sidebar() {
   );
 
   const handleProjectContextMenu = useCallback(
-    async (project: Project, position: { x: number; y: number }) => {
+    async (projectId: ProjectId, position: { x: number; y: number }) => {
       const api = readNativeApi();
       if (!api) return;
-<<<<<<< HEAD
       const project = projects.find((entry) => entry.id === projectId);
       if (!project) return;
-=======
-      const projectId = project.id;
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
 
       const clicked = await api.contextMenu.show(
         [
@@ -1326,12 +1264,8 @@ export default function Sidebar() {
       clearProjectDraftThreadId,
       copyPathToClipboard,
       getDraftThreadByProjectId,
-<<<<<<< HEAD
       projects,
       threadIdsByProjectId,
-=======
-      getProjectThreads,
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
     ],
   );
 
@@ -1469,9 +1403,6 @@ export default function Sidebar() {
           hiddenThreads.map((thread) => resolveProjectThreadStatus(thread)),
         );
         const orderedProjectThreadIds = projectThreads.map((thread) => thread.id);
-        const renderedThreads = pinnedCollapsedThread
-          ? [pinnedCollapsedThread]
-          : visibleProjectThreads;
         const renderedThreadIds = pinnedCollapsedThread
           ? [pinnedCollapsedThread.id]
           : visibleProjectThreads.map((thread) => thread.id);
@@ -1483,7 +1414,6 @@ export default function Sidebar() {
           orderedProjectThreadIds,
           project,
           projectStatus,
-          renderedThreads,
           renderedThreadIds,
           showEmptyThreadState,
           shouldShowThreadPanel,
@@ -1629,7 +1559,7 @@ export default function Sidebar() {
       orderedProjectThreadIds,
       project,
       projectStatus,
-      renderedThreads,
+      renderedThreadIds,
       showEmptyThreadState,
       shouldShowThreadPanel,
       isThreadListExpanded,
@@ -1651,7 +1581,7 @@ export default function Sidebar() {
             onContextMenu={(event) => {
               event.preventDefault();
               suppressProjectClickForContextMenuRef.current = true;
-              void handleProjectContextMenu(project, {
+              void handleProjectContextMenu(project.id, {
                 x: event.clientX,
                 y: event.clientY,
               });
@@ -1757,21 +1687,16 @@ export default function Sidebar() {
             </SidebarMenuSubItem>
           ) : null}
           {shouldShowThreadPanel &&
-            renderedThreads.map((thread) => (
+            renderedThreadIds.map((threadId) => (
               <SidebarThreadRow
-<<<<<<< HEAD
                 key={threadId}
                 threadId={threadId}
                 projectCwd={project.cwd}
-=======
-                key={thread.id}
-                thread={thread}
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
                 orderedProjectThreadIds={orderedProjectThreadIds}
                 routeThreadId={routeThreadId}
                 selectedThreadIds={selectedThreadIds}
                 showThreadJumpHints={showThreadJumpHints}
-                jumpLabel={threadJumpLabelById.get(thread.id) ?? null}
+                jumpLabel={threadJumpLabelById.get(threadId) ?? null}
                 appSettingsConfirmThreadArchive={appSettings.confirmThreadArchive}
                 renamingThreadId={renamingThreadId}
                 renamingTitle={renamingTitle}
@@ -1790,10 +1715,6 @@ export default function Sidebar() {
                 cancelRename={cancelRename}
                 attemptArchiveThread={attemptArchiveThread}
                 openPrLink={openPrLink}
-<<<<<<< HEAD
-=======
-                pr={prByThreadId.get(thread.id) ?? null}
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
               />
             ))}
 

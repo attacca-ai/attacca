@@ -1,4 +1,5 @@
 import {
+  type EnvironmentId,
   OrchestrationEvent,
   type ServerLifecycleWelcomePayload,
   ThreadId,
@@ -201,6 +202,13 @@ function coalesceOrchestrationUiEvents(
 const REPLAY_RECOVERY_RETRY_DELAY_MS = 100;
 const MAX_NO_PROGRESS_REPLAY_RETRIES = 3;
 
+function resolveKnownEnvironmentId(input: {
+  serverConfigEnvironmentId: EnvironmentId | null | undefined;
+  activeEnvironmentId: EnvironmentId | null;
+}): EnvironmentId | null {
+  return input.serverConfigEnvironmentId ?? input.activeEnvironmentId;
+}
+
 function ServerStateBootstrap() {
   useEffect(() => startServerStateSync(getWsRpcClient().server), []);
 
@@ -209,6 +217,7 @@ function ServerStateBootstrap() {
 
 function EventRouter() {
   const applyOrchestrationEvents = useStore((store) => store.applyOrchestrationEvents);
+  const setActiveEnvironmentId = useStore((store) => store.setActiveEnvironmentId);
   const syncServerReadModel = useStore((store) => store.syncServerReadModel);
   const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
   const syncProjects = useUiStateStore((store) => store.syncProjects);
@@ -226,15 +235,26 @@ function EventRouter() {
   const handledBootstrapThreadIdRef = useRef<string | null>(null);
   const seenServerConfigUpdateIdRef = useRef(getServerConfigUpdatedNotification()?.id ?? 0);
   const disposedRef = useRef(false);
-  const bootstrapFromSnapshotRef = useRef<() => Promise<void>>(async () => undefined);
+  const bootstrapFromSnapshotRef = useRef<(environmentId: EnvironmentId) => Promise<void>>(
+    async () => undefined,
+  );
+  const schedulePendingDomainEventFlushRef = useRef<() => void>(() => undefined);
   const serverConfig = useServerConfig();
+  const resolveCurrentEnvironmentId = useEffectEvent((): EnvironmentId | null =>
+    resolveKnownEnvironmentId({
+      serverConfigEnvironmentId: serverConfig?.environment.environmentId,
+      activeEnvironmentId: useStore.getState().activeEnvironmentId,
+    }),
+  );
 
   const handleWelcome = useEffectEvent((payload: ServerLifecycleWelcomePayload | null) => {
     if (!payload) return;
 
+    setActiveEnvironmentId(payload.environment.environmentId);
+    schedulePendingDomainEventFlushRef.current();
     migrateLocalSettingsToServer();
     void (async () => {
-      await bootstrapFromSnapshotRef.current();
+      await bootstrapFromSnapshotRef.current(payload.environment.environmentId);
       if (disposedRef.current) {
         return;
       }
@@ -317,6 +337,15 @@ function EventRouter() {
   );
 
   useEffect(() => {
+    if (!serverConfig) {
+      return;
+    }
+
+    setActiveEnvironmentId(serverConfig.environment.environmentId);
+    schedulePendingDomainEventFlushRef.current();
+  }, [serverConfig, setActiveEnvironmentId]);
+
+  useEffect(() => {
     const api = readNativeApi();
     if (!api) return;
     let disposed = false;
@@ -371,7 +400,10 @@ function EventRouter() {
       },
     );
 
-    const applyEventBatch = (events: ReadonlyArray<OrchestrationEvent>) => {
+    const applyEventBatch = (
+      events: ReadonlyArray<OrchestrationEvent>,
+      environmentId: EnvironmentId,
+    ) => {
       const nextEvents = recovery.markEventBatchApplied(events);
       if (nextEvents.length === 0) {
         return;
@@ -391,7 +423,7 @@ function EventRouter() {
         void queryInvalidationThrottler.maybeExecute();
       }
 
-      applyOrchestrationEvents(uiEvents);
+      applyOrchestrationEvents(uiEvents, environmentId);
       if (needsProjectUiSync) {
         const projects = selectProjects(useStore.getState());
         syncProjects(projects.map((project) => ({ id: project.id, cwd: project.cwd })));
@@ -425,9 +457,13 @@ function EventRouter() {
       if (disposed || pendingDomainEvents.length === 0) {
         return;
       }
+      const currentEnvironmentId = resolveCurrentEnvironmentId();
+      if (currentEnvironmentId === null) {
+        return;
+      }
 
       const events = pendingDomainEvents.splice(0, pendingDomainEvents.length);
-      applyEventBatch(events);
+      applyEventBatch(events, currentEnvironmentId);
     };
     const schedulePendingDomainEventFlush = () => {
       if (flushPendingDomainEventsScheduled) {
@@ -437,6 +473,7 @@ function EventRouter() {
       flushPendingDomainEventsScheduled = true;
       queueMicrotask(flushPendingDomainEvents);
     };
+    schedulePendingDomainEventFlushRef.current = schedulePendingDomainEventFlush;
 
     const runReplayRecovery = async (reason: "sequence-gap" | "resubscribe"): Promise<void> => {
       if (!recovery.beginReplayRecovery(reason)) {
@@ -447,7 +484,13 @@ function EventRouter() {
       try {
         const events = await api.orchestration.replayEvents(fromSequenceExclusive);
         if (!disposed) {
-          applyEventBatch(events);
+          const currentEnvironmentId = resolveCurrentEnvironmentId();
+          if (currentEnvironmentId === null) {
+            replayRetryTracker = null;
+            recovery.failReplayRecovery();
+            return;
+          }
+          applyEventBatch(events, currentEnvironmentId);
         }
       } catch {
         replayRetryTracker = null;
@@ -489,7 +532,10 @@ function EventRouter() {
       }
     };
 
-    const runSnapshotRecovery = async (reason: "bootstrap" | "replay-failed"): Promise<void> => {
+    const runSnapshotRecovery = async (
+      reason: "bootstrap" | "replay-failed",
+      environmentId: EnvironmentId,
+    ): Promise<void> => {
       const started = recovery.beginSnapshotRecovery(reason);
       if (import.meta.env.MODE !== "test") {
         const state = recovery.getState();
@@ -512,7 +558,7 @@ function EventRouter() {
       try {
         const snapshot = await api.orchestration.getSnapshot();
         if (!disposed) {
-          syncServerReadModel(snapshot);
+          syncServerReadModel(snapshot, environmentId);
           reconcileSnapshotDerivedState();
           if (recovery.completeSnapshotRecovery(snapshot.snapshotSequence)) {
             void runReplayRecovery("sequence-gap");
@@ -524,13 +570,17 @@ function EventRouter() {
       }
     };
 
-    const bootstrapFromSnapshot = async (): Promise<void> => {
-      await runSnapshotRecovery("bootstrap");
+    const bootstrapFromSnapshot = async (environmentId: EnvironmentId): Promise<void> => {
+      await runSnapshotRecovery("bootstrap", environmentId);
     };
     bootstrapFromSnapshotRef.current = bootstrapFromSnapshot;
 
     const fallbackToSnapshotRecovery = async (): Promise<void> => {
-      await runSnapshotRecovery("replay-failed");
+      const currentEnvironmentId = resolveCurrentEnvironmentId();
+      if (currentEnvironmentId === null) {
+        return;
+      }
+      await runSnapshotRecovery("replay-failed", currentEnvironmentId);
     };
     const unsubDomainEvent = api.orchestration.onDomainEvent(
       (event) => {
@@ -556,8 +606,16 @@ function EventRouter() {
       },
     );
     const unsubTerminalEvent = api.terminal.onEvent((event) => {
+      const currentEnvironmentId = resolveCurrentEnvironmentId();
+      if (currentEnvironmentId === null) {
+        return;
+      }
       const thread = selectThreadById(ThreadId.makeUnsafe(event.threadId))(useStore.getState());
-      if (thread && thread.archivedAt !== null) {
+      if (
+        thread &&
+        thread.environmentId === currentEnvironmentId &&
+        thread.archivedAt !== null
+      ) {
         return;
       }
       applyTerminalEvent(event);
@@ -568,6 +626,7 @@ function EventRouter() {
       needsProviderInvalidation = false;
       flushPendingDomainEventsScheduled = false;
       pendingDomainEvents.length = 0;
+      schedulePendingDomainEventFlushRef.current = () => undefined;
       queryInvalidationThrottler.cancel();
       unsubDomainEvent();
       unsubTerminalEvent();
@@ -581,6 +640,7 @@ function EventRouter() {
     applyTerminalEvent,
     clearThreadUi,
     setProjectExpanded,
+    setActiveEnvironmentId,
     syncProjects,
     syncServerReadModel,
     syncThreads,

@@ -1,6 +1,7 @@
 import {
   CheckpointRef,
   DEFAULT_MODEL_BY_PROVIDER,
+  EnvironmentId,
   EventId,
   MessageId,
   ProjectId,
@@ -14,22 +15,48 @@ import { describe, expect, it } from "vitest";
 import {
   applyOrchestrationEvent,
   applyOrchestrationEvents,
-<<<<<<< HEAD
   selectProjects,
   selectThreads,
-=======
-  getProjectScopedId,
-  getThreadScopedId,
-  selectThreadIdsByProjectId,
->>>>>>> 2540f09bb (Treat explicit null environments distinctly)
   syncServerReadModel,
   type AppState,
 } from "./store";
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Thread } from "./types";
 
+const localEnvironmentId = EnvironmentId.makeUnsafe("environment-local");
+
+function withActiveEnvironmentState(
+  environmentState: Omit<AppState, "activeEnvironmentId" | "environmentStateById">,
+  overrides: Partial<AppState> = {},
+): AppState {
+  const {
+    activeEnvironmentId: overrideActiveEnvironmentId,
+    environmentStateById: overrideEnvironmentStateById,
+    ...environmentOverrides
+  } = overrides;
+  const activeEnvironmentId = overrideActiveEnvironmentId ?? localEnvironmentId;
+  const mergedEnvironmentState = {
+    ...environmentState,
+    ...environmentOverrides,
+  };
+  const environmentStateById =
+    overrideEnvironmentStateById ??
+    (activeEnvironmentId
+      ? {
+          [activeEnvironmentId]: mergedEnvironmentState,
+        }
+      : {});
+
+  return {
+    activeEnvironmentId,
+    environmentStateById,
+    ...mergedEnvironmentState,
+  };
+}
+
 function makeThread(overrides: Partial<Thread> = {}): Thread {
   return {
     id: ThreadId.makeUnsafe("thread-1"),
+    environmentId: localEnvironmentId,
     codexThreadId: null,
     projectId: ProjectId.makeUnsafe("project-1"),
     title: "Thread",
@@ -58,6 +85,7 @@ function makeState(thread: Thread): AppState {
   const projectId = ProjectId.makeUnsafe("project-1");
   const project = {
     id: projectId,
+    environmentId: localEnvironmentId,
     name: "Project",
     cwd: "/tmp/project",
     defaultModelSelection: {
@@ -71,7 +99,7 @@ function makeState(thread: Thread): AppState {
   const threadIdsByProjectId: AppState["threadIdsByProjectId"] = {
     [thread.projectId]: [thread.id],
   };
-  return {
+  const environmentState = {
     projectIds: [projectId],
     projectById: {
       [projectId]: project,
@@ -81,6 +109,7 @@ function makeState(thread: Thread): AppState {
     threadShellById: {
       [thread.id]: {
         id: thread.id,
+        environmentId: thread.environmentId,
         codexThreadId: thread.codexThreadId,
         projectId: thread.projectId,
         title: thread.title,
@@ -141,10 +170,11 @@ function makeState(thread: Thread): AppState {
     sidebarThreadSummaryById: {},
     bootstrapComplete: true,
   };
+  return withActiveEnvironmentState(environmentState);
 }
 
 function makeEmptyState(overrides: Partial<AppState> = {}): AppState {
-  return {
+  const environmentState = {
     projectIds: [],
     projectById: {},
     threadIds: [],
@@ -162,8 +192,8 @@ function makeEmptyState(overrides: Partial<AppState> = {}): AppState {
     turnDiffSummaryByThreadId: {},
     sidebarThreadSummaryById: {},
     bootstrapComplete: true,
-    ...overrides,
   };
+  return withActiveEnvironmentState(environmentState, overrides);
 }
 
 function projectsOf(state: AppState) {
@@ -411,56 +441,6 @@ describe("store read model sync", () => {
     const next = syncServerReadModel(initialState, readModel);
 
     expect(projectsOf(next).map((project) => project.id)).toEqual([project1, project2, project3]);
-  });
-
-  it("treats an explicit null environment as distinct from the active environment", () => {
-    const remoteThread = makeThread({
-      id: ThreadId.makeUnsafe("thread-remote"),
-      projectId: ProjectId.makeUnsafe("project-remote"),
-      environmentId: remoteEnvironmentId,
-      title: "Remote thread",
-    });
-    const initialState: AppState = {
-      ...makeState(remoteThread),
-      activeEnvironmentId: remoteEnvironmentId,
-    };
-
-    const next = syncServerReadModel(
-      initialState,
-      makeReadModel(
-        makeReadModelThread({
-          id: ThreadId.makeUnsafe("thread-null-environment"),
-          title: "Null environment thread",
-        }),
-      ),
-      null,
-    );
-
-    expect(next.threads).toHaveLength(2);
-    expect(next.threads.find((thread) => thread.environmentId === remoteEnvironmentId)?.title).toBe(
-      "Remote thread",
-    );
-    expect(next.threads.find((thread) => thread.environmentId === null)?.title).toBe(
-      "Null environment thread",
-    );
-  });
-
-  it("returns a stable thread id array for unchanged project thread inputs", () => {
-    const projectId = ProjectId.makeUnsafe("project-1");
-    const syncedState = syncServerReadModel(
-      makeState(makeThread()),
-      makeReadModel(makeReadModelThread({ projectId })),
-      localEnvironmentId,
-    );
-    const selectThreadIds = selectThreadIdsByProjectId(projectId);
-
-    const first = selectThreadIds(syncedState);
-    const second = selectThreadIds({
-      ...syncedState,
-      bootstrapComplete: false,
-    });
-
-    expect(first).toBe(second);
   });
 });
 
