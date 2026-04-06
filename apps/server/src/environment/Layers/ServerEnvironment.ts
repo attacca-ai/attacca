@@ -6,8 +6,6 @@ import { ServerConfig } from "../../config.ts";
 import { ServerEnvironment, type ServerEnvironmentShape } from "../Services/ServerEnvironment.ts";
 import { version } from "../../../package.json" with { type: "json" };
 
-const ENVIRONMENT_ID_FILENAME = "environment-id";
-
 function platformOs(): ExecutionEnvironmentDescriptor["platform"]["os"] {
   switch (process.platform) {
     case "darwin":
@@ -36,17 +34,16 @@ export const makeServerEnvironment = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const serverConfig = yield* ServerConfig;
-  const environmentIdPath = path.join(serverConfig.stateDir, ENVIRONMENT_ID_FILENAME);
 
   const readPersistedEnvironmentId = Effect.gen(function* () {
     const exists = yield* fileSystem
-      .exists(environmentIdPath)
+      .exists(serverConfig.environmentIdPath)
       .pipe(Effect.orElseSucceed(() => false));
     if (!exists) {
       return null;
     }
 
-    const raw = yield* fileSystem.readFileString(environmentIdPath).pipe(
+    const raw = yield* fileSystem.readFileString(serverConfig.environmentIdPath).pipe(
       Effect.orElseSucceed(() => ""),
       Effect.map((value) => value.trim()),
     );
@@ -55,7 +52,7 @@ export const makeServerEnvironment = Effect.gen(function* () {
   });
 
   const persistEnvironmentId = (value: string) =>
-    fileSystem.writeFileString(environmentIdPath, `${value}\n`);
+    fileSystem.writeFileString(serverConfig.environmentIdPath, `${value}\n`);
 
   const environmentIdRaw = yield* readPersistedEnvironmentId.pipe(
     Effect.flatMap((persisted) => {
