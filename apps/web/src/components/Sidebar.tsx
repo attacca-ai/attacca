@@ -19,7 +19,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type Dispatch,
+  type FocusEvent,
   type KeyboardEvent,
   type MouseEvent,
   type MutableRefObject,
@@ -278,7 +280,6 @@ interface SidebarThreadRowProps {
   projectCwd: string | null;
   orderedProjectThreadKeys: readonly string[];
   routeThreadKey: string | null;
-  showThreadJumpHints: boolean;
   jumpLabel: string | null;
   appSettingsConfirmThreadArchive: boolean;
   renamingThreadKey: string | null;
@@ -312,7 +313,30 @@ interface SidebarThreadRowProps {
 }
 
 const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowProps) {
-  const thread = props.thread;
+  const {
+    orderedProjectThreadKeys,
+    routeThreadKey,
+    jumpLabel,
+    appSettingsConfirmThreadArchive,
+    renamingThreadKey,
+    renamingTitle,
+    setRenamingTitle,
+    renamingInputRef,
+    renamingCommittedRef,
+    confirmingArchiveThreadKey,
+    setConfirmingArchiveThreadKey,
+    confirmArchiveButtonRefs,
+    handleThreadClick,
+    navigateToThread,
+    handleMultiSelectContextMenu,
+    handleThreadContextMenu,
+    clearSelection,
+    commitRename,
+    cancelRename,
+    attemptArchiveThread,
+    openPrLink,
+    thread,
+  } = props;
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const threadKey = scopedThreadKey(threadRef);
   const lastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[threadKey]);
@@ -328,7 +352,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     cwd: thread.branch != null ? gitCwd : null,
   });
 
-  const isActive = props.routeThreadKey === threadKey;
+  const isActive = routeThreadKey === threadKey;
   const isHighlighted = isActive || isSelected;
   const isThreadRunning =
     thread.session?.status === "running" && thread.session.activeTurnId != null;
@@ -341,31 +365,166 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   const pr = resolveThreadPr(thread.branch, gitStatus.data);
   const prStatus = prStatusIndicator(pr);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
-  const isConfirmingArchive = props.confirmingArchiveThreadKey === threadKey && !isThreadRunning;
+  const isConfirmingArchive = confirmingArchiveThreadKey === threadKey && !isThreadRunning;
   const threadMetaClassName = isConfirmingArchive
     ? "pointer-events-none opacity-0"
     : !isThreadRunning
       ? "pointer-events-none transition-opacity duration-150 group-hover/menu-sub-item:opacity-0 group-focus-within/menu-sub-item:opacity-0"
       : "pointer-events-none";
+  const clearConfirmingArchive = useCallback(() => {
+    setConfirmingArchiveThreadKey((current) => (current === threadKey ? null : current));
+  }, [setConfirmingArchiveThreadKey, threadKey]);
+  const handleMouseLeave = useCallback(() => {
+    clearConfirmingArchive();
+  }, [clearConfirmingArchive]);
+  const handleBlurCapture = useCallback(
+    (event: FocusEvent<HTMLLIElement>) => {
+      const currentTarget = event.currentTarget;
+      requestAnimationFrame(() => {
+        if (currentTarget.contains(document.activeElement)) {
+          return;
+        }
+        clearConfirmingArchive();
+      });
+    },
+    [clearConfirmingArchive],
+  );
+  const handleRowClick = useCallback(
+    (event: MouseEvent) => {
+      handleThreadClick(event, threadRef, orderedProjectThreadKeys);
+    },
+    [handleThreadClick, orderedProjectThreadKeys, threadRef],
+  );
+  const handleRowKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      navigateToThread(threadRef);
+    },
+    [navigateToThread, threadRef],
+  );
+  const handleRowContextMenu = useCallback(
+    (event: MouseEvent) => {
+      event.preventDefault();
+      if (hasSelection && isSelected) {
+        void handleMultiSelectContextMenu({
+          x: event.clientX,
+          y: event.clientY,
+        });
+        return;
+      }
+
+      if (hasSelection) {
+        clearSelection();
+      }
+      void handleThreadContextMenu(threadRef, {
+        x: event.clientX,
+        y: event.clientY,
+      });
+    },
+    [
+      clearSelection,
+      handleMultiSelectContextMenu,
+      handleThreadContextMenu,
+      hasSelection,
+      isSelected,
+      threadRef,
+    ],
+  );
+  const handlePrClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      if (!prStatus) return;
+      openPrLink(event, prStatus.url);
+    },
+    [openPrLink, prStatus],
+  );
+  const handleRenameInputRef = useCallback(
+    (element: HTMLInputElement | null) => {
+      if (element && renamingInputRef.current !== element) {
+        renamingInputRef.current = element;
+        element.focus();
+        element.select();
+      }
+    },
+    [renamingInputRef],
+  );
+  const handleRenameInputChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setRenamingTitle(event.target.value);
+    },
+    [setRenamingTitle],
+  );
+  const handleRenameInputKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      event.stopPropagation();
+      if (event.key === "Enter") {
+        event.preventDefault();
+        renamingCommittedRef.current = true;
+        void commitRename(threadRef, renamingTitle, thread.title);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        renamingCommittedRef.current = true;
+        cancelRename();
+      }
+    },
+    [cancelRename, commitRename, renamingCommittedRef, renamingTitle, thread.title, threadRef],
+  );
+  const handleRenameInputBlur = useCallback(() => {
+    if (!renamingCommittedRef.current) {
+      void commitRename(threadRef, renamingTitle, thread.title);
+    }
+  }, [commitRename, renamingCommittedRef, renamingTitle, thread.title, threadRef]);
+  const handleRenameInputClick = useCallback((event: MouseEvent<HTMLInputElement>) => {
+    event.stopPropagation();
+  }, []);
+  const handleConfirmArchiveRef = useCallback(
+    (element: HTMLButtonElement | null) => {
+      if (element) {
+        confirmArchiveButtonRefs.current.set(threadKey, element);
+      } else {
+        confirmArchiveButtonRefs.current.delete(threadKey);
+      }
+    },
+    [confirmArchiveButtonRefs, threadKey],
+  );
+  const stopPropagationOnPointerDown = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+  }, []);
+  const handleConfirmArchiveClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      clearConfirmingArchive();
+      void attemptArchiveThread(threadRef);
+    },
+    [attemptArchiveThread, clearConfirmingArchive, threadRef],
+  );
+  const handleStartArchiveConfirmation = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setConfirmingArchiveThreadKey(threadKey);
+      requestAnimationFrame(() => {
+        confirmArchiveButtonRefs.current.get(threadKey)?.focus();
+      });
+    },
+    [confirmArchiveButtonRefs, setConfirmingArchiveThreadKey, threadKey],
+  );
+  const handleArchiveImmediateClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void attemptArchiveThread(threadRef);
+    },
+    [attemptArchiveThread, threadRef],
+  );
 
   return (
     <SidebarMenuSubItem
       className="w-full"
       data-thread-item
-      onMouseLeave={() => {
-        props.setConfirmingArchiveThreadKey((current) => (current === threadKey ? null : current));
-      }}
-      onBlurCapture={(event) => {
-        const currentTarget = event.currentTarget;
-        requestAnimationFrame(() => {
-          if (currentTarget.contains(document.activeElement)) {
-            return;
-          }
-          props.setConfirmingArchiveThreadKey((current) =>
-            current === threadKey ? null : current,
-          );
-        });
-      }}
+      onMouseLeave={handleMouseLeave}
+      onBlurCapture={handleBlurCapture}
     >
       <SidebarMenuSubButton
         render={<div role="button" tabIndex={0} />}
@@ -376,31 +535,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
           isActive,
           isSelected,
         })} relative isolate`}
-        onClick={(event) => {
-          props.handleThreadClick(event, threadRef, props.orderedProjectThreadKeys);
-        }}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" && event.key !== " ") return;
-          event.preventDefault();
-          props.navigateToThread(threadRef);
-        }}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          if (hasSelection && isSelected) {
-            void props.handleMultiSelectContextMenu({
-              x: event.clientX,
-              y: event.clientY,
-            });
-          } else {
-            if (hasSelection) {
-              props.clearSelection();
-            }
-            void props.handleThreadContextMenu(threadRef, {
-              x: event.clientX,
-              y: event.clientY,
-            });
-          }
-        }}
+        onClick={handleRowClick}
+        onKeyDown={handleRowKeyDown}
+        onContextMenu={handleRowContextMenu}
       >
         <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
           {prStatus && (
@@ -411,9 +548,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                     type="button"
                     aria-label={prStatus.tooltip}
                     className={`inline-flex items-center justify-center ${prStatus.colorClass} cursor-pointer rounded-sm outline-hidden focus-visible:ring-1 focus-visible:ring-ring`}
-                    onClick={(event) => {
-                      props.openPrLink(event, prStatus.url);
-                    }}
+                    onClick={handlePrClick}
                   >
                     <GitPullRequestIcon className="size-3" />
                   </button>
@@ -423,36 +558,15 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
             </Tooltip>
           )}
           {threadStatus && <ThreadStatusLabel status={threadStatus} />}
-          {props.renamingThreadKey === threadKey ? (
+          {renamingThreadKey === threadKey ? (
             <input
-              ref={(element) => {
-                if (element && props.renamingInputRef.current !== element) {
-                  props.renamingInputRef.current = element;
-                  element.focus();
-                  element.select();
-                }
-              }}
+              ref={handleRenameInputRef}
               className="min-w-0 flex-1 truncate text-xs bg-transparent outline-none border border-ring rounded px-0.5"
-              value={props.renamingTitle}
-              onChange={(event) => props.setRenamingTitle(event.target.value)}
-              onKeyDown={(event) => {
-                event.stopPropagation();
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  props.renamingCommittedRef.current = true;
-                  void props.commitRename(threadRef, props.renamingTitle, thread.title);
-                } else if (event.key === "Escape") {
-                  event.preventDefault();
-                  props.renamingCommittedRef.current = true;
-                  props.cancelRename();
-                }
-              }}
-              onBlur={() => {
-                if (!props.renamingCommittedRef.current) {
-                  void props.commitRename(threadRef, props.renamingTitle, thread.title);
-                }
-              }}
-              onClick={(event) => event.stopPropagation()}
+              value={renamingTitle}
+              onChange={handleRenameInputChange}
+              onKeyDown={handleRenameInputKeyDown}
+              onBlur={handleRenameInputBlur}
+              onClick={handleRenameInputClick}
             />
           ) : (
             <span className="min-w-0 flex-1 truncate text-xs">{thread.title}</span>
@@ -472,34 +586,19 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
           <div className="flex min-w-12 justify-end">
             {isConfirmingArchive ? (
               <button
-                ref={(element) => {
-                  if (element) {
-                    props.confirmArchiveButtonRefs.current.set(threadKey, element);
-                  } else {
-                    props.confirmArchiveButtonRefs.current.delete(threadKey);
-                  }
-                }}
+                ref={handleConfirmArchiveRef}
                 type="button"
                 data-thread-selection-safe
                 data-testid={`thread-archive-confirm-${thread.id}`}
                 aria-label={`Confirm archive ${thread.title}`}
                 className="absolute top-1/2 right-1 inline-flex h-5 -translate-y-1/2 cursor-pointer items-center rounded-full bg-destructive/12 px-2 text-[10px] font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
-                onPointerDown={(event) => {
-                  event.stopPropagation();
-                }}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  props.setConfirmingArchiveThreadKey((current) =>
-                    current === threadKey ? null : current,
-                  );
-                  void props.attemptArchiveThread(threadRef);
-                }}
+                onPointerDown={stopPropagationOnPointerDown}
+                onClick={handleConfirmArchiveClick}
               >
                 Confirm
               </button>
             ) : !isThreadRunning ? (
-              props.appSettingsConfirmThreadArchive ? (
+              appSettingsConfirmThreadArchive ? (
                 <div className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity duration-150 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100">
                   <button
                     type="button"
@@ -507,17 +606,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                     data-testid={`thread-archive-${thread.id}`}
                     aria-label={`Archive ${thread.title}`}
                     className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-                    onPointerDown={(event) => {
-                      event.stopPropagation();
-                    }}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      props.setConfirmingArchiveThreadKey(threadKey);
-                      requestAnimationFrame(() => {
-                        props.confirmArchiveButtonRefs.current.get(threadKey)?.focus();
-                      });
-                    }}
+                    onPointerDown={stopPropagationOnPointerDown}
+                    onClick={handleStartArchiveConfirmation}
                   >
                     <ArchiveIcon className="size-3.5" />
                   </button>
@@ -533,14 +623,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                           data-testid={`thread-archive-${thread.id}`}
                           aria-label={`Archive ${thread.title}`}
                           className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-                          onPointerDown={(event) => {
-                            event.stopPropagation();
-                          }}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            void props.attemptArchiveThread(threadRef);
-                          }}
+                          onPointerDown={stopPropagationOnPointerDown}
+                          onClick={handleArchiveImmediateClick}
                         >
                           <ArchiveIcon className="size-3.5" />
                         </button>
@@ -552,12 +636,12 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               )
             ) : null}
             <span className={threadMetaClassName}>
-              {props.showThreadJumpHints && props.jumpLabel ? (
+              {jumpLabel ? (
                 <span
                   className="inline-flex h-5 items-center rounded-full border border-border/80 bg-background/90 px-1.5 font-mono text-[10px] font-medium tracking-tight text-foreground shadow-sm"
-                  title={props.jumpLabel}
+                  title={jumpLabel}
                 >
-                  {props.jumpLabel}
+                  {jumpLabel}
                 </span>
               ) : (
                 <span
@@ -590,8 +674,7 @@ interface SidebarProjectThreadListProps {
   isThreadListExpanded: boolean;
   projectCwd: string;
   routeThreadKey: string | null;
-  showThreadJumpHints: boolean;
-  getThreadJumpLabel: ((threadKey: string) => string | null) | null;
+  threadJumpLabelByKey: ReadonlyMap<string, string>;
   appSettingsConfirmThreadArchive: boolean;
   renamingThreadKey: string | null;
   renamingTitle: string;
@@ -641,8 +724,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     isThreadListExpanded,
     projectCwd,
     routeThreadKey,
-    showThreadJumpHints,
-    getThreadJumpLabel,
+    threadJumpLabelByKey,
     appSettingsConfirmThreadArchive,
     renamingThreadKey,
     renamingTitle,
@@ -691,10 +773,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
               projectCwd={projectCwd}
               orderedProjectThreadKeys={orderedProjectThreadKeys}
               routeThreadKey={routeThreadKey}
-              showThreadJumpHints={showThreadJumpHints}
-              jumpLabel={
-                showThreadJumpHints && getThreadJumpLabel ? getThreadJumpLabel(threadKey) : null
-              }
+              jumpLabel={threadJumpLabelByKey.get(threadKey) ?? null}
               appSettingsConfirmThreadArchive={appSettingsConfirmThreadArchive}
               renamingThreadKey={renamingThreadKey}
               renamingTitle={renamingTitle}
@@ -757,8 +836,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
 interface SidebarProjectItemProps {
   project: SidebarProjectSnapshot;
   isThreadListExpanded: boolean;
-  showThreadJumpHints: boolean;
-  getThreadJumpLabel: ((threadKey: string) => string | null) | null;
+  threadJumpLabelByKey: ReadonlyMap<string, string>;
   attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
   expandThreadListForProject: (projectKey: string) => void;
   collapseThreadListForProject: (projectKey: string) => void;
@@ -773,8 +851,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const {
     project,
     isThreadListExpanded,
-    showThreadJumpHints,
-    getThreadJumpLabel,
+    threadJumpLabelByKey,
     attachThreadListAutoAnimateRef,
     expandThreadListForProject,
     collapseThreadListForProject,
@@ -790,6 +867,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   });
   const routeThreadKey =
     routeTarget?.kind === "server" ? scopedThreadKey(routeTarget.threadRef) : null;
+  const routeServerThreadRef = routeTarget?.kind === "server" ? routeTarget.threadRef : null;
   const itemSettings = useSettings();
   const threadSortOrder = itemSettings.sidebarThreadSortOrder;
   const appSettingsConfirmThreadDelete = itemSettings.confirmThreadDelete;
@@ -827,14 +905,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         : state.getDraftSession(routeTarget.draftId)
       : null,
   );
-  const routeTerminalOpen =
-    routeTarget?.kind === "server"
-      ? useTerminalStateStore(
-          (state) =>
-            selectThreadTerminalState(state.terminalStateByThreadKey, routeTarget.threadRef)
-              .terminalOpen,
-        )
-      : false;
+  const routeTerminalOpen = useTerminalStateStore((state) =>
+    routeServerThreadRef
+      ? selectThreadTerminalState(state.terminalStateByThreadKey, routeServerThreadRef).terminalOpen
+      : false,
+  );
   const sidebarShortcutLabelOptions = useMemo(
     () => ({
       platform: navigator.platform,
@@ -1561,8 +1636,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         isThreadListExpanded={isThreadListExpanded}
         projectCwd={project.cwd}
         routeThreadKey={routeThreadKey}
-        showThreadJumpHints={showThreadJumpHints}
-        getThreadJumpLabel={getThreadJumpLabel}
+        threadJumpLabelByKey={threadJumpLabelByKey}
         appSettingsConfirmThreadArchive={appSettingsConfirmThreadArchive}
         renamingThreadKey={renamingThreadKey}
         renamingTitle={renamingTitle}
@@ -1713,6 +1787,371 @@ function SortableProjectItem({
     </li>
   );
 }
+
+const SidebarChromeHeader = memo(function SidebarChromeHeader({
+  isElectron,
+}: {
+  isElectron: boolean;
+}) {
+  const wordmark = (
+    <div className="flex items-center gap-2">
+      <SidebarTrigger className="shrink-0 md:hidden" />
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Link
+              aria-label="Go to threads"
+              className="ml-1 flex min-w-0 flex-1 cursor-pointer items-center gap-1 rounded-md outline-hidden ring-ring transition-colors hover:text-foreground focus-visible:ring-2"
+              to="/"
+            >
+              <T3Wordmark />
+              <span className="truncate text-sm font-medium tracking-tight text-muted-foreground">
+                Code
+              </span>
+              <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
+                {APP_STAGE_LABEL}
+              </span>
+            </Link>
+          }
+        />
+        <TooltipPopup side="bottom" sideOffset={2}>
+          Version {APP_VERSION}
+        </TooltipPopup>
+      </Tooltip>
+    </div>
+  );
+
+  return isElectron ? (
+    <SidebarHeader className="drag-region h-[52px] flex-row items-center gap-2 px-4 py-0 pl-[90px]">
+      {wordmark}
+    </SidebarHeader>
+  ) : (
+    <SidebarHeader className="gap-3 px-3 py-2 sm:gap-2.5 sm:px-4 sm:py-3">{wordmark}</SidebarHeader>
+  );
+});
+
+const SidebarChromeFooter = memo(function SidebarChromeFooter({
+  navigate,
+}: {
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const handleSettingsClick = useCallback(() => {
+    void navigate({ to: "/settings" });
+  }, [navigate]);
+
+  return (
+    <SidebarFooter className="p-2">
+      <SidebarUpdatePill />
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            size="sm"
+            className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+            onClick={handleSettingsClick}
+          >
+            <SettingsIcon className="size-3.5" />
+            <span className="text-xs">Settings</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarFooter>
+  );
+});
+
+interface SidebarProjectsContentProps {
+  showArm64IntelBuildWarning: boolean;
+  arm64IntelBuildWarningDescription: string | null;
+  desktopUpdateButtonAction: "download" | "install" | "none";
+  desktopUpdateButtonDisabled: boolean;
+  handleDesktopUpdateButtonClick: () => void;
+  projectSortOrder: SidebarProjectSortOrder;
+  threadSortOrder: SidebarThreadSortOrder;
+  updateSettings: ReturnType<typeof useUpdateSettings>["updateSettings"];
+  shouldShowProjectPathEntry: boolean;
+  handleStartAddProject: () => void;
+  isElectron: boolean;
+  isPickingFolder: boolean;
+  isAddingProject: boolean;
+  handlePickFolder: () => Promise<void>;
+  addProjectInputRef: MutableRefObject<HTMLInputElement | null>;
+  addProjectError: string | null;
+  newCwd: string;
+  setNewCwd: Dispatch<SetStateAction<string>>;
+  setAddProjectError: Dispatch<SetStateAction<string | null>>;
+  handleAddProject: () => void;
+  setAddingProject: Dispatch<SetStateAction<boolean>>;
+  canAddProject: boolean;
+  isManualProjectSorting: boolean;
+  projectDnDSensors: ReturnType<typeof useSensors>;
+  projectCollisionDetection: CollisionDetection;
+  handleProjectDragStart: (event: DragStartEvent) => void;
+  handleProjectDragEnd: (event: DragEndEvent) => void;
+  handleProjectDragCancel: (event: DragCancelEvent) => void;
+  sortedProjects: readonly SidebarProjectSnapshot[];
+  expandedThreadListsByProject: ReadonlySet<string>;
+  threadJumpLabelByKey: ReadonlyMap<string, string>;
+  attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
+  expandThreadListForProject: (projectKey: string) => void;
+  collapseThreadListForProject: (projectKey: string) => void;
+  dragInProgressRef: MutableRefObject<boolean>;
+  suppressProjectClickAfterDragRef: MutableRefObject<boolean>;
+  suppressProjectClickForContextMenuRef: MutableRefObject<boolean>;
+  attachProjectListAutoAnimateRef: (node: HTMLElement | null) => void;
+  projectsLength: number;
+}
+
+const SidebarProjectsContent = memo(function SidebarProjectsContent(
+  props: SidebarProjectsContentProps,
+) {
+  const {
+    showArm64IntelBuildWarning,
+    arm64IntelBuildWarningDescription,
+    desktopUpdateButtonAction,
+    desktopUpdateButtonDisabled,
+    handleDesktopUpdateButtonClick,
+    projectSortOrder,
+    threadSortOrder,
+    updateSettings,
+    shouldShowProjectPathEntry,
+    handleStartAddProject,
+    isElectron,
+    isPickingFolder,
+    isAddingProject,
+    handlePickFolder,
+    addProjectInputRef,
+    addProjectError,
+    newCwd,
+    setNewCwd,
+    setAddProjectError,
+    handleAddProject,
+    setAddingProject,
+    canAddProject,
+    isManualProjectSorting,
+    projectDnDSensors,
+    projectCollisionDetection,
+    handleProjectDragStart,
+    handleProjectDragEnd,
+    handleProjectDragCancel,
+    sortedProjects,
+    expandedThreadListsByProject,
+    threadJumpLabelByKey,
+    attachThreadListAutoAnimateRef,
+    expandThreadListForProject,
+    collapseThreadListForProject,
+    dragInProgressRef,
+    suppressProjectClickAfterDragRef,
+    suppressProjectClickForContextMenuRef,
+    attachProjectListAutoAnimateRef,
+    projectsLength,
+  } = props;
+
+  const handleProjectSortOrderChange = useCallback(
+    (sortOrder: SidebarProjectSortOrder) => {
+      updateSettings({ sidebarProjectSortOrder: sortOrder });
+    },
+    [updateSettings],
+  );
+  const handleThreadSortOrderChange = useCallback(
+    (sortOrder: SidebarThreadSortOrder) => {
+      updateSettings({ sidebarThreadSortOrder: sortOrder });
+    },
+    [updateSettings],
+  );
+  const handleAddProjectInputChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setNewCwd(event.target.value);
+      setAddProjectError(null);
+    },
+    [setAddProjectError, setNewCwd],
+  );
+  const handleAddProjectInputKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") handleAddProject();
+      if (event.key === "Escape") {
+        setAddingProject(false);
+        setAddProjectError(null);
+      }
+    },
+    [handleAddProject, setAddProjectError, setAddingProject],
+  );
+  const handleBrowseForFolderClick = useCallback(() => {
+    void handlePickFolder();
+  }, [handlePickFolder]);
+
+  return (
+    <SidebarContent className="gap-0">
+      {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
+        <SidebarGroup className="px-2 pt-2 pb-0">
+          <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8">
+            <TriangleAlertIcon />
+            <AlertTitle>Intel build on Apple Silicon</AlertTitle>
+            <AlertDescription>{arm64IntelBuildWarningDescription}</AlertDescription>
+            {desktopUpdateButtonAction !== "none" ? (
+              <AlertAction>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={desktopUpdateButtonDisabled}
+                  onClick={handleDesktopUpdateButtonClick}
+                >
+                  {desktopUpdateButtonAction === "download"
+                    ? "Download ARM build"
+                    : "Install ARM build"}
+                </Button>
+              </AlertAction>
+            ) : null}
+          </Alert>
+        </SidebarGroup>
+      ) : null}
+      <SidebarGroup className="px-2 py-2">
+        <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+            Projects
+          </span>
+          <div className="flex items-center gap-1">
+            <ProjectSortMenu
+              projectSortOrder={projectSortOrder}
+              threadSortOrder={threadSortOrder}
+              onProjectSortOrderChange={handleProjectSortOrderChange}
+              onThreadSortOrderChange={handleThreadSortOrderChange}
+            />
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
+                    aria-pressed={shouldShowProjectPathEntry}
+                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={handleStartAddProject}
+                  />
+                }
+              >
+                <PlusIcon
+                  className={`size-3.5 transition-transform duration-150 ${
+                    shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
+                  }`}
+                />
+              </TooltipTrigger>
+              <TooltipPopup side="right">
+                {shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
+              </TooltipPopup>
+            </Tooltip>
+          </div>
+        </div>
+        {shouldShowProjectPathEntry && (
+          <div className="mb-2 px-1">
+            {isElectron && (
+              <button
+                type="button"
+                className="mb-1.5 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary py-1.5 text-xs text-foreground/80 transition-colors duration-150 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={handleBrowseForFolderClick}
+                disabled={isPickingFolder || isAddingProject}
+              >
+                <FolderIcon className="size-3.5" />
+                {isPickingFolder ? "Picking folder..." : "Browse for folder"}
+              </button>
+            )}
+            <div className="flex gap-1.5">
+              <input
+                ref={addProjectInputRef}
+                className={`min-w-0 flex-1 rounded-md border bg-secondary px-2 py-1 font-mono text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none ${
+                  addProjectError
+                    ? "border-red-500/70 focus:border-red-500"
+                    : "border-border focus:border-ring"
+                }`}
+                placeholder="/path/to/project"
+                value={newCwd}
+                onChange={handleAddProjectInputChange}
+                onKeyDown={handleAddProjectInputKeyDown}
+                autoFocus
+              />
+              <button
+                type="button"
+                className="shrink-0 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 disabled:opacity-60"
+                onClick={handleAddProject}
+                disabled={!canAddProject}
+              >
+                {isAddingProject ? "Adding..." : "Add"}
+              </button>
+            </div>
+            {addProjectError && (
+              <p className="mt-1 px-0.5 text-[11px] leading-tight text-red-400">
+                {addProjectError}
+              </p>
+            )}
+          </div>
+        )}
+
+        {isManualProjectSorting ? (
+          <DndContext
+            sensors={projectDnDSensors}
+            collisionDetection={projectCollisionDetection}
+            modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
+            onDragStart={handleProjectDragStart}
+            onDragEnd={handleProjectDragEnd}
+            onDragCancel={handleProjectDragCancel}
+          >
+            <SidebarMenu>
+              <SortableContext
+                items={sortedProjects.map((project) => project.projectKey)}
+                strategy={verticalListSortingStrategy}
+              >
+                {sortedProjects.map((project) => (
+                  <SortableProjectItem key={project.projectKey} projectId={project.projectKey}>
+                    {(dragHandleProps) => (
+                      <SidebarProjectItem
+                        project={project}
+                        isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
+                        threadJumpLabelByKey={threadJumpLabelByKey}
+                        attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                        expandThreadListForProject={expandThreadListForProject}
+                        collapseThreadListForProject={collapseThreadListForProject}
+                        dragInProgressRef={dragInProgressRef}
+                        suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                        suppressProjectClickForContextMenuRef={
+                          suppressProjectClickForContextMenuRef
+                        }
+                        isManualProjectSorting={isManualProjectSorting}
+                        dragHandleProps={dragHandleProps}
+                      />
+                    )}
+                  </SortableProjectItem>
+                ))}
+              </SortableContext>
+            </SidebarMenu>
+          </DndContext>
+        ) : (
+          <SidebarMenu ref={attachProjectListAutoAnimateRef}>
+            {sortedProjects.map((project) => (
+              <SidebarMenuItem key={project.id} className="rounded-md">
+                <SidebarProjectItem
+                  project={project}
+                  isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
+                  threadJumpLabelByKey={threadJumpLabelByKey}
+                  attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                  expandThreadListForProject={expandThreadListForProject}
+                  collapseThreadListForProject={collapseThreadListForProject}
+                  dragInProgressRef={dragInProgressRef}
+                  suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                  suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
+                  isManualProjectSorting={isManualProjectSorting}
+                  dragHandleProps={null}
+                />
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        )}
+
+        {projectsLength === 0 && !shouldShowProjectPathEntry && (
+          <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
+            No projects yet
+          </div>
+        )}
+      </SidebarGroup>
+    </SidebarContent>
+  );
+});
 
 export default function Sidebar() {
   const projects = useStore(useShallow(selectProjectsAcrossEnvironments));
@@ -2108,10 +2547,12 @@ export default function Sidebar() {
     }
     return mapping;
   }, [keybindings, sidebarShortcutLabelOptions, threadJumpCommandByKey]);
-  const getThreadJumpLabel = useMemo<((threadKey: string) => string | null) | null>(
-    () => (showThreadJumpHints ? (threadKey) => threadJumpLabelByKey.get(threadKey) ?? null : null),
-    [showThreadJumpHints, threadJumpLabelByKey],
-  );
+  const visibleThreadJumpLabelByKey = useMemo(() => {
+    if (!showThreadJumpHints) {
+      return new Map<string, string>();
+    }
+    return threadJumpLabelByKey;
+  }, [showThreadJumpHints, threadJumpLabelByKey]);
   const orderedSidebarThreadKeys = visibleSidebarThreadKeys;
 
   useEffect(() => {
@@ -2347,262 +2788,58 @@ export default function Sidebar() {
     });
   }, []);
 
-  const wordmark = (
-    <div className="flex items-center gap-2">
-      <SidebarTrigger className="shrink-0 md:hidden" />
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Link
-              aria-label="Go to threads"
-              className="ml-1 flex min-w-0 flex-1 cursor-pointer items-center gap-1 rounded-md outline-hidden ring-ring transition-colors hover:text-foreground focus-visible:ring-2"
-              to="/"
-            >
-              <T3Wordmark />
-              <span className="truncate text-sm font-medium tracking-tight text-muted-foreground">
-                Code
-              </span>
-              <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
-                {APP_STAGE_LABEL}
-              </span>
-            </Link>
-          }
-        />
-        <TooltipPopup side="bottom" sideOffset={2}>
-          Version {APP_VERSION}
-        </TooltipPopup>
-      </Tooltip>
-    </div>
-  );
-
   return (
     <>
-      {isElectron ? (
-        <SidebarHeader className="drag-region h-[52px] flex-row items-center gap-2 px-4 py-0 pl-[90px]">
-          {wordmark}
-        </SidebarHeader>
-      ) : (
-        <SidebarHeader className="gap-3 px-3 py-2 sm:gap-2.5 sm:px-4 sm:py-3">
-          {wordmark}
-        </SidebarHeader>
-      )}
+      <SidebarChromeHeader isElectron={isElectron} />
 
       {isOnSettings ? (
         <SettingsSidebarNav pathname={pathname} />
       ) : (
         <>
-          <SidebarContent className="gap-0">
-            {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
-              <SidebarGroup className="px-2 pt-2 pb-0">
-                <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8">
-                  <TriangleAlertIcon />
-                  <AlertTitle>Intel build on Apple Silicon</AlertTitle>
-                  <AlertDescription>{arm64IntelBuildWarningDescription}</AlertDescription>
-                  {desktopUpdateButtonAction !== "none" ? (
-                    <AlertAction>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        disabled={desktopUpdateButtonDisabled}
-                        onClick={handleDesktopUpdateButtonClick}
-                      >
-                        {desktopUpdateButtonAction === "download"
-                          ? "Download ARM build"
-                          : "Install ARM build"}
-                      </Button>
-                    </AlertAction>
-                  ) : null}
-                </Alert>
-              </SidebarGroup>
-            ) : null}
-            <SidebarGroup className="px-2 py-2">
-              <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
-                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-                  Projects
-                </span>
-                <div className="flex items-center gap-1">
-                  <ProjectSortMenu
-                    projectSortOrder={appSettings.sidebarProjectSortOrder}
-                    threadSortOrder={appSettings.sidebarThreadSortOrder}
-                    onProjectSortOrderChange={(sortOrder) => {
-                      updateSettings({ sidebarProjectSortOrder: sortOrder });
-                    }}
-                    onThreadSortOrderChange={(sortOrder) => {
-                      updateSettings({ sidebarThreadSortOrder: sortOrder });
-                    }}
-                  />
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <button
-                          type="button"
-                          aria-label={
-                            shouldShowProjectPathEntry ? "Cancel add project" : "Add project"
-                          }
-                          aria-pressed={shouldShowProjectPathEntry}
-                          className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-                          onClick={handleStartAddProject}
-                        />
-                      }
-                    >
-                      <PlusIcon
-                        className={`size-3.5 transition-transform duration-150 ${
-                          shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
-                        }`}
-                      />
-                    </TooltipTrigger>
-                    <TooltipPopup side="right">
-                      {shouldShowProjectPathEntry ? "Cancel add project" : "Add project"}
-                    </TooltipPopup>
-                  </Tooltip>
-                </div>
-              </div>
-              {shouldShowProjectPathEntry && (
-                <div className="mb-2 px-1">
-                  {isElectron && (
-                    <button
-                      type="button"
-                      className="mb-1.5 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary py-1.5 text-xs text-foreground/80 transition-colors duration-150 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                      onClick={() => void handlePickFolder()}
-                      disabled={isPickingFolder || isAddingProject}
-                    >
-                      <FolderIcon className="size-3.5" />
-                      {isPickingFolder ? "Picking folder..." : "Browse for folder"}
-                    </button>
-                  )}
-                  <div className="flex gap-1.5">
-                    <input
-                      ref={addProjectInputRef}
-                      className={`min-w-0 flex-1 rounded-md border bg-secondary px-2 py-1 font-mono text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none ${
-                        addProjectError
-                          ? "border-red-500/70 focus:border-red-500"
-                          : "border-border focus:border-ring"
-                      }`}
-                      placeholder="/path/to/project"
-                      value={newCwd}
-                      onChange={(event) => {
-                        setNewCwd(event.target.value);
-                        setAddProjectError(null);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") handleAddProject();
-                        if (event.key === "Escape") {
-                          setAddingProject(false);
-                          setAddProjectError(null);
-                        }
-                      }}
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      className="shrink-0 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 disabled:opacity-60"
-                      onClick={handleAddProject}
-                      disabled={!canAddProject}
-                    >
-                      {isAddingProject ? "Adding..." : "Add"}
-                    </button>
-                  </div>
-                  {addProjectError && (
-                    <p className="mt-1 px-0.5 text-[11px] leading-tight text-red-400">
-                      {addProjectError}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {isManualProjectSorting ? (
-                <DndContext
-                  sensors={projectDnDSensors}
-                  collisionDetection={projectCollisionDetection}
-                  modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
-                  onDragStart={handleProjectDragStart}
-                  onDragEnd={handleProjectDragEnd}
-                  onDragCancel={handleProjectDragCancel}
-                >
-                  <SidebarMenu>
-                    <SortableContext
-                      items={sortedProjects.map((project) => project.projectKey)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      {sortedProjects.map((project) => (
-                        <SortableProjectItem
-                          key={project.projectKey}
-                          projectId={project.projectKey}
-                        >
-                          {(dragHandleProps) => (
-                            <SidebarProjectItem
-                              project={project}
-                              isThreadListExpanded={expandedThreadListsByProject.has(
-                                project.projectKey,
-                              )}
-                              showThreadJumpHints={showThreadJumpHints}
-                              getThreadJumpLabel={getThreadJumpLabel}
-                              attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                              expandThreadListForProject={expandThreadListForProject}
-                              collapseThreadListForProject={collapseThreadListForProject}
-                              dragInProgressRef={dragInProgressRef}
-                              suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
-                              suppressProjectClickForContextMenuRef={
-                                suppressProjectClickForContextMenuRef
-                              }
-                              isManualProjectSorting={isManualProjectSorting}
-                              dragHandleProps={dragHandleProps}
-                            />
-                          )}
-                        </SortableProjectItem>
-                      ))}
-                    </SortableContext>
-                  </SidebarMenu>
-                </DndContext>
-              ) : (
-                <SidebarMenu ref={attachProjectListAutoAnimateRef}>
-                  {sortedProjects.map((project) => (
-                    <SidebarMenuItem key={project.id} className="rounded-md">
-                      <SidebarProjectItem
-                        project={project}
-                        isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
-                        showThreadJumpHints={showThreadJumpHints}
-                        getThreadJumpLabel={getThreadJumpLabel}
-                        attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                        expandThreadListForProject={expandThreadListForProject}
-                        collapseThreadListForProject={collapseThreadListForProject}
-                        dragInProgressRef={dragInProgressRef}
-                        suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
-                        suppressProjectClickForContextMenuRef={
-                          suppressProjectClickForContextMenuRef
-                        }
-                        isManualProjectSorting={isManualProjectSorting}
-                        dragHandleProps={null}
-                      />
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              )}
-
-              {projects.length === 0 && !shouldShowProjectPathEntry && (
-                <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
-                  No projects yet
-                </div>
-              )}
-            </SidebarGroup>
-          </SidebarContent>
+          <SidebarProjectsContent
+            showArm64IntelBuildWarning={showArm64IntelBuildWarning}
+            arm64IntelBuildWarningDescription={arm64IntelBuildWarningDescription}
+            desktopUpdateButtonAction={desktopUpdateButtonAction}
+            desktopUpdateButtonDisabled={desktopUpdateButtonDisabled}
+            handleDesktopUpdateButtonClick={handleDesktopUpdateButtonClick}
+            projectSortOrder={appSettings.sidebarProjectSortOrder}
+            threadSortOrder={appSettings.sidebarThreadSortOrder}
+            updateSettings={updateSettings}
+            shouldShowProjectPathEntry={shouldShowProjectPathEntry}
+            handleStartAddProject={handleStartAddProject}
+            isElectron={isElectron}
+            isPickingFolder={isPickingFolder}
+            isAddingProject={isAddingProject}
+            handlePickFolder={handlePickFolder}
+            addProjectInputRef={addProjectInputRef}
+            addProjectError={addProjectError}
+            newCwd={newCwd}
+            setNewCwd={setNewCwd}
+            setAddProjectError={setAddProjectError}
+            handleAddProject={handleAddProject}
+            setAddingProject={setAddingProject}
+            canAddProject={canAddProject}
+            isManualProjectSorting={isManualProjectSorting}
+            projectDnDSensors={projectDnDSensors}
+            projectCollisionDetection={projectCollisionDetection}
+            handleProjectDragStart={handleProjectDragStart}
+            handleProjectDragEnd={handleProjectDragEnd}
+            handleProjectDragCancel={handleProjectDragCancel}
+            sortedProjects={sortedProjects}
+            expandedThreadListsByProject={expandedThreadListsByProject}
+            threadJumpLabelByKey={visibleThreadJumpLabelByKey}
+            attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+            expandThreadListForProject={expandThreadListForProject}
+            collapseThreadListForProject={collapseThreadListForProject}
+            dragInProgressRef={dragInProgressRef}
+            suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+            suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
+            attachProjectListAutoAnimateRef={attachProjectListAutoAnimateRef}
+            projectsLength={projects.length}
+          />
 
           <SidebarSeparator />
-          <SidebarFooter className="p-2">
-            <SidebarUpdatePill />
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  size="sm"
-                  className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-                  onClick={() => void navigate({ to: "/settings" })}
-                >
-                  <SettingsIcon className="size-3.5" />
-                  <span className="text-xs">Settings</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarFooter>
+          <SidebarChromeFooter navigate={navigate} />
         </>
       )}
     </>
