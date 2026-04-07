@@ -1,3 +1,4 @@
+import { scopeThreadRef } from "@t3tools/client-runtime";
 import { ThreadId } from "@t3tools/contracts";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -5,6 +6,7 @@ import { render } from "vitest-browser-react";
 
 const THREAD_A = ThreadId.makeUnsafe("thread-a");
 const THREAD_B = ThreadId.makeUnsafe("thread-b");
+const ENVIRONMENT_ID = "environment-local" as never;
 const GIT_CWD = "/repo/project";
 const BRANCH_NAME = "feature/toast-scope";
 
@@ -168,7 +170,10 @@ function Harness() {
       <button type="button" onClick={() => setActiveThreadId(THREAD_B)}>
         Switch thread
       </button>
-      <GitActionsControl gitCwd={GIT_CWD} activeThreadId={activeThreadId} />
+      <GitActionsControl
+        gitCwd={GIT_CWD}
+        activeThreadRef={scopeThreadRef(ENVIRONMENT_ID, activeThreadId)}
+      />
     </>
   );
 }
@@ -248,9 +253,15 @@ describe("GitActionsControl thread-scoped progress toast", () => {
 
     const host = document.createElement("div");
     document.body.append(host);
-    const screen = await render(<GitActionsControl gitCwd={GIT_CWD} activeThreadId={THREAD_A} />, {
-      container: host,
-    });
+    const screen = await render(
+      <GitActionsControl
+        gitCwd={GIT_CWD}
+        activeThreadRef={scopeThreadRef(ENVIRONMENT_ID, THREAD_A)}
+      />,
+      {
+        container: host,
+      },
+    );
 
     try {
       window.dispatchEvent(new Event("focus"));

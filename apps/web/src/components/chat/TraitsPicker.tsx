@@ -3,6 +3,7 @@ import {
   type CodexModelOptions,
   type ProviderKind,
   type ProviderModelOptions,
+  type ScopedThreadRef,
   type ServerProviderModel,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -35,11 +36,12 @@ import { cn } from "~/lib/utils";
 type ProviderOptions = ProviderModelOptions[ProviderKind];
 type TraitsPersistence =
   | {
-      threadId: ThreadId;
+      threadRef?: ScopedThreadRef;
+      threadId?: ThreadId;
       onModelOptionsChange?: never;
     }
   | {
-      threadId?: undefined;
+      threadRef?: undefined;
       onModelOptionsChange: (nextOptions: ProviderOptions | undefined) => void;
     };
 
@@ -167,7 +169,13 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
         persistence.onModelOptionsChange(nextOptions);
         return;
       }
-      setProviderModelOptions(persistence.threadId, provider, nextOptions, { persistSticky: true });
+      const threadTarget = persistence.threadRef ?? persistence.threadId;
+      if (!threadTarget) {
+        return;
+      }
+      setProviderModelOptions(threadTarget, provider, nextOptions, {
+        persistSticky: true,
+      });
     },
     [persistence, provider, setProviderModelOptions],
   );

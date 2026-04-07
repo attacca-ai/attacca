@@ -1,9 +1,9 @@
+import { type ScopedThreadRef } from "@t3tools/contracts";
 import type {
   GitActionProgressEvent,
   GitRunStackedActionResult,
   GitStackedAction,
   GitStatusResult,
-  ThreadId,
 } from "@t3tools/contracts";
 import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
@@ -51,10 +51,11 @@ import { newCommandId, randomUUID } from "~/lib/utils";
 import { resolvePathLinkTarget } from "~/terminal-links";
 import { readNativeApi } from "~/nativeApi";
 import { useStore } from "~/store";
+import { createThreadSelectorByRef } from "~/storeSelectors";
 
 interface GitActionsControlProps {
   gitCwd: string | null;
-  activeThreadId: ThreadId | null;
+  activeThreadRef: ScopedThreadRef | null;
 }
 
 interface PendingDefaultBranchAction {
@@ -206,14 +207,17 @@ function GitQuickActionIcon({ quickAction }: { quickAction: GitQuickAction }) {
   return <InfoIcon className={iconClassName} />;
 }
 
-export default function GitActionsControl({ gitCwd, activeThreadId }: GitActionsControlProps) {
+export default function GitActionsControl({ gitCwd, activeThreadRef }: GitActionsControlProps) {
+  const activeThreadId = activeThreadRef?.threadId ?? null;
   const threadToastData = useMemo(
     () => (activeThreadId ? { threadId: activeThreadId } : undefined),
     [activeThreadId],
   );
-  const activeServerThread = useStore((store) =>
-    activeThreadId ? store.threadShellById[activeThreadId] : undefined,
+  const activeServerThreadSelector = useMemo(
+    () => createThreadSelectorByRef(activeThreadRef),
+    [activeThreadRef],
   );
+  const activeServerThread = useStore(activeServerThreadSelector);
   const setThreadBranch = useStore((store) => store.setThreadBranch);
   const queryClient = useQueryClient();
   const [isCommitDialogOpen, setIsCommitDialogOpen] = useState(false);

@@ -17,6 +17,7 @@ import {
   OrchestrationSessionStatus,
   DEFAULT_SERVER_SETTINGS,
 } from "@t3tools/contracts";
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { HttpResponse, http, ws } from "msw";
 import { setupWorker } from "msw/browser";
@@ -35,7 +36,7 @@ import { __resetNativeApiForTests } from "../nativeApi";
 import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
 import { getServerConfig } from "../rpc/serverState";
 import { getRouter } from "../router";
-import { useStore } from "../store";
+import { selectBootstrapCompleteForActiveEnvironment, useStore } from "../store";
 import { useTerminalStateStore } from "../terminalStateStore";
 import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test/wsRpcHarness";
 import { estimateTimelineMessageHeight } from "./timelineHeight";
@@ -49,8 +50,14 @@ vi.mock("../lib/gitStatusState", () => ({
 }));
 
 const THREAD_ID = "thread-browser-test" as ThreadId;
-const UUID_ROUTE_RE = /^\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PROJECT_ID = "project-1" as ProjectId;
+const LOCAL_ENVIRONMENT_ID = EnvironmentId.makeUnsafe("environment-local");
+const THREAD_REF = scopeThreadRef(LOCAL_ENVIRONMENT_ID, THREAD_ID);
+const THREAD_KEY = scopedThreadKey(THREAD_REF);
+const UUID_ROUTE_RE = new RegExp(
+  `^/${LOCAL_ENVIRONMENT_ID}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`,
+);
+const PROJECT_DRAFT_KEY = `${LOCAL_ENVIRONMENT_ID}:${PROJECT_ID}`;
 const NOW_ISO = "2026-03-04T12:00:00.000Z";
 const BASE_TIME_MS = Date.parse(NOW_ISO);
 const ATTACHMENT_SVG = "<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'></svg>";
@@ -433,11 +440,27 @@ async function waitForWsClient(): Promise<void> {
   );
 }
 
+function threadRefFor(threadId: ThreadId) {
+  return scopeThreadRef(LOCAL_ENVIRONMENT_ID, threadId);
+}
+
+function threadKeyFor(threadId: ThreadId): string {
+  return scopedThreadKey(threadRefFor(threadId));
+}
+
+function threadIdFromPath(pathname: string): ThreadId {
+  const [, , threadId] = pathname.split("/");
+  if (!threadId) {
+    throw new Error(`Expected scoped thread path, received "${pathname}".`);
+  }
+  return threadId as ThreadId;
+}
+
 async function waitForAppBootstrap(): Promise<void> {
   await vi.waitFor(
     () => {
       expect(getServerConfig()).not.toBeNull();
-      expect(useStore.getState().bootstrapComplete).toBe(true);
+      expect(selectBootstrapCompleteForActiveEnvironment(useStore.getState())).toBe(true);
     },
     { timeout: 8_000, interval: 16 },
   );
@@ -451,7 +474,9 @@ async function promoteDraftThreadViaDomainEvent(threadId: ThreadId): Promise<voi
   );
   await vi.waitFor(
     () => {
-      expect(useComposerDraftStore.getState().draftThreadsByThreadId[threadId]).toBeUndefined();
+      expect(useComposerDraftStore.getState().draftThreadsByThreadKey[threadKeyFor(threadId)]).toBe(
+        undefined,
+      );
     },
     { timeout: 8_000, interval: 16 },
   );
@@ -482,8 +507,9 @@ function withProjectScripts(
 
 function setDraftThreadWithoutWorktree(): void {
   useComposerDraftStore.setState({
-    draftThreadsByThreadId: {
-      [THREAD_ID]: {
+    draftThreadsByThreadKey: {
+      [THREAD_KEY]: {
+        environmentId: LOCAL_ENVIRONMENT_ID,
         projectId: PROJECT_ID,
         createdAt: NOW_ISO,
         runtimeMode: "full-access",
@@ -493,8 +519,8 @@ function setDraftThreadWithoutWorktree(): void {
         envMode: "local",
       },
     },
-    projectDraftThreadIdByProjectId: {
-      [PROJECT_ID]: THREAD_ID,
+    projectDraftThreadKeyByProjectKey: {
+      [PROJECT_DRAFT_KEY]: THREAD_KEY,
     },
   });
 }
@@ -1063,7 +1089,7 @@ async function mountChatView(options: {
 
   const router = getRouter(
     createMemoryHistory({
-      initialEntries: [`/${THREAD_ID}`],
+      initialEntries: [`/${LOCAL_ENVIRONMENT_ID}/${THREAD_ID}`],
     }),
   );
 
@@ -1175,35 +1201,20 @@ describe("ChatView timeline estimator parity (full app)", () => {
     wsRequests.length = 0;
     customWsRpcResolver = null;
     useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
+      draftsByThreadKey: {},
+      draftThreadsByThreadKey: {},
+      projectDraftThreadKeyByProjectKey: {},
       stickyModelSelectionByProvider: {},
       stickyActiveProvider: null,
     });
     useStore.setState({
-      projectIds: [],
-      projectById: {},
-      threadIds: [],
-      threadIdsByProjectId: {},
-      threadShellById: {},
-      threadSessionById: {},
-      threadTurnStateById: {},
-      messageIdsByThreadId: {},
-      messageByThreadId: {},
-      activityIdsByThreadId: {},
-      activityByThreadId: {},
-      proposedPlanIdsByThreadId: {},
-      proposedPlanByThreadId: {},
-      turnDiffIdsByThreadId: {},
-      turnDiffSummaryByThreadId: {},
-      sidebarThreadSummaryById: {},
-      bootstrapComplete: false,
+      activeEnvironmentId: null,
+      environmentStateById: {},
     });
     useTerminalStateStore.persist.clearStorage();
     useTerminalStateStore.setState({
-      terminalStateByThreadId: {},
-      terminalLaunchContextByThreadId: {},
+      terminalStateByThreadKey: {},
+      terminalLaunchContextByThreadKey: {},
       terminalEventEntriesByKey: {},
       nextTerminalEventId: 1,
     });
@@ -1444,8 +1455,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
 
     useTerminalStateStore.setState({
-      terminalStateByThreadId: {
-        [THREAD_ID]: {
+      terminalStateByThreadKey: {
+        [THREAD_KEY]: {
           terminalOpen: true,
           terminalHeight: 280,
           terminalIds: ["default"],
@@ -1455,8 +1466,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           activeTerminalGroupId: "group-default",
         },
       },
-      terminalLaunchContextByThreadId: {
-        [THREAD_ID]: {
+      terminalLaunchContextByThreadKey: {
+        [THREAD_KEY]: {
           cwd: "/repo/project",
           worktreePath: null,
         },
@@ -1702,8 +1713,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("runs project scripts from local draft threads at the project cwd", async () => {
     useComposerDraftStore.setState({
-      draftThreadsByThreadId: {
-        [THREAD_ID]: {
+      draftThreadsByThreadKey: {
+        [THREAD_KEY]: {
+          environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
@@ -1713,8 +1725,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "local",
         },
       },
-      projectDraftThreadIdByProjectId: {
-        [PROJECT_ID]: THREAD_ID,
+      projectDraftThreadKeyByProjectKey: {
+        [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
 
@@ -1778,8 +1790,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("runs project scripts from worktree draft threads at the worktree cwd", async () => {
     useComposerDraftStore.setState({
-      draftThreadsByThreadId: {
-        [THREAD_ID]: {
+      draftThreadsByThreadKey: {
+        [THREAD_KEY]: {
+          environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
@@ -1789,8 +1802,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      projectDraftThreadIdByProjectId: {
-        [PROJECT_ID]: THREAD_ID,
+      projectDraftThreadKeyByProjectKey: {
+        [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
 
@@ -1841,8 +1854,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("lets the server own setup after preparing a pull request worktree thread", async () => {
     useComposerDraftStore.setState({
-      draftThreadsByThreadId: {
-        [THREAD_ID]: {
+      draftThreadsByThreadKey: {
+        [THREAD_KEY]: {
+          environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
@@ -1852,8 +1866,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "local",
         },
       },
-      projectDraftThreadIdByProjectId: {
-        [PROJECT_ID]: THREAD_ID,
+      projectDraftThreadKeyByProjectKey: {
+        [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
 
@@ -1963,11 +1977,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("sends bootstrap turn-starts and waits for server setup on first-send worktree drafts", async () => {
     useTerminalStateStore.setState({
-      terminalStateByThreadId: {},
+      terminalStateByThreadKey: {},
     });
     useComposerDraftStore.setState({
-      draftThreadsByThreadId: {
-        [THREAD_ID]: {
+      draftThreadsByThreadKey: {
+        [THREAD_KEY]: {
+          environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
@@ -1977,8 +1992,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      projectDraftThreadIdByProjectId: {
-        [PROJECT_ID]: THREAD_ID,
+      projectDraftThreadKeyByProjectKey: {
+        [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
 
@@ -2004,7 +2019,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      useComposerDraftStore.getState().setPrompt(THREAD_ID, "Ship it");
+      useComposerDraftStore.getState().setPrompt(THREAD_REF, "Ship it");
       await waitForLayout();
 
       const sendButton = await waitForSendButton();
@@ -2063,11 +2078,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
   it("shows the send state once bootstrap dispatch is in flight", async () => {
     useTerminalStateStore.setState({
-      terminalStateByThreadId: {},
+      terminalStateByThreadKey: {},
     });
     useComposerDraftStore.setState({
-      draftThreadsByThreadId: {
-        [THREAD_ID]: {
+      draftThreadsByThreadKey: {
+        [THREAD_KEY]: {
+          environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
@@ -2077,8 +2093,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      projectDraftThreadIdByProjectId: {
-        [PROJECT_ID]: THREAD_ID,
+      projectDraftThreadKeyByProjectKey: {
+        [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
 
@@ -2107,7 +2123,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     });
 
     try {
-      useComposerDraftStore.getState().setPrompt(THREAD_ID, "Ship it");
+      useComposerDraftStore.getState().setPrompt(THREAD_REF, "Ship it");
       await waitForLayout();
 
       const sendButton = await waitForSendButton();
@@ -2199,7 +2215,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     const removedLabel = "Terminal 1 lines 1-2";
     const addedLabel = "Terminal 2 lines 9-10";
     useComposerDraftStore.getState().addTerminalContext(
-      THREAD_ID,
+      THREAD_REF,
       createTerminalContext({
         id: "ctx-removed",
         terminalLabel: "Terminal 1",
@@ -2226,21 +2242,21 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
 
       const store = useComposerDraftStore.getState();
-      const currentPrompt = store.draftsByThreadId[THREAD_ID]?.prompt ?? "";
+      const currentPrompt = store.draftsByThreadKey[THREAD_KEY]?.prompt ?? "";
       const nextPrompt = removeInlineTerminalContextPlaceholder(currentPrompt, 0);
-      store.setPrompt(THREAD_ID, nextPrompt.prompt);
-      store.removeTerminalContext(THREAD_ID, "ctx-removed");
+      store.setPrompt(THREAD_REF, nextPrompt.prompt);
+      store.removeTerminalContext(THREAD_REF, "ctx-removed");
 
       await vi.waitFor(
         () => {
-          expect(useComposerDraftStore.getState().draftsByThreadId[THREAD_ID]).toBeUndefined();
+          expect(useComposerDraftStore.getState().draftsByThreadKey[THREAD_KEY]).toBeUndefined();
           expect(document.body.textContent).not.toContain(removedLabel);
         },
         { timeout: 8_000, interval: 16 },
       );
 
       useComposerDraftStore.getState().addTerminalContext(
-        THREAD_ID,
+        THREAD_REF,
         createTerminalContext({
           id: "ctx-added",
           terminalLabel: "Terminal 2",
@@ -2252,7 +2268,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await vi.waitFor(
         () => {
-          const draft = useComposerDraftStore.getState().draftsByThreadId[THREAD_ID];
+          const draft = useComposerDraftStore.getState().draftsByThreadKey[THREAD_KEY];
           expect(draft?.terminalContexts.map((context) => context.id)).toEqual(["ctx-added"]);
           expect(document.body.textContent).toContain(addedLabel);
           expect(document.body.textContent).not.toContain(removedLabel);
@@ -2267,7 +2283,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   it("disables send when the composer only contains an expired terminal pill", async () => {
     const expiredLabel = "Terminal 1 line 4";
     useComposerDraftStore.getState().addTerminalContext(
-      THREAD_ID,
+      THREAD_REF,
       createTerminalContext({
         id: "ctx-expired-only",
         terminalLabel: "Terminal 1",
@@ -2303,7 +2319,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
   it("warns when sending text while omitting expired terminal pills", async () => {
     const expiredLabel = "Terminal 1 line 4";
     useComposerDraftStore.getState().addTerminalContext(
-      THREAD_ID,
+      THREAD_REF,
       createTerminalContext({
         id: "ctx-expired-send-warning",
         terminalLabel: "Terminal 1",
@@ -2314,7 +2330,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     );
     useComposerDraftStore
       .getState()
-      .setPrompt(THREAD_ID, `yoo${INLINE_TERMINAL_CONTEXT_PLACEHOLDER}waddup`);
+      .setPrompt(THREAD_REF, `yoo${INLINE_TERMINAL_CONTEXT_PLACEHOLDER}waddup`);
 
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -2476,7 +2492,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         (path) => UUID_ROUTE_RE.test(path),
         "Route should have changed to a new draft thread UUID.",
       );
-      const newThreadId = newThreadPath.slice(1) as ThreadId;
+      const newThreadId = threadIdFromPath(newThreadPath);
 
       // The composer editor should be present for the new draft thread.
       await waitForComposerEditor();
@@ -2537,9 +2553,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
         (path) => UUID_ROUTE_RE.test(path),
         "Route should have changed to a new draft thread UUID.",
       );
-      const newThreadId = newThreadPath.slice(1) as ThreadId;
+      const newThreadId = threadIdFromPath(newThreadPath);
 
-      expect(useComposerDraftStore.getState().draftsByThreadId[newThreadId]).toMatchObject({
+      expect(
+        useComposerDraftStore.getState().draftsByThreadKey[threadKeyFor(newThreadId)],
+      ).toMatchObject({
         modelSelectionByProvider: {
           codex: {
             provider: "codex",
@@ -2590,9 +2608,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
         (path) => UUID_ROUTE_RE.test(path),
         "Route should have changed to a new sticky claude draft thread UUID.",
       );
-      const newThreadId = newThreadPath.slice(1) as ThreadId;
+      const newThreadId = threadIdFromPath(newThreadPath);
 
-      expect(useComposerDraftStore.getState().draftsByThreadId[newThreadId]).toMatchObject({
+      expect(
+        useComposerDraftStore.getState().draftsByThreadKey[threadKeyFor(newThreadId)],
+      ).toMatchObject({
         modelSelectionByProvider: {
           claudeAgent: {
             provider: "claudeAgent",
@@ -2630,9 +2650,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
         (path) => UUID_ROUTE_RE.test(path),
         "Route should have changed to a new draft thread UUID.",
       );
-      const newThreadId = newThreadPath.slice(1) as ThreadId;
+      const newThreadId = threadIdFromPath(newThreadPath);
 
-      expect(useComposerDraftStore.getState().draftsByThreadId[newThreadId]).toBeUndefined();
+      expect(useComposerDraftStore.getState().draftsByThreadKey[threadKeyFor(newThreadId)]).toBe(
+        undefined,
+      );
     } finally {
       await mounted.cleanup();
     }
@@ -2672,9 +2694,11 @@ describe("ChatView timeline estimator parity (full app)", () => {
         (path) => UUID_ROUTE_RE.test(path),
         "Route should have changed to a sticky draft thread UUID.",
       );
-      const threadId = threadPath.slice(1) as ThreadId;
+      const threadId = threadIdFromPath(threadPath);
 
-      expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toMatchObject({
+      expect(
+        useComposerDraftStore.getState().draftsByThreadKey[threadKeyFor(threadId)],
+      ).toMatchObject({
         modelSelectionByProvider: {
           codex: {
             provider: "codex",
@@ -2687,7 +2711,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         activeProvider: "codex",
       });
 
-      useComposerDraftStore.getState().setModelSelection(threadId, {
+      useComposerDraftStore.getState().setModelSelection(threadRefFor(threadId), {
         provider: "codex",
         model: "gpt-5.4",
         options: {
@@ -2703,7 +2727,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
         (path) => path === threadPath,
         "New-thread should reuse the existing project draft thread.",
       );
-      expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toMatchObject({
+      expect(
+        useComposerDraftStore.getState().draftsByThreadKey[threadKeyFor(threadId)],
+      ).toMatchObject({
         modelSelectionByProvider: {
           codex: {
             provider: "codex",
@@ -2810,7 +2836,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         (path) => UUID_ROUTE_RE.test(path),
         "Route should have changed to a promoted draft thread UUID.",
       );
-      const promotedThreadId = promotedThreadPath.slice(1) as ThreadId;
+      const promotedThreadId = threadIdFromPath(promotedThreadPath);
 
       await promoteDraftThreadViaDomainEvent(promotedThreadId);
 

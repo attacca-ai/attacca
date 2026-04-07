@@ -1,4 +1,3 @@
-import { ThreadId } from "@t3tools/contracts";
 import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/react-router";
 import { Suspense, lazy, type ReactNode, useCallback, useEffect, useState } from "react";
 
@@ -17,7 +16,8 @@ import {
   stripDiffSearchParams,
 } from "../diffRouteSearch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
-import { useStore } from "../store";
+import { selectEnvironmentState, selectThreadByRef, useStore } from "../store";
+import { resolveThreadRouteRef, buildThreadRouteParams } from "../threadRoutes";
 import { Sheet, SheetPopup } from "../components/ui/sheet";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 
@@ -161,39 +161,57 @@ const DiffPanelInlineSidebar = (props: {
 };
 
 function ChatThreadRouteView() {
-  const bootstrapComplete = useStore((store) => store.bootstrapComplete);
   const navigate = useNavigate();
-  const threadId = Route.useParams({
-    select: (params) => ThreadId.makeUnsafe(params.threadId),
+  const threadRef = Route.useParams({
+    select: (params) => resolveThreadRouteRef(params),
   });
   const search = Route.useSearch();
-  const threadExists = useStore((store) => store.threadShellById[threadId] !== undefined);
-  const draftThreadExists = useComposerDraftStore((store) =>
-    Object.hasOwn(store.draftThreadsByThreadId, threadId),
+  const bootstrapComplete = useStore(
+    (store) => selectEnvironmentState(store, threadRef?.environmentId ?? null).bootstrapComplete,
   );
+  const threadExists = useStore((store) => selectThreadByRef(store, threadRef) !== undefined);
+  const environmentHasServerThreads = useStore(
+    (store) => selectEnvironmentState(store, threadRef?.environmentId ?? null).threadIds.length > 0,
+  );
+  const draftThreadExists = useComposerDraftStore((store) =>
+    threadRef ? store.getDraftThreadByRef(threadRef) !== null : false,
+  );
+  const environmentHasDraftThreads = useComposerDraftStore((store) => {
+    if (!threadRef) {
+      return false;
+    }
+    return Object.values(store.draftThreadsByThreadKey).some(
+      (draftThread) => draftThread.environmentId === threadRef.environmentId,
+    );
+  });
   const routeThreadExists = threadExists || draftThreadExists;
+  const environmentHasAnyThreads = environmentHasServerThreads || environmentHasDraftThreads;
   const diffOpen = search.diff === "1";
   const shouldUseDiffSheet = useMediaQuery(DIFF_INLINE_LAYOUT_MEDIA_QUERY);
-  // TanStack Router keeps active route components mounted across param-only navigations
-  // unless remountDeps are configured, so this stays warm across thread switches.
   const [hasOpenedDiff, setHasOpenedDiff] = useState(diffOpen);
   const closeDiff = useCallback(() => {
+    if (!threadRef) {
+      return;
+    }
     void navigate({
-      to: "/$threadId",
-      params: { threadId },
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(threadRef),
       search: { diff: undefined },
     });
-  }, [navigate, threadId]);
+  }, [navigate, threadRef]);
   const openDiff = useCallback(() => {
+    if (!threadRef) {
+      return;
+    }
     void navigate({
-      to: "/$threadId",
-      params: { threadId },
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(threadRef),
       search: (previous) => {
         const rest = stripDiffSearchParams(previous);
         return { ...rest, diff: "1" };
       },
     });
-  }, [navigate, threadId]);
+  }, [navigate, threadRef]);
 
   useEffect(() => {
     if (diffOpen) {
@@ -202,17 +220,16 @@ function ChatThreadRouteView() {
   }, [diffOpen]);
 
   useEffect(() => {
-    if (!bootstrapComplete) {
+    if (!threadRef || !bootstrapComplete) {
       return;
     }
 
-    if (!routeThreadExists) {
+    if (!routeThreadExists && environmentHasAnyThreads) {
       void navigate({ to: "/", replace: true });
-      return;
     }
-  }, [bootstrapComplete, navigate, routeThreadExists, threadId]);
+  }, [bootstrapComplete, environmentHasAnyThreads, navigate, routeThreadExists, threadRef]);
 
-  if (!bootstrapComplete || !routeThreadExists) {
+  if (!threadRef || !bootstrapComplete || !routeThreadExists) {
     return null;
   }
 
@@ -222,7 +239,7 @@ function ChatThreadRouteView() {
     return (
       <>
         <SidebarInset className="h-dvh  min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-          <ChatView threadId={threadId} />
+          <ChatView environmentId={threadRef.environmentId} threadId={threadRef.threadId} />
         </SidebarInset>
         <DiffPanelInlineSidebar
           diffOpen={diffOpen}
@@ -237,7 +254,7 @@ function ChatThreadRouteView() {
   return (
     <>
       <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-        <ChatView threadId={threadId} />
+        <ChatView environmentId={threadRef.environmentId} threadId={threadRef.threadId} />
       </SidebarInset>
       <DiffPanelSheet diffOpen={diffOpen} onCloseDiff={closeDiff}>
         {shouldRenderDiffContent ? <LazyDiffPanel mode="sheet" /> : null}
@@ -246,7 +263,7 @@ function ChatThreadRouteView() {
   );
 }
 
-export const Route = createFileRoute("/_chat/$threadId")({
+export const Route = createFileRoute("/_chat/$environmentId/$threadId")({
   validateSearch: (search) => parseDiffRouteSearch(search),
   search: {
     middlewares: [retainSearchParams<DiffRouteSearch>(["diff"])],

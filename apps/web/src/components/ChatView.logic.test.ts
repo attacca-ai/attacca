@@ -1,6 +1,7 @@
+import { scopeThreadRef } from "@t3tools/client-runtime";
 import { EnvironmentId, ProjectId, ThreadId, TurnId } from "@t3tools/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useStore } from "../store";
+import { type EnvironmentState, useStore } from "../store";
 import { type Thread } from "../types";
 
 import {
@@ -211,8 +212,7 @@ const makeThread = (input?: {
 
 function setStoreThreads(threads: ReadonlyArray<ReturnType<typeof makeThread>>) {
   const projectId = ProjectId.makeUnsafe("project-1");
-  useStore.setState({
-    activeEnvironmentId: localEnvironmentId,
+  const environmentState: EnvironmentState = {
     projectIds: [projectId],
     projectById: {
       [projectId]: {
@@ -307,7 +307,12 @@ function setStoreThreads(threads: ReadonlyArray<ReturnType<typeof makeThread>>) 
     ),
     sidebarThreadSummaryById: {},
     bootstrapComplete: true,
-    environmentStateById: {},
+  };
+  useStore.setState({
+    activeEnvironmentId: localEnvironmentId,
+    environmentStateById: {
+      [localEnvironmentId]: environmentState,
+    },
   });
 }
 
@@ -333,14 +338,16 @@ describe("waitForStartedServerThread", () => {
       }),
     ]);
 
-    await expect(waitForStartedServerThread(threadId)).resolves.toBe(true);
+    await expect(
+      waitForStartedServerThread(scopeThreadRef(localEnvironmentId, threadId)),
+    ).resolves.toBe(true);
   });
 
   it("waits for the thread to start via subscription updates", async () => {
     const threadId = ThreadId.makeUnsafe("thread-wait");
     setStoreThreads([makeThread({ id: threadId })]);
 
-    const promise = waitForStartedServerThread(threadId, 500);
+    const promise = waitForStartedServerThread(scopeThreadRef(localEnvironmentId, threadId), 500);
 
     setStoreThreads([
       makeThread({
@@ -383,7 +390,9 @@ describe("waitForStartedServerThread", () => {
       return originalSubscribe(listener);
     });
 
-    await expect(waitForStartedServerThread(threadId, 500)).resolves.toBe(true);
+    await expect(
+      waitForStartedServerThread(scopeThreadRef(localEnvironmentId, threadId), 500),
+    ).resolves.toBe(true);
   });
 
   it("returns false after the timeout when the thread never starts", async () => {
@@ -391,7 +400,7 @@ describe("waitForStartedServerThread", () => {
 
     const threadId = ThreadId.makeUnsafe("thread-timeout");
     setStoreThreads([makeThread({ id: threadId })]);
-    const promise = waitForStartedServerThread(threadId, 500);
+    const promise = waitForStartedServerThread(scopeThreadRef(localEnvironmentId, threadId), 500);
 
     await vi.advanceTimersByTimeAsync(500);
 

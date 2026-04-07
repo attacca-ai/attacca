@@ -1,6 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Plus, SquareSplitHorizontal, TerminalSquare, Trash2, XIcon } from "lucide-react";
 import {
+  type ScopedThreadRef,
   type TerminalEvent,
   type TerminalSessionSnapshot,
   type ThreadId,
@@ -208,6 +209,7 @@ export function shouldHandleTerminalSelectionMouseUp(
 }
 
 interface TerminalViewportProps {
+  threadRef: ScopedThreadRef;
   threadId: ThreadId;
   terminalId: string;
   terminalLabel: string;
@@ -223,6 +225,7 @@ interface TerminalViewportProps {
 }
 
 function TerminalViewport({
+  threadRef,
   threadId,
   terminalId,
   terminalLabel,
@@ -573,12 +576,12 @@ function TerminalViewport({
       const previousLastEntryId =
         selectTerminalEventEntries(
           previousState.terminalEventEntriesByKey,
-          threadId,
+          threadRef,
           terminalId,
         ).at(-1)?.id ?? 0;
       const nextEntries = selectTerminalEventEntries(
         state.terminalEventEntriesByKey,
-        threadId,
+        threadRef,
         terminalId,
       );
       const nextLastEntryId = nextEntries.at(-1)?.id ?? 0;
@@ -608,7 +611,7 @@ function TerminalViewport({
         writeTerminalSnapshot(activeTerminal, snapshot);
         const bufferedEntries = selectTerminalEventEntries(
           useTerminalStateStore.getState().terminalEventEntriesByKey,
-          threadId,
+          threadRef,
           terminalId,
         );
         const replayEntries = selectTerminalEventEntriesAfterSnapshot(
@@ -714,13 +717,14 @@ function TerminalViewport({
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [drawerHeight, resizeEpoch, terminalId, threadId]);
+  }, [drawerHeight, resizeEpoch, terminalId, threadId, threadRef]);
   return (
     <div ref={containerRef} className="relative h-full w-full overflow-hidden rounded-[4px]" />
   );
 }
 
 interface ThreadTerminalDrawerProps {
+  threadRef: ScopedThreadRef;
   threadId: ThreadId;
   cwd: string;
   worktreePath?: string | null;
@@ -773,6 +777,7 @@ function TerminalActionButton({ label, className, onClick, children }: TerminalA
 }
 
 export default function ThreadTerminalDrawer({
+  threadRef,
   threadId,
   cwd,
   worktreePath,
@@ -1098,6 +1103,7 @@ export default function ThreadTerminalDrawer({
                   >
                     <div className="h-full p-1">
                       <TerminalViewport
+                        threadRef={threadRef}
                         threadId={threadId}
                         terminalId={terminalId}
                         terminalLabel={terminalLabelById.get(terminalId) ?? "Terminal"}
@@ -1119,6 +1125,7 @@ export default function ThreadTerminalDrawer({
               <div className="h-full p-1">
                 <TerminalViewport
                   key={resolvedActiveTerminalId}
+                  threadRef={threadRef}
                   threadId={threadId}
                   terminalId={resolvedActiveTerminalId}
                   terminalLabel={terminalLabelById.get(resolvedActiveTerminalId) ?? "Terminal"}

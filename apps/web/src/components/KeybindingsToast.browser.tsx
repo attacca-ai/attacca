@@ -35,6 +35,7 @@ vi.mock("../lib/gitStatusState", () => ({
 
 const THREAD_ID = "thread-kb-toast-test" as ThreadId;
 const PROJECT_ID = "project-1" as ProjectId;
+const LOCAL_ENVIRONMENT_ID = EnvironmentId.makeUnsafe("environment-local");
 const NOW_ISO = "2026-03-04T12:00:00.000Z";
 
 interface TestFixture {
@@ -51,7 +52,7 @@ const wsLink = ws.link(/ws(s)?:\/\/.*/);
 function createBaseServerConfig(): ServerConfig {
   return {
     environment: {
-      environmentId: EnvironmentId.makeUnsafe("environment-local"),
+      environmentId: LOCAL_ENVIRONMENT_ID,
       label: "Local environment",
       platform: { os: "darwin" as const, arch: "arm64" as const },
       serverVersion: "0.0.0-test",
@@ -164,7 +165,7 @@ function buildFixture(): TestFixture {
     serverConfig: createBaseServerConfig(),
     welcome: {
       environment: {
-        environmentId: EnvironmentId.makeUnsafe("environment-local"),
+        environmentId: LOCAL_ENVIRONMENT_ID,
         label: "Local environment",
         platform: { os: "darwin" as const, arch: "arm64" as const },
         serverVersion: "0.0.0-test",
@@ -301,7 +302,9 @@ async function mountApp(): Promise<{ cleanup: () => Promise<void> }> {
   host.style.overflow = "hidden";
   document.body.append(host);
 
-  const router = getRouter(createMemoryHistory({ initialEntries: [`/${THREAD_ID}`] }));
+  const router = getRouter(
+    createMemoryHistory({ initialEntries: [`/${LOCAL_ENVIRONMENT_ID}/${THREAD_ID}`] }),
+  );
 
   const screen = await render(
     <AppAtomRegistryProvider>
@@ -366,28 +369,13 @@ describe("Keybindings update toast", () => {
     localStorage.clear();
     document.body.innerHTML = "";
     useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
+      draftsByThreadKey: {},
+      draftThreadsByThreadKey: {},
+      projectDraftThreadKeyByProjectKey: {},
     });
     useStore.setState({
-      projectIds: [],
-      projectById: {},
-      threadIds: [],
-      threadIdsByProjectId: {},
-      threadShellById: {},
-      threadSessionById: {},
-      threadTurnStateById: {},
-      messageIdsByThreadId: {},
-      messageByThreadId: {},
-      activityIdsByThreadId: {},
-      activityByThreadId: {},
-      proposedPlanIdsByThreadId: {},
-      proposedPlanByThreadId: {},
-      turnDiffIdsByThreadId: {},
-      turnDiffSummaryByThreadId: {},
-      sidebarThreadSummaryById: {},
-      bootstrapComplete: false,
+      activeEnvironmentId: null,
+      environmentStateById: {},
     });
   });
 

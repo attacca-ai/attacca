@@ -15,18 +15,20 @@ import { describe, expect, it } from "vitest";
 import {
   applyOrchestrationEvent,
   applyOrchestrationEvents,
-  selectProjects,
-  selectThreads,
+  selectEnvironmentState,
+  selectProjectsAcrossEnvironments,
+  selectThreadsAcrossEnvironments,
   syncServerReadModel,
   type AppState,
+  type EnvironmentState,
 } from "./store";
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Thread } from "./types";
 
 const localEnvironmentId = EnvironmentId.makeUnsafe("environment-local");
 
 function withActiveEnvironmentState(
-  environmentState: Omit<AppState, "activeEnvironmentId" | "environmentStateById">,
-  overrides: Partial<AppState> = {},
+  environmentState: EnvironmentState,
+  overrides: Partial<AppState & EnvironmentState> = {},
 ): AppState {
   const {
     activeEnvironmentId: overrideActiveEnvironmentId,
@@ -49,7 +51,6 @@ function withActiveEnvironmentState(
   return {
     activeEnvironmentId,
     environmentStateById,
-    ...mergedEnvironmentState,
   };
 }
 
@@ -96,7 +97,7 @@ function makeState(thread: Thread): AppState {
     updatedAt: "2026-02-13T00:00:00.000Z",
     scripts: [],
   };
-  const threadIdsByProjectId: AppState["threadIdsByProjectId"] = {
+  const threadIdsByProjectId: EnvironmentState["threadIdsByProjectId"] = {
     [thread.projectId]: [thread.id],
   };
   const environmentState = {
@@ -141,7 +142,7 @@ function makeState(thread: Thread): AppState {
     messageByThreadId: {
       [thread.id]: Object.fromEntries(
         thread.messages.map((message) => [message.id, message] as const),
-      ) as AppState["messageByThreadId"][ThreadId],
+      ) as EnvironmentState["messageByThreadId"][ThreadId],
     },
     activityIdsByThreadId: {
       [thread.id]: thread.activities.map((activity) => activity.id),
@@ -149,7 +150,7 @@ function makeState(thread: Thread): AppState {
     activityByThreadId: {
       [thread.id]: Object.fromEntries(
         thread.activities.map((activity) => [activity.id, activity] as const),
-      ) as AppState["activityByThreadId"][ThreadId],
+      ) as EnvironmentState["activityByThreadId"][ThreadId],
     },
     proposedPlanIdsByThreadId: {
       [thread.id]: thread.proposedPlans.map((plan) => plan.id),
@@ -157,7 +158,7 @@ function makeState(thread: Thread): AppState {
     proposedPlanByThreadId: {
       [thread.id]: Object.fromEntries(
         thread.proposedPlans.map((plan) => [plan.id, plan] as const),
-      ) as AppState["proposedPlanByThreadId"][ThreadId],
+      ) as EnvironmentState["proposedPlanByThreadId"][ThreadId],
     },
     turnDiffIdsByThreadId: {
       [thread.id]: thread.turnDiffSummaries.map((summary) => summary.turnId),
@@ -165,7 +166,7 @@ function makeState(thread: Thread): AppState {
     turnDiffSummaryByThreadId: {
       [thread.id]: Object.fromEntries(
         thread.turnDiffSummaries.map((summary) => [summary.turnId, summary] as const),
-      ) as AppState["turnDiffSummaryByThreadId"][ThreadId],
+      ) as EnvironmentState["turnDiffSummaryByThreadId"][ThreadId],
     },
     sidebarThreadSummaryById: {},
     bootstrapComplete: true,
@@ -173,8 +174,8 @@ function makeState(thread: Thread): AppState {
   return withActiveEnvironmentState(environmentState);
 }
 
-function makeEmptyState(overrides: Partial<AppState> = {}): AppState {
-  const environmentState = {
+function makeEmptyState(overrides: Partial<AppState & EnvironmentState> = {}): AppState {
+  const environmentState: EnvironmentState = {
     projectIds: [],
     projectById: {},
     threadIds: [],
@@ -196,12 +197,16 @@ function makeEmptyState(overrides: Partial<AppState> = {}): AppState {
   return withActiveEnvironmentState(environmentState, overrides);
 }
 
+function localEnvironmentStateOf(state: AppState): EnvironmentState {
+  return selectEnvironmentState(state, localEnvironmentId);
+}
+
 function projectsOf(state: AppState) {
-  return selectProjects(state);
+  return selectProjectsAcrossEnvironments(state);
 }
 
 function threadsOf(state: AppState) {
-  return selectThreads(state);
+  return selectThreadsAcrossEnvironments(state);
 }
 
 function makeEvent<T extends OrchestrationEvent["type"]>(
@@ -302,10 +307,12 @@ function makeReadModelProject(
 
 describe("store read model sync", () => {
   it("marks bootstrap complete after snapshot sync", () => {
-    const initialState: AppState = {
-      ...makeState(makeThread()),
-      bootstrapComplete: false,
-    };
+    const initialState = withActiveEnvironmentState(
+      localEnvironmentStateOf(makeState(makeThread())),
+      {
+        bootstrapComplete: false,
+      },
+    );
 
     const next = syncServerReadModel(
       initialState,
@@ -313,7 +320,7 @@ describe("store read model sync", () => {
       localEnvironmentId,
     );
 
-    expect(next.bootstrapComplete).toBe(true);
+    expect(localEnvironmentStateOf(next).bootstrapComplete).toBe(true);
   });
 
   it("preserves claude model slugs without an active session", () => {
@@ -453,10 +460,9 @@ describe("store read model sync", () => {
 
 describe("incremental orchestration updates", () => {
   it("does not mark bootstrap complete for incremental events", () => {
-    const state: AppState = {
-      ...makeState(makeThread()),
+    const state = withActiveEnvironmentState(localEnvironmentStateOf(makeState(makeThread())), {
       bootstrapComplete: false,
-    };
+    });
 
     const next = applyOrchestrationEvent(
       state,
@@ -468,7 +474,7 @@ describe("incremental orchestration updates", () => {
       localEnvironmentId,
     );
 
-    expect(next.bootstrapComplete).toBe(false);
+    expect(localEnvironmentStateOf(next).bootstrapComplete).toBe(false);
   });
 
   it("preserves state identity for no-op project and thread deletes", () => {
@@ -539,9 +545,11 @@ describe("incremental orchestration updates", () => {
     expect(projectsOf(next)[0]?.id).toBe(recreatedProjectId);
     expect(projectsOf(next)[0]?.cwd).toBe("/tmp/project");
     expect(projectsOf(next)[0]?.name).toBe("Project Recreated");
-    expect(next.projectIds).toEqual([recreatedProjectId]);
-    expect(next.projectById[originalProjectId]).toBeUndefined();
-    expect(next.projectById[recreatedProjectId]?.id).toBe(recreatedProjectId);
+    expect(localEnvironmentStateOf(next).projectIds).toEqual([recreatedProjectId]);
+    expect(localEnvironmentStateOf(next).projectById[originalProjectId]).toBeUndefined();
+    expect(localEnvironmentStateOf(next).projectById[recreatedProjectId]?.id).toBe(
+      recreatedProjectId,
+    );
   });
 
   it("removes stale project index entries when thread.created recreates a thread under a new project", () => {
@@ -552,8 +560,7 @@ describe("incremental orchestration updates", () => {
       id: threadId,
       projectId: originalProjectId,
     });
-    const state: AppState = {
-      ...makeState(thread),
+    const state = withActiveEnvironmentState(localEnvironmentStateOf(makeState(thread)), {
       projectIds: [originalProjectId, recreatedProjectId],
       projectById: {
         [originalProjectId]: {
@@ -583,7 +590,7 @@ describe("incremental orchestration updates", () => {
           scripts: [],
         },
       },
-    };
+    });
 
     const next = applyOrchestrationEvent(
       state,
@@ -607,8 +614,10 @@ describe("incremental orchestration updates", () => {
 
     expect(threadsOf(next)).toHaveLength(1);
     expect(threadsOf(next)[0]?.projectId).toBe(recreatedProjectId);
-    expect(next.threadIdsByProjectId[originalProjectId]).toBeUndefined();
-    expect(next.threadIdsByProjectId[recreatedProjectId]).toEqual([threadId]);
+    expect(localEnvironmentStateOf(next).threadIdsByProjectId[originalProjectId]).toBeUndefined();
+    expect(localEnvironmentStateOf(next).threadIdsByProjectId[recreatedProjectId]).toEqual([
+      threadId,
+    ]);
   });
 
   it("updates only the affected thread for message events", () => {
@@ -627,11 +636,12 @@ describe("incremental orchestration updates", () => {
       ],
     });
     const thread2 = makeThread({ id: ThreadId.makeUnsafe("thread-2") });
-    const state: AppState = {
-      ...makeState(thread1),
+    const baseState = makeState(thread1);
+    const baseEnvironmentState = localEnvironmentStateOf(baseState);
+    const state = withActiveEnvironmentState(baseEnvironmentState, {
       threadIds: [thread1.id, thread2.id],
       threadShellById: {
-        ...makeState(thread1).threadShellById,
+        ...baseEnvironmentState.threadShellById,
         [thread2.id]: {
           id: thread2.id,
           environmentId: thread2.environmentId,
@@ -650,54 +660,54 @@ describe("incremental orchestration updates", () => {
         },
       },
       threadSessionById: {
-        ...makeState(thread1).threadSessionById,
+        ...baseEnvironmentState.threadSessionById,
         [thread2.id]: thread2.session,
       },
       threadTurnStateById: {
-        ...makeState(thread1).threadTurnStateById,
+        ...baseEnvironmentState.threadTurnStateById,
         [thread2.id]: {
           latestTurn: thread2.latestTurn,
         },
       },
       messageIdsByThreadId: {
-        ...makeState(thread1).messageIdsByThreadId,
+        ...baseEnvironmentState.messageIdsByThreadId,
         [thread2.id]: [],
       },
       messageByThreadId: {
-        ...makeState(thread1).messageByThreadId,
+        ...baseEnvironmentState.messageByThreadId,
         [thread2.id]: {},
       },
       activityIdsByThreadId: {
-        ...makeState(thread1).activityIdsByThreadId,
+        ...baseEnvironmentState.activityIdsByThreadId,
         [thread2.id]: [],
       },
       activityByThreadId: {
-        ...makeState(thread1).activityByThreadId,
+        ...baseEnvironmentState.activityByThreadId,
         [thread2.id]: {},
       },
       proposedPlanIdsByThreadId: {
-        ...makeState(thread1).proposedPlanIdsByThreadId,
+        ...baseEnvironmentState.proposedPlanIdsByThreadId,
         [thread2.id]: [],
       },
       proposedPlanByThreadId: {
-        ...makeState(thread1).proposedPlanByThreadId,
+        ...baseEnvironmentState.proposedPlanByThreadId,
         [thread2.id]: {},
       },
       turnDiffIdsByThreadId: {
-        ...makeState(thread1).turnDiffIdsByThreadId,
+        ...baseEnvironmentState.turnDiffIdsByThreadId,
         [thread2.id]: [],
       },
       turnDiffSummaryByThreadId: {
-        ...makeState(thread1).turnDiffSummaryByThreadId,
+        ...baseEnvironmentState.turnDiffSummaryByThreadId,
         [thread2.id]: {},
       },
       sidebarThreadSummaryById: {
-        ...makeState(thread1).sidebarThreadSummaryById,
+        ...baseEnvironmentState.sidebarThreadSummaryById,
       },
       threadIdsByProjectId: {
         [thread1.projectId]: [thread1.id, thread2.id],
       },
-    };
+    });
 
     const next = applyOrchestrationEvent(
       state,
@@ -716,10 +726,20 @@ describe("incremental orchestration updates", () => {
 
     expect(threadsOf(next)[0]?.messages[0]?.text).toBe("hello world");
     expect(threadsOf(next)[0]?.latestTurn?.state).toBe("running");
-    expect(next.threadShellById[thread2.id]).toBe(state.threadShellById[thread2.id]);
-    expect(next.threadSessionById[thread2.id]).toBe(state.threadSessionById[thread2.id]);
-    expect(next.messageIdsByThreadId[thread2.id]).toBe(state.messageIdsByThreadId[thread2.id]);
-    expect(next.messageByThreadId[thread2.id]).toBe(state.messageByThreadId[thread2.id]);
+    const nextEnvironmentState = next.environmentStateById[localEnvironmentId];
+    const previousEnvironmentState = state.environmentStateById[localEnvironmentId];
+    expect(nextEnvironmentState?.threadShellById[thread2.id]).toBe(
+      previousEnvironmentState?.threadShellById[thread2.id],
+    );
+    expect(nextEnvironmentState?.threadSessionById[thread2.id]).toBe(
+      previousEnvironmentState?.threadSessionById[thread2.id],
+    );
+    expect(nextEnvironmentState?.messageIdsByThreadId[thread2.id]).toBe(
+      previousEnvironmentState?.messageIdsByThreadId[thread2.id],
+    );
+    expect(nextEnvironmentState?.messageByThreadId[thread2.id]).toBe(
+      previousEnvironmentState?.messageByThreadId[thread2.id],
+    );
   });
 
   it("applies replay batches in sequence and updates session state", () => {

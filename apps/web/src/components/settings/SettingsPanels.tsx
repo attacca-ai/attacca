@@ -13,11 +13,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   PROVIDER_DISPLAY_NAMES,
+  type ScopedThreadRef,
   type ProviderKind,
   type ServerProvider,
   type ServerProviderModel,
-  ThreadId,
 } from "@t3tools/contracts";
+import { scopeThreadRef } from "@t3tools/client-runtime";
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
 import { normalizeModelSlug } from "@t3tools/shared/model";
 import { Equal } from "effect";
@@ -46,7 +47,11 @@ import {
   resolveAppModelSelectionState,
 } from "../../modelSelection";
 import { ensureNativeApi, readNativeApi } from "../../nativeApi";
-import { useStore } from "../../store";
+import {
+  selectProjectsAcrossEnvironments,
+  selectThreadsAcrossEnvironments,
+  useStore,
+} from "../../store";
 import { formatRelativeTime, formatRelativeTimeLabel } from "../../timestampFormat";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
@@ -1479,20 +1484,10 @@ export function GeneralSettingsPanel() {
 }
 
 export function ArchivedThreadsPanel() {
-  const projectIds = useStore((store) => store.projectIds);
-  const projectById = useStore((store) => store.projectById);
-  const threadIds = useStore((store) => store.threadIds);
-  const threadShellById = useStore((store) => store.threadShellById);
+  const projects = useStore(selectProjectsAcrossEnvironments);
+  const threads = useStore(selectThreadsAcrossEnvironments);
   const { unarchiveThread, confirmAndDeleteThread } = useThreadActions();
   const archivedGroups = useMemo(() => {
-    const projects = projectIds.flatMap((projectId) => {
-      const project = projectById[projectId];
-      return project ? [project] : [];
-    });
-    const threads = threadIds.flatMap((threadId) => {
-      const thread = threadShellById[threadId];
-      return thread ? [thread] : [];
-    });
     return projects
       .map((project) => ({
         project,
@@ -1505,10 +1500,10 @@ export function ArchivedThreadsPanel() {
           }),
       }))
       .filter((group) => group.threads.length > 0);
-  }, [projectById, projectIds, threadIds, threadShellById]);
+  }, [projects, threads]);
 
   const handleArchivedThreadContextMenu = useCallback(
-    async (threadId: ThreadId, position: { x: number; y: number }) => {
+    async (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
       const api = readNativeApi();
       if (!api) return;
       const clicked = await api.contextMenu.show(
@@ -1521,7 +1516,7 @@ export function ArchivedThreadsPanel() {
 
       if (clicked === "unarchive") {
         try {
-          await unarchiveThread(threadId);
+          await unarchiveThread(threadRef);
         } catch (error) {
           toastManager.add({
             type: "error",
@@ -1533,7 +1528,7 @@ export function ArchivedThreadsPanel() {
       }
 
       if (clicked === "delete") {
-        await confirmAndDeleteThread(threadId);
+        await confirmAndDeleteThread(threadRef);
       }
     },
     [confirmAndDeleteThread, unarchiveThread],
@@ -1566,10 +1561,13 @@ export function ArchivedThreadsPanel() {
                 className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 first:border-t-0 sm:px-5"
                 onContextMenu={(event) => {
                   event.preventDefault();
-                  void handleArchivedThreadContextMenu(thread.id, {
-                    x: event.clientX,
-                    y: event.clientY,
-                  });
+                  void handleArchivedThreadContextMenu(
+                    scopeThreadRef(thread.environmentId, thread.id),
+                    {
+                      x: event.clientX,
+                      y: event.clientY,
+                    },
+                  );
                 }}
               >
                 <div className="min-w-0 flex-1">
@@ -1586,13 +1584,16 @@ export function ArchivedThreadsPanel() {
                   size="sm"
                   className="h-7 shrink-0 cursor-pointer gap-1.5 px-2.5"
                   onClick={() =>
-                    void unarchiveThread(thread.id).catch((error) => {
-                      toastManager.add({
-                        type: "error",
-                        title: "Failed to unarchive thread",
-                        description: error instanceof Error ? error.message : "An error occurred.",
-                      });
-                    })
+                    void unarchiveThread(scopeThreadRef(thread.environmentId, thread.id)).catch(
+                      (error) => {
+                        toastManager.add({
+                          type: "error",
+                          title: "Failed to unarchive thread",
+                          description:
+                            error instanceof Error ? error.message : "An error occurred.",
+                        });
+                      },
+                    )
                   }
                 >
                   <ArchiveX className="size-3.5" />

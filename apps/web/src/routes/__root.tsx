@@ -5,6 +5,12 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import {
+  scopedProjectKey,
+  scopedThreadKey,
+  scopeProjectRef,
+  scopeThreadRef,
+} from "@t3tools/client-runtime";
+import {
   Outlet,
   createRootRouteWithContext,
   type ErrorComponentProps,
@@ -35,11 +41,15 @@ import {
   useServerWelcomeSubscription,
 } from "../rpc/serverState";
 import {
-  clearPromotedDraftThread,
-  clearPromotedDraftThreads,
+  clearPromotedDraftThreadByRef,
+  clearPromotedDraftThreadsByRef,
   useComposerDraftStore,
 } from "../composerDraftStore";
-import { selectProjects, selectThreadById, selectThreads, useStore } from "../store";
+import {
+  selectProjectsAcrossEnvironments,
+  selectThreadsAcrossEnvironments,
+  useStore,
+} from "../store";
 import { useUiStateStore } from "../uiStateStore";
 import { useTerminalStateStore } from "../terminalStateStore";
 import { migrateLocalSettingsToServer } from "../hooks/useSettings";
@@ -271,8 +281,11 @@ function EventRouter() {
         return;
       }
       await navigate({
-        to: "/$threadId",
-        params: { threadId: payload.bootstrapThreadId },
+        to: "/$environmentId/$threadId",
+        params: {
+          environmentId: payload.environment.environmentId,
+          threadId: payload.bootstrapThreadId,
+        },
         replace: true,
       });
       handledBootstrapThreadIdRef.current = payload.bootstrapThreadId;
@@ -358,28 +371,34 @@ function EventRouter() {
 
     const reconcileSnapshotDerivedState = () => {
       const storeState = useStore.getState();
-      const threads = selectThreads(storeState);
-      const projects = selectProjects(storeState);
-      syncProjects(projects.map((project) => ({ id: project.id, cwd: project.cwd })));
+      const threads = selectThreadsAcrossEnvironments(storeState);
+      const projects = selectProjectsAcrossEnvironments(storeState);
+      syncProjects(
+        projects.map((project) => ({
+          key: scopedProjectKey(scopeProjectRef(project.environmentId, project.id)),
+          cwd: project.cwd,
+        })),
+      );
       syncThreads(
         threads.map((thread) => ({
-          id: thread.id,
+          key: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
           seedVisitedAt: thread.updatedAt ?? thread.createdAt,
         })),
       );
-      clearPromotedDraftThreads(threads.map((thread) => thread.id));
-      const draftThreadIds = Object.keys(
-        useComposerDraftStore.getState().draftThreadsByThreadId,
-      ) as ThreadId[];
-      const activeThreadIds = collectActiveTerminalThreadIds({
+      clearPromotedDraftThreadsByRef(
+        threads.map((thread) => scopeThreadRef(thread.environmentId, thread.id)),
+      );
+      const activeThreadKeys = collectActiveTerminalThreadIds({
         snapshotThreads: threads.map((thread) => ({
-          id: thread.id,
+          key: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
           deletedAt: null,
           archivedAt: thread.archivedAt,
         })),
-        draftThreadIds,
+        draftThreadKeys: Object.entries(
+          useComposerDraftStore.getState().draftThreadsByThreadKey,
+        ).map(([draftThreadKey]) => draftThreadKey),
       });
-      removeOrphanedTerminalStates(activeThreadIds);
+      removeOrphanedTerminalStates(activeThreadKeys);
     };
 
     const queryInvalidationThrottler = new Throttler(
@@ -425,31 +444,36 @@ function EventRouter() {
 
       applyOrchestrationEvents(uiEvents, environmentId);
       if (needsProjectUiSync) {
-        const projects = selectProjects(useStore.getState());
-        syncProjects(projects.map((project) => ({ id: project.id, cwd: project.cwd })));
+        const projects = selectProjectsAcrossEnvironments(useStore.getState());
+        syncProjects(
+          projects.map((project) => ({
+            key: scopedProjectKey(scopeProjectRef(project.environmentId, project.id)),
+            cwd: project.cwd,
+          })),
+        );
       }
       const needsThreadUiSync = nextEvents.some(
         (event) => event.type === "thread.created" || event.type === "thread.deleted",
       );
       if (needsThreadUiSync) {
-        const threads = selectThreads(useStore.getState());
+        const threads = selectThreadsAcrossEnvironments(useStore.getState());
         syncThreads(
           threads.map((thread) => ({
-            id: thread.id,
+            key: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
             seedVisitedAt: thread.updatedAt ?? thread.createdAt,
           })),
         );
       }
       const draftStore = useComposerDraftStore.getState();
       for (const threadId of batchEffects.clearPromotedDraftThreadIds) {
-        clearPromotedDraftThread(threadId);
+        clearPromotedDraftThreadByRef(scopeThreadRef(environmentId, threadId));
       }
       for (const threadId of batchEffects.clearDeletedThreadIds) {
-        draftStore.clearDraftThread(threadId);
-        clearThreadUi(threadId);
+        draftStore.clearDraftThread(scopeThreadRef(environmentId, threadId));
+        clearThreadUi(scopedThreadKey(scopeThreadRef(environmentId, threadId)));
       }
       for (const threadId of batchEffects.removeTerminalStateThreadIds) {
-        removeTerminalState(threadId);
+        removeTerminalState(scopeThreadRef(environmentId, threadId));
       }
     };
     const flushPendingDomainEvents = () => {
@@ -606,15 +630,18 @@ function EventRouter() {
       },
     );
     const unsubTerminalEvent = api.terminal.onEvent((event) => {
-      const currentEnvironmentId = resolveCurrentEnvironmentId();
-      if (currentEnvironmentId === null) {
+      const storeState = useStore.getState();
+      const matchingThreads = selectThreadsAcrossEnvironments(storeState).filter(
+        (thread) => thread.id === ThreadId.makeUnsafe(event.threadId),
+      );
+      if (matchingThreads.length !== 1) {
         return;
       }
-      const thread = selectThreadById(ThreadId.makeUnsafe(event.threadId))(useStore.getState());
-      if (thread && thread.environmentId === currentEnvironmentId && thread.archivedAt !== null) {
+      const [thread] = matchingThreads;
+      if (!thread || thread.archivedAt !== null) {
         return;
       }
-      applyTerminalEvent(event);
+      applyTerminalEvent(scopeThreadRef(thread.environmentId, thread.id), event);
     });
     return () => {
       disposed = true;

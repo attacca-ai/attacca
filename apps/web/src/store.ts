@@ -12,6 +12,8 @@ import {
   type OrchestrationThreadActivity,
   type ProjectId,
   type ProviderKind,
+  type ScopedProjectRef,
+  type ScopedThreadRef,
   ThreadId,
   type TurnId,
 } from "@t3tools/contracts";
@@ -56,7 +58,7 @@ export interface EnvironmentState {
   bootstrapComplete: boolean;
 }
 
-export interface AppState extends EnvironmentState {
+export interface AppState {
   activeEnvironmentId: EnvironmentId | null;
   environmentStateById: Record<string, EnvironmentState>;
 }
@@ -84,7 +86,6 @@ const initialEnvironmentState: EnvironmentState = {
 const initialState: AppState = {
   activeEnvironmentId: null,
   environmentStateById: {},
-  ...initialEnvironmentState,
 };
 
 const MAX_THREAD_MESSAGES = 2_000;
@@ -1020,69 +1021,7 @@ function getStoredEnvironmentState(
   state: AppState,
   environmentId: EnvironmentId,
 ): EnvironmentState {
-  const storedEnvironmentState = state.environmentStateById[environmentId];
-  if (state.activeEnvironmentId !== environmentId) {
-    return storedEnvironmentState ?? initialEnvironmentState;
-  }
-
-  if (
-    storedEnvironmentState &&
-    storedEnvironmentState.projectIds === state.projectIds &&
-    storedEnvironmentState.projectById === state.projectById &&
-    storedEnvironmentState.threadIds === state.threadIds &&
-    storedEnvironmentState.threadIdsByProjectId === state.threadIdsByProjectId &&
-    storedEnvironmentState.threadShellById === state.threadShellById &&
-    storedEnvironmentState.threadSessionById === state.threadSessionById &&
-    storedEnvironmentState.threadTurnStateById === state.threadTurnStateById &&
-    storedEnvironmentState.messageIdsByThreadId === state.messageIdsByThreadId &&
-    storedEnvironmentState.messageByThreadId === state.messageByThreadId &&
-    storedEnvironmentState.activityIdsByThreadId === state.activityIdsByThreadId &&
-    storedEnvironmentState.activityByThreadId === state.activityByThreadId &&
-    storedEnvironmentState.proposedPlanIdsByThreadId === state.proposedPlanIdsByThreadId &&
-    storedEnvironmentState.proposedPlanByThreadId === state.proposedPlanByThreadId &&
-    storedEnvironmentState.turnDiffIdsByThreadId === state.turnDiffIdsByThreadId &&
-    storedEnvironmentState.turnDiffSummaryByThreadId === state.turnDiffSummaryByThreadId &&
-    storedEnvironmentState.sidebarThreadSummaryById === state.sidebarThreadSummaryById &&
-    storedEnvironmentState.bootstrapComplete === state.bootstrapComplete
-  ) {
-    return storedEnvironmentState;
-  }
-
-  return {
-    projectIds: state.projectIds,
-    projectById: state.projectById,
-    threadIds: state.threadIds,
-    threadIdsByProjectId: state.threadIdsByProjectId,
-    threadShellById: state.threadShellById,
-    threadSessionById: state.threadSessionById,
-    threadTurnStateById: state.threadTurnStateById,
-    messageIdsByThreadId: state.messageIdsByThreadId,
-    messageByThreadId: state.messageByThreadId,
-    activityIdsByThreadId: state.activityIdsByThreadId,
-    activityByThreadId: state.activityByThreadId,
-    proposedPlanIdsByThreadId: state.proposedPlanIdsByThreadId,
-    proposedPlanByThreadId: state.proposedPlanByThreadId,
-    turnDiffIdsByThreadId: state.turnDiffIdsByThreadId,
-    turnDiffSummaryByThreadId: state.turnDiffSummaryByThreadId,
-    sidebarThreadSummaryById: state.sidebarThreadSummaryById,
-    bootstrapComplete: state.bootstrapComplete,
-  };
-}
-
-function projectActiveEnvironmentState(input: {
-  activeEnvironmentId: EnvironmentId | null;
-  environmentStateById: Record<string, EnvironmentState>;
-}): AppState {
-  const projectedState =
-    input.activeEnvironmentId === null
-      ? initialEnvironmentState
-      : (input.environmentStateById[input.activeEnvironmentId] ?? initialEnvironmentState);
-
-  return {
-    activeEnvironmentId: input.activeEnvironmentId,
-    environmentStateById: input.environmentStateById,
-    ...projectedState,
-  };
+  return state.environmentStateById[environmentId] ?? initialEnvironmentState;
 }
 
 function commitEnvironmentState(
@@ -1103,10 +1042,10 @@ function commitEnvironmentState(
     return state;
   }
 
-  return projectActiveEnvironmentState({
-    activeEnvironmentId: state.activeEnvironmentId,
+  return {
+    ...state,
     environmentStateById,
-  });
+  };
 }
 
 function syncEnvironmentReadModel(
@@ -1646,24 +1585,96 @@ export function applyOrchestrationEvents(
   return commitEnvironmentState(state, environmentId, nextEnvironmentState);
 }
 
-export const selectProjects = (state: AppState): Project[] => getProjects(state);
-export const selectThreads = (state: AppState): Thread[] => getThreads(state);
-export const selectProjectById =
-  (projectId: Project["id"] | null | undefined) =>
-  (state: AppState): Project | undefined =>
-    projectId ? state.projectById[projectId] : undefined;
-export const selectThreadById =
-  (threadId: ThreadId | null | undefined) =>
-  (state: AppState): Thread | undefined =>
-    threadId ? getThread(state, threadId) : undefined;
-export const selectSidebarThreadSummaryById =
-  (threadId: ThreadId | null | undefined) =>
-  (state: AppState): SidebarThreadSummary | undefined =>
-    threadId ? state.sidebarThreadSummaryById[threadId] : undefined;
-export const selectThreadIdsByProjectId =
-  (projectId: ProjectId | null | undefined) =>
-  (state: AppState): ThreadId[] =>
-    projectId ? (state.threadIdsByProjectId[projectId] ?? EMPTY_THREAD_IDS) : EMPTY_THREAD_IDS;
+function getEnvironmentEntries(
+  state: AppState,
+): ReadonlyArray<readonly [EnvironmentId, EnvironmentState]> {
+  return Object.entries(state.environmentStateById) as unknown as ReadonlyArray<
+    readonly [EnvironmentId, EnvironmentState]
+  >;
+}
+
+export function selectEnvironmentState(
+  state: AppState,
+  environmentId: EnvironmentId | null | undefined,
+): EnvironmentState {
+  return environmentId ? getStoredEnvironmentState(state, environmentId) : initialEnvironmentState;
+}
+
+export function selectProjectsForEnvironment(
+  state: AppState,
+  environmentId: EnvironmentId | null | undefined,
+): Project[] {
+  return getProjects(selectEnvironmentState(state, environmentId));
+}
+
+export function selectThreadsForEnvironment(
+  state: AppState,
+  environmentId: EnvironmentId | null | undefined,
+): Thread[] {
+  return getThreads(selectEnvironmentState(state, environmentId));
+}
+
+export function selectProjectsAcrossEnvironments(state: AppState): Project[] {
+  return getEnvironmentEntries(state).flatMap(([, environmentState]) =>
+    getProjects(environmentState),
+  );
+}
+
+export function selectThreadsAcrossEnvironments(state: AppState): Thread[] {
+  return getEnvironmentEntries(state).flatMap(([, environmentState]) =>
+    getThreads(environmentState),
+  );
+}
+
+export function selectSidebarThreadsAcrossEnvironments(state: AppState): SidebarThreadSummary[] {
+  return getEnvironmentEntries(state).flatMap(([environmentId, environmentState]) =>
+    environmentState.threadIds.flatMap((threadId) => {
+      const thread = environmentState.sidebarThreadSummaryById[threadId];
+      return thread && thread.environmentId === environmentId ? [thread] : [];
+    }),
+  );
+}
+
+export function selectBootstrapCompleteForActiveEnvironment(state: AppState): boolean {
+  return selectEnvironmentState(state, state.activeEnvironmentId).bootstrapComplete;
+}
+
+export function selectProjectByRef(
+  state: AppState,
+  ref: ScopedProjectRef | null | undefined,
+): Project | undefined {
+  return ref
+    ? selectEnvironmentState(state, ref.environmentId).projectById[ref.projectId]
+    : undefined;
+}
+
+export function selectThreadByRef(
+  state: AppState,
+  ref: ScopedThreadRef | null | undefined,
+): Thread | undefined {
+  return ref
+    ? getThread(selectEnvironmentState(state, ref.environmentId), ref.threadId)
+    : undefined;
+}
+
+export function selectSidebarThreadSummaryByRef(
+  state: AppState,
+  ref: ScopedThreadRef | null | undefined,
+): SidebarThreadSummary | undefined {
+  return ref
+    ? selectEnvironmentState(state, ref.environmentId).sidebarThreadSummaryById[ref.threadId]
+    : undefined;
+}
+
+export function selectThreadIdsByProjectRef(
+  state: AppState,
+  ref: ScopedProjectRef | null | undefined,
+): ThreadId[] {
+  return ref
+    ? (selectEnvironmentState(state, ref.environmentId).threadIdsByProjectId[ref.projectId] ??
+        EMPTY_THREAD_IDS)
+    : EMPTY_THREAD_IDS;
+}
 
 export function setError(state: AppState, threadId: ThreadId, error: string | null): AppState {
   if (state.activeEnvironmentId === null) {
@@ -1702,10 +1713,10 @@ export function setActiveEnvironmentId(state: AppState, environmentId: Environme
     return state;
   }
 
-  return projectActiveEnvironmentState({
+  return {
+    ...state,
     activeEnvironmentId: environmentId,
-    environmentStateById: state.environmentStateById,
-  });
+  };
 }
 
 export function setThreadBranch(
