@@ -10,7 +10,20 @@ const ENVIRONMENT_ID = "environment-local" as never;
 const GIT_CWD = "/repo/project";
 const BRANCH_NAME = "feature/toast-scope";
 
+function createDeferredPromise<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+
+  return { promise, resolve, reject };
+}
+
 const {
+  activeRunStackedActionDeferredRef,
   invalidateGitQueriesSpy,
   refreshGitStatusSpy,
   runStackedActionMutateAsyncSpy,
@@ -20,9 +33,10 @@ const {
   toastPromiseSpy,
   toastUpdateSpy,
 } = vi.hoisted(() => ({
+  activeRunStackedActionDeferredRef: { current: createDeferredPromise<never>() },
   invalidateGitQueriesSpy: vi.fn(() => Promise.resolve()),
   refreshGitStatusSpy: vi.fn(() => Promise.resolve(null)),
-  runStackedActionMutateAsyncSpy: vi.fn(() => new Promise<never>(() => undefined)),
+  runStackedActionMutateAsyncSpy: vi.fn(() => activeRunStackedActionDeferredRef.current.promise),
   setThreadBranchSpy: vi.fn(),
   toastAddSpy: vi.fn(() => "toast-1"),
   toastCloseSpy: vi.fn(),
@@ -30,12 +44,8 @@ const {
   toastUpdateSpy: vi.fn(),
 }));
 
-vi.mock("@tanstack/react-query", async () => {
-  const actual =
-    await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query");
-
+vi.mock("@tanstack/react-query", () => {
   return {
-    ...actual,
     useIsMutating: vi.fn(() => 0),
     useMutation: vi.fn((options: { __kind?: string }) => {
       if (options.__kind === "run-stacked-action") {
@@ -58,27 +68,7 @@ vi.mock("@tanstack/react-query", async () => {
         isPending: false,
       };
     }),
-    useQuery: vi.fn((options: { queryKey?: string[] }) => {
-      if (options.queryKey?.[0] === "git-branches") {
-        return {
-          data: {
-            isRepo: true,
-            hasOriginRemote: true,
-            branches: [
-              {
-                name: BRANCH_NAME,
-                current: true,
-                isDefault: false,
-                worktreePath: null,
-              },
-            ],
-          },
-          error: null,
-        };
-      }
-
-      return { data: null, error: null };
-    }),
+    useQuery: vi.fn(() => ({ data: null, error: null })),
     useQueryClient: vi.fn(() => ({})),
   };
 });
@@ -125,48 +115,47 @@ vi.mock("~/lib/gitStatusState", () => ({
   })),
 }));
 
-vi.mock("~/lib/utils", async () => {
-  const actual = await vi.importActual<typeof import("~/lib/utils")>("~/lib/utils");
-
-  return {
-    ...actual,
-    newCommandId: vi.fn(() => "command-1"),
-    randomUUID: vi.fn(() => "action-1"),
-  };
-});
-
 vi.mock("~/localApi", () => ({
   readLocalApi: vi.fn(() => null),
 }));
 
-vi.mock("~/store", async () => {
-  const actual = await vi.importActual<typeof import("~/store")>("~/store");
-  return {
-    ...actual,
-    useStore: (selector: (state: unknown) => unknown) =>
-      selector({
-        setThreadBranch: setThreadBranchSpy,
-        environmentStateById: {
-          [ENVIRONMENT_ID]: {
-            threadShellById: {
-              [THREAD_A]: { id: THREAD_A, branch: BRANCH_NAME, worktreePath: null },
-              [THREAD_B]: { id: THREAD_B, branch: BRANCH_NAME, worktreePath: null },
-            },
-            threadSessionById: {},
-            threadTurnStateById: {},
-            messageIdsByThreadId: {},
-            messageByThreadId: {},
-            activityIdsByThreadId: {},
-            activityByThreadId: {},
-            proposedPlanIdsByThreadId: {},
-            proposedPlanByThreadId: {},
-            turnDiffIdsByThreadId: {},
-            turnDiffSummaryByThreadId: {},
+vi.mock("~/store", () => ({
+  selectEnvironmentState: (
+    state: { environmentStateById: Record<string, unknown> },
+    environmentId: string | null,
+  ) => {
+    if (!environmentId) {
+      throw new Error("Missing environment id");
+    }
+    const environmentState = state.environmentStateById[environmentId];
+    if (!environmentState) {
+      throw new Error(`Unknown environment: ${environmentId}`);
+    }
+    return environmentState;
+  },
+  useStore: (selector: (state: unknown) => unknown) =>
+    selector({
+      setThreadBranch: setThreadBranchSpy,
+      environmentStateById: {
+        [ENVIRONMENT_ID]: {
+          threadShellById: {
+            [THREAD_A]: { id: THREAD_A, branch: BRANCH_NAME, worktreePath: null },
+            [THREAD_B]: { id: THREAD_B, branch: BRANCH_NAME, worktreePath: null },
           },
+          threadSessionById: {},
+          threadTurnStateById: {},
+          messageIdsByThreadId: {},
+          messageByThreadId: {},
+          activityIdsByThreadId: {},
+          activityByThreadId: {},
+          proposedPlanIdsByThreadId: {},
+          proposedPlanByThreadId: {},
+          turnDiffIdsByThreadId: {},
+          turnDiffSummaryByThreadId: {},
         },
-      }),
-  };
-});
+      },
+    }),
+}));
 
 vi.mock("~/terminal-links", () => ({
   resolvePathLinkTarget: vi.fn(),
@@ -200,6 +189,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    activeRunStackedActionDeferredRef.current = createDeferredPromise<never>();
     document.body.innerHTML = "";
   });
 
@@ -254,6 +244,9 @@ describe("GitActionsControl thread-scoped progress toast", () => {
         }),
       );
     } finally {
+      activeRunStackedActionDeferredRef.current.reject(new Error("test cleanup"));
+      await Promise.resolve();
+      vi.useRealTimers();
       await screen.unmount();
       host.remove();
     }
@@ -301,6 +294,7 @@ describe("GitActionsControl thread-scoped progress toast", () => {
       if (originalVisibilityState) {
         Object.defineProperty(document, "visibilityState", originalVisibilityState);
       }
+      vi.useRealTimers();
       await screen.unmount();
       host.remove();
     }
