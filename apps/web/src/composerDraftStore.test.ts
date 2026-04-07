@@ -16,10 +16,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   COMPOSER_DRAFT_STORAGE_KEY,
-  clearPromotedDraftThread,
-  clearPromotedDraftThreadByRef,
-  clearPromotedDraftThreads,
-  clearPromotedDraftThreadsByRef,
+  finalizePromotedDraftThreadByRef,
+  markPromotedDraftThread,
+  markPromotedDraftThreadByRef,
+  markPromotedDraftThreads,
+  markPromotedDraftThreadsByRef,
   type ComposerImageAttachment,
   useComposerDraftStore,
 } from "./composerDraftStore";
@@ -504,7 +505,7 @@ describe("composerDraftStore project draft thread mapping", () => {
       interactionMode: "default",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
-    expect(useComposerDraftStore.getState().getDraftThread(threadId)).toEqual({
+    expect(useComposerDraftStore.getState().getDraftThread(threadId)).toMatchObject({
       environmentId: TEST_ENVIRONMENT_ID,
       projectId,
       logicalProjectKey: scopedProjectKey(projectRef),
@@ -582,51 +583,55 @@ describe("composerDraftStore project draft thread mapping", () => {
     expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
   });
 
-  it("clears a promoted draft by thread id", () => {
+  it("marks a promoted draft by thread id without deleting composer state", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectRef, threadId);
     store.setPrompt(threadId, "promote me");
 
-    clearPromotedDraftThread(threadId);
+    markPromotedDraftThread(threadId);
 
     expect(useComposerDraftStore.getState().getDraftThreadByProjectRef(projectRef)).toBeNull();
-    expect(useComposerDraftStore.getState().getDraftThread(threadId)).toBeNull();
-    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
+    expect(useComposerDraftStore.getState().getDraftThread(threadId)?.promotedTo).toEqual(
+      scopeThreadRef(TEST_ENVIRONMENT_ID, threadId),
+    );
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.prompt).toBe("promote me");
   });
 
   it("does not clear composer drafts for existing server threads during promotion cleanup", () => {
     const store = useComposerDraftStore.getState();
     store.setPrompt(threadId, "keep me");
 
-    clearPromotedDraftThread(threadId);
+    markPromotedDraftThread(threadId);
 
     expect(useComposerDraftStore.getState().getDraftThread(threadId)).toBeNull();
     expect(draftFor(threadId)?.prompt).toBe("keep me");
   });
 
-  it("clears promoted drafts from an iterable of server thread ids", () => {
+  it("marks promoted drafts from an iterable of server thread ids", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectRef, threadId);
     store.setPrompt(threadId, "promote me");
     store.setProjectDraftThreadId(otherProjectRef, otherThreadId);
     store.setPrompt(otherThreadId, "keep me");
 
-    clearPromotedDraftThreads([threadId]);
+    markPromotedDraftThreads([threadId]);
 
-    expect(useComposerDraftStore.getState().getDraftThread(threadId)).toBeNull();
-    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
+    expect(useComposerDraftStore.getState().getDraftThread(threadId)?.promotedTo).toEqual(
+      scopeThreadRef(TEST_ENVIRONMENT_ID, threadId),
+    );
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.prompt).toBe("promote me");
     expect(
       useComposerDraftStore.getState().getDraftThreadByProjectRef(otherProjectRef)?.threadId,
     ).toBe(otherThreadId);
     expect(draftFor(otherThreadId, TEST_ENVIRONMENT_ID)?.prompt).toBe("keep me");
   });
 
-  it("only clears promoted drafts for the matching environment ref", () => {
+  it("only marks promoted drafts for the matching environment ref", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectRef, threadId);
     store.setPrompt(threadId, "promote me");
 
-    clearPromotedDraftThreadByRef(scopeThreadRef(OTHER_TEST_ENVIRONMENT_ID, threadId));
+    markPromotedDraftThreadByRef(scopeThreadRef(OTHER_TEST_ENVIRONMENT_ID, threadId));
 
     expect(useComposerDraftStore.getState().getDraftThreadByProjectRef(projectRef)?.threadId).toBe(
       threadId,
@@ -634,12 +639,12 @@ describe("composerDraftStore project draft thread mapping", () => {
     expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.prompt).toBe("promote me");
   });
 
-  it("only clears iterable promotion cleanup entries for the matching environment refs", () => {
+  it("only marks iterable promotion cleanup entries for the matching environment refs", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectRef, threadId);
     store.setPrompt(threadId, "promote me");
 
-    clearPromotedDraftThreadsByRef([scopeThreadRef(OTHER_TEST_ENVIRONMENT_ID, threadId)]);
+    markPromotedDraftThreadsByRef([scopeThreadRef(OTHER_TEST_ENVIRONMENT_ID, threadId)]);
 
     expect(useComposerDraftStore.getState().getDraftThreadByProjectRef(projectRef)?.threadId).toBe(
       threadId,
@@ -651,10 +656,23 @@ describe("composerDraftStore project draft thread mapping", () => {
     const store = useComposerDraftStore.getState();
     store.setPrompt(threadId, "keep me");
 
-    clearPromotedDraftThreads([threadId]);
+    markPromotedDraftThreads([threadId]);
 
     expect(useComposerDraftStore.getState().getDraftThread(threadId)).toBeNull();
     expect(draftFor(threadId)?.prompt).toBe("keep me");
+  });
+
+  it("finalizes a promoted draft after the canonical thread route is active", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, threadId);
+    store.setPrompt(threadId, "promote me");
+    markPromotedDraftThread(threadId);
+
+    finalizePromotedDraftThreadByRef(scopeThreadRef(TEST_ENVIRONMENT_ID, threadId));
+
+    expect(useComposerDraftStore.getState().getDraftThreadByProjectRef(projectRef)).toBeNull();
+    expect(useComposerDraftStore.getState().getDraftThread(threadId)).toBeNull();
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
   });
 
   it("updates branch context on an existing draft thread", () => {

@@ -41,8 +41,8 @@ import {
   useServerWelcomeSubscription,
 } from "../rpc/serverState";
 import {
-  clearPromotedDraftThreadByRef,
-  clearPromotedDraftThreadsByRef,
+  markPromotedDraftThreadByRef,
+  markPromotedDraftThreadsByRef,
   useComposerDraftStore,
 } from "../composerDraftStore";
 import {
@@ -387,7 +387,7 @@ function EventRouter() {
           seedVisitedAt: thread.updatedAt ?? thread.createdAt,
         })),
       );
-      clearPromotedDraftThreadsByRef(
+      markPromotedDraftThreadsByRef(
         threads.map((thread) => scopeThreadRef(thread.environmentId, thread.id)),
       );
       const activeThreadKeys = collectActiveTerminalThreadIds({
@@ -468,8 +468,8 @@ function EventRouter() {
         );
       }
       const draftStore = useComposerDraftStore.getState();
-      for (const threadId of batchEffects.clearPromotedDraftThreadIds) {
-        clearPromotedDraftThreadByRef(scopeThreadRef(environmentId, threadId));
+      for (const threadId of batchEffects.promoteDraftThreadIds) {
+        markPromotedDraftThreadByRef(scopeThreadRef(environmentId, threadId));
       }
       for (const threadId of batchEffects.clearDeletedThreadIds) {
         draftStore.clearDraftThread(scopeThreadRef(environmentId, threadId));

@@ -3,7 +3,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Layer, PlatformError } from "effect";
 
-import { ServerConfig, type ServerConfigShape } from "../../config.ts";
+import { deriveServerPaths, ServerConfig, type ServerConfigShape } from "../../config.ts";
 import { ServerEnvironment } from "../Services/ServerEnvironment.ts";
 import { ServerEnvironmentLive } from "./ServerEnvironment.ts";
 
@@ -12,9 +12,9 @@ const makeServerEnvironmentLayer = (baseDir: string) =>
 
 const makeServerConfig = (baseDir: string): ServerConfigShape => {
   const stateDir = nodePath.join(baseDir, "userdata");
-  const logsDir = nodePath.join(stateDir, "logs");
-  const providerLogsDir = nodePath.join(logsDir, "provider");
+
   return {
+    ...deriveServerPaths(baseDir, undefined),
     logLevel: "Error",
     traceMinLevel: "Info",
     traceTimingEnabled: true,
@@ -28,19 +28,6 @@ const makeServerConfig = (baseDir: string): ServerConfigShape => {
     cwd: process.cwd(),
     baseDir,
     stateDir,
-    dbPath: nodePath.join(stateDir, "state.sqlite"),
-    keybindingsConfigPath: nodePath.join(stateDir, "keybindings.json"),
-    settingsPath: nodePath.join(stateDir, "settings.json"),
-    worktreesDir: nodePath.join(baseDir, "worktrees"),
-    attachmentsDir: nodePath.join(stateDir, "attachments"),
-    logsDir,
-    serverLogPath: nodePath.join(logsDir, "server.log"),
-    serverTracePath: nodePath.join(logsDir, "server.trace.ndjson"),
-    providerLogsDir,
-    providerEventLogPath: nodePath.join(providerLogsDir, "events.log"),
-    terminalLogsDir: nodePath.join(logsDir, "terminals"),
-    anonymousIdPath: nodePath.join(stateDir, "anonymous-id"),
-    environmentIdPath: nodePath.join(stateDir, "environment-id"),
     mode: "web",
     autoBootstrapProjectFromCwd: false,
     logWebSocketEvents: false,

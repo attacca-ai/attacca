@@ -415,6 +415,33 @@ function createThreadCreatedEvent(threadId: ThreadId, sequence: number): Orchest
   };
 }
 
+function createThreadSessionSetEvent(threadId: ThreadId, sequence: number): OrchestrationEvent {
+  return {
+    sequence,
+    eventId: EventId.makeUnsafe(`event-thread-session-set-${sequence}`),
+    aggregateKind: "thread",
+    aggregateId: threadId,
+    occurredAt: NOW_ISO,
+    commandId: null,
+    causationEventId: null,
+    correlationId: null,
+    metadata: {},
+    type: "thread.session-set",
+    payload: {
+      threadId,
+      session: {
+        threadId,
+        status: "running",
+        providerName: "codex",
+        runtimeMode: "full-access",
+        activeTurnId: `turn-${threadId}` as TurnId,
+        lastError: null,
+        updatedAt: NOW_ISO,
+      },
+    },
+  };
+}
+
 function sendOrchestrationDomainEvent(event: OrchestrationEvent): void {
   rpcHarness.emitStreamValue(WS_METHODS.subscribeOrchestrationDomainEvents, event);
 }
@@ -455,6 +482,10 @@ function threadIdFromPath(pathname: string): ThreadId {
   return threadId as ThreadId;
 }
 
+function serverThreadPath(threadId: ThreadId): string {
+  return `/${LOCAL_ENVIRONMENT_ID}/${threadId}`;
+}
+
 async function waitForAppBootstrap(): Promise<void> {
   await vi.waitFor(
     () => {
@@ -465,12 +496,23 @@ async function waitForAppBootstrap(): Promise<void> {
   );
 }
 
-async function promoteDraftThreadViaDomainEvent(threadId: ThreadId): Promise<void> {
+async function materializePromotedDraftThreadViaDomainEvent(threadId: ThreadId): Promise<void> {
   await waitForWsClient();
   fixture.snapshot = addThreadToSnapshot(fixture.snapshot, threadId);
   sendOrchestrationDomainEvent(
     createThreadCreatedEvent(threadId, fixture.snapshot.snapshotSequence),
   );
+}
+
+async function startPromotedServerThreadViaDomainEvent(threadId: ThreadId): Promise<void> {
+  sendOrchestrationDomainEvent(
+    createThreadSessionSetEvent(threadId, fixture.snapshot.snapshotSequence + 1),
+  );
+}
+
+async function promoteDraftThreadViaDomainEvent(threadId: ThreadId): Promise<void> {
+  await materializePromotedDraftThreadViaDomainEvent(threadId);
+  await startPromotedServerThreadViaDomainEvent(threadId);
   await vi.waitFor(
     () => {
       expect(useComposerDraftStore.getState().draftThreadsByThreadKey[threadKeyFor(threadId)]).toBe(
@@ -2475,7 +2517,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("keeps the new thread selected after clicking the new-thread button", async () => {
+  it("canonicalizes promoted draft threads to the server thread route", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -2502,22 +2544,75 @@ describe("ChatView timeline estimator parity (full app)", () => {
       // The composer editor should be present for the new draft thread.
       await waitForComposerEditor();
 
-      // Simulate the steady-state promotion path: the server emits
-      // `thread.created`, the client materializes the thread incrementally,
-      // and the draft is cleared by live batch effects.
-      await promoteDraftThreadViaDomainEvent(newThreadId);
+      // `thread.created` should only mark the draft as promoting; it should
+      // not navigate away until the server thread has actual runtime state.
+      await materializePromotedDraftThreadViaDomainEvent(newThreadId);
+      expect(mounted.router.state.location.pathname).toBe(newThreadPath);
+      await expect.element(page.getByTestId("composer-editor")).toBeInTheDocument();
 
-      // The route should still be on the new thread — not redirected away.
+      // Once the server thread starts, the route should canonicalize.
+      await startPromotedServerThreadViaDomainEvent(newThreadId);
+      await vi.waitFor(
+        () => {
+          expect(
+            useComposerDraftStore.getState().draftThreadsByThreadKey[threadKeyFor(newThreadId)],
+          ).toBe(undefined);
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+
+      // The route should switch to the canonical server thread path.
       await waitForURL(
         mounted.router,
-        (path) => path === newThreadPath,
-        "New thread should remain selected after server thread promotion clears the draft.",
+        (path) => path === serverThreadPath(newThreadId),
+        "Promoted drafts should canonicalize to the server thread route.",
       );
 
       // The empty thread view and composer should still be visible.
       await expect
         .element(page.getByText("Send a message to start the conversation."))
         .toBeInTheDocument();
+      await expect.element(page.getByTestId("composer-editor")).toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("canonicalizes stale promoted draft routes to the server thread route", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-draft-hydration-race-test" as MessageId,
+        targetText: "draft hydration race test",
+      }),
+    });
+
+    try {
+      const newThreadButton = page.getByTestId("new-thread-button");
+      await expect.element(newThreadButton).toBeInTheDocument();
+
+      await newThreadButton.click();
+
+      const newThreadPath = await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path),
+        "Route should have changed to a new draft thread UUID.",
+      );
+      const newThreadId = threadIdFromPath(newThreadPath);
+
+      await promoteDraftThreadViaDomainEvent(newThreadId);
+
+      await mounted.router.navigate({
+        to: "/draft/$threadId",
+        params: { threadId: newThreadId },
+      });
+
+      await waitForURL(
+        mounted.router,
+        (path) => path === serverThreadPath(newThreadId),
+        "Stale promoted draft routes should canonicalize to the server thread path.",
+      );
+
       await expect.element(page.getByTestId("composer-editor")).toBeInTheDocument();
     } finally {
       await mounted.cleanup();

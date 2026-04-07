@@ -1,7 +1,8 @@
 import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/react-router";
-import { Suspense, lazy, type ReactNode, useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import ChatView from "../components/ChatView";
+import { threadHasStarted } from "../components/ChatView.logic";
 import { DiffWorkerPoolProvider } from "../components/DiffWorkerPoolProvider";
 import {
   DiffPanelHeaderSkeleton,
@@ -9,7 +10,7 @@ import {
   DiffPanelShell,
   type DiffPanelMode,
 } from "../components/DiffPanelShell";
-import { useComposerDraftStore } from "../composerDraftStore";
+import { finalizePromotedDraftThreadByRef, useComposerDraftStore } from "../composerDraftStore";
 import {
   type DiffRouteSearch,
   parseDiffRouteSearch,
@@ -17,6 +18,7 @@ import {
 } from "../diffRouteSearch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { selectEnvironmentState, selectThreadByRef, useStore } from "../store";
+import { createThreadSelectorByRef } from "../storeSelectors";
 import { resolveThreadRouteRef, buildThreadRouteParams } from "../threadRoutes";
 import { Sheet, SheetPopup } from "../components/ui/sheet";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
@@ -169,12 +171,16 @@ function ChatThreadRouteView() {
   const bootstrapComplete = useStore(
     (store) => selectEnvironmentState(store, threadRef?.environmentId ?? null).bootstrapComplete,
   );
+  const serverThread = useStore(useMemo(() => createThreadSelectorByRef(threadRef), [threadRef]));
   const threadExists = useStore((store) => selectThreadByRef(store, threadRef) !== undefined);
   const environmentHasServerThreads = useStore(
     (store) => selectEnvironmentState(store, threadRef?.environmentId ?? null).threadIds.length > 0,
   );
   const draftThreadExists = useComposerDraftStore((store) =>
     threadRef ? store.getDraftThreadByRef(threadRef) !== null : false,
+  );
+  const draftThread = useComposerDraftStore((store) =>
+    threadRef ? store.getDraftThreadByRef(threadRef) : null,
   );
   const environmentHasDraftThreads = useComposerDraftStore((store) => {
     if (!threadRef) {
@@ -185,6 +191,7 @@ function ChatThreadRouteView() {
     );
   });
   const routeThreadExists = threadExists || draftThreadExists;
+  const serverThreadStarted = threadHasStarted(serverThread);
   const environmentHasAnyThreads = environmentHasServerThreads || environmentHasDraftThreads;
   const diffOpen = search.diff === "1";
   const shouldUseDiffSheet = useMediaQuery(DIFF_INLINE_LAYOUT_MEDIA_QUERY);
@@ -228,6 +235,13 @@ function ChatThreadRouteView() {
       void navigate({ to: "/", replace: true });
     }
   }, [bootstrapComplete, environmentHasAnyThreads, navigate, routeThreadExists, threadRef]);
+
+  useEffect(() => {
+    if (!threadRef || !serverThreadStarted || !draftThread?.promotedTo) {
+      return;
+    }
+    finalizePromotedDraftThreadByRef(threadRef);
+  }, [draftThread?.promotedTo, serverThreadStarted, threadRef]);
 
   if (!threadRef || !bootstrapComplete || !routeThreadExists) {
     return null;
