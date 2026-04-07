@@ -1672,6 +1672,14 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   );
 });
 
+const SidebarProjectListRow = memo(function SidebarProjectListRow(props: SidebarProjectItemProps) {
+  return (
+    <SidebarMenuItem className="rounded-md">
+      <SidebarProjectItem {...props} />
+    </SidebarMenuItem>
+  );
+});
+
 function T3Wordmark() {
   return (
     <svg
@@ -2152,28 +2160,27 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         ) : (
           <SidebarMenu ref={attachProjectListAutoAnimateRef}>
             {sortedProjects.map((project) => (
-              <SidebarMenuItem key={project.id} className="rounded-md">
-                <SidebarProjectItem
-                  project={project}
-                  isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
-                  activeRouteThreadKey={
-                    activeRouteProjectKey === project.projectKey ? routeThreadKey : null
-                  }
-                  newThreadShortcutLabel={newThreadShortcutLabel}
-                  handleNewThread={handleNewThread}
-                  archiveThread={archiveThread}
-                  deleteThread={deleteThread}
-                  threadJumpLabelByKey={threadJumpLabelByKey}
-                  attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
-                  expandThreadListForProject={expandThreadListForProject}
-                  collapseThreadListForProject={collapseThreadListForProject}
-                  dragInProgressRef={dragInProgressRef}
-                  suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
-                  suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
-                  isManualProjectSorting={isManualProjectSorting}
-                  dragHandleProps={null}
-                />
-              </SidebarMenuItem>
+              <SidebarProjectListRow
+                key={project.id}
+                project={project}
+                isThreadListExpanded={expandedThreadListsByProject.has(project.projectKey)}
+                activeRouteThreadKey={
+                  activeRouteProjectKey === project.projectKey ? routeThreadKey : null
+                }
+                newThreadShortcutLabel={newThreadShortcutLabel}
+                handleNewThread={handleNewThread}
+                archiveThread={archiveThread}
+                deleteThread={deleteThread}
+                threadJumpLabelByKey={threadJumpLabelByKey}
+                attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
+                expandThreadListForProject={expandThreadListForProject}
+                collapseThreadListForProject={collapseThreadListForProject}
+                dragInProgressRef={dragInProgressRef}
+                suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
+                suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
+                isManualProjectSorting={isManualProjectSorting}
+                dragHandleProps={null}
+              />
             ))}
           </SidebarMenu>
         )}
