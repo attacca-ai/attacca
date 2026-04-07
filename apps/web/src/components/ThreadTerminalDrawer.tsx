@@ -32,6 +32,7 @@ import {
   MAX_TERMINALS_PER_GROUP,
   type ThreadTerminalGroup,
 } from "../types";
+import { readEnvironmentNativeApi } from "~/environmentNativeApi";
 import { readNativeApi } from "~/nativeApi";
 import { selectTerminalEventEntries, useTerminalStateStore } from "../terminalStateStore";
 
@@ -280,8 +281,9 @@ function TerminalViewport({
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
-    const api = readNativeApi();
-    if (!api) return;
+    const api = readEnvironmentNativeApi(threadRef.environmentId);
+    const localApi = readNativeApi();
+    if (!api || !localApi) return;
 
     const clearSelectionAction = () => {
       selectionActionRequestIdRef.current += 1;
@@ -343,7 +345,7 @@ function TerminalViewport({
       const requestId = ++selectionActionRequestIdRef.current;
       selectionActionOpenRef.current = true;
       try {
-        const clicked = await api.contextMenu.show(
+        const clicked = await localApi.contextMenu.show(
           [{ id: "add-to-chat", label: "Add to chat" }],
           nextAction.position,
         );
@@ -419,7 +421,7 @@ function TerminalViewport({
               if (!latestTerminal) return;
 
               if (match.kind === "url") {
-                void api.shell.openExternal(match.text).catch((error) => {
+                void localApi.shell.openExternal(match.text).catch((error: unknown) => {
                   writeSystemMessage(
                     latestTerminal,
                     error instanceof Error ? error.message : "Unable to open link",
@@ -429,7 +431,7 @@ function TerminalViewport({
               }
 
               const target = resolvePathLinkTarget(match.text, cwd);
-              void openInPreferredEditor(api, target).catch((error) => {
+              void openInPreferredEditor(localApi, target).catch((error) => {
                 writeSystemMessage(
                   latestTerminal,
                   error instanceof Error ? error.message : "Unable to open path",
@@ -695,7 +697,7 @@ function TerminalViewport({
   }, [autoFocus, focusRequestId]);
 
   useEffect(() => {
-    const api = readNativeApi();
+    const api = readEnvironmentNativeApi(threadRef.environmentId);
     const terminal = terminalRef.current;
     const fitAddon = fitAddonRef.current;
     if (!api || !terminal || !fitAddon) return;

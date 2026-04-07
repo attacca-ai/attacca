@@ -95,6 +95,17 @@ const rpcClientMock = {
 vi.mock("./wsRpcClient", () => {
   return {
     getWsRpcClient: () => rpcClientMock,
+    getPrimaryWsRpcClientEntry: () => ({
+      key: "primary",
+      knownEnvironment: {
+        id: "primary",
+        label: "Primary",
+        source: "manual",
+        target: { type: "ws", wsUrl: "ws://localhost:3000" },
+      },
+      client: rpcClientMock,
+      environmentId: null,
+    }),
     __resetWsRpcClientForTests: vi.fn(),
   };
 });

@@ -138,6 +138,7 @@ import {
 } from "./Sidebar.logic";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
+import { readEnvironmentNativeApi } from "../environmentNativeApi";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "../rpc/serverState";
 import type { Project, SidebarThreadSummary } from "../types";
@@ -316,7 +317,10 @@ function SidebarThreadRow(props: SidebarThreadRowProps) {
       selectThreadTerminalState(state.terminalStateByThreadKey, threadRef).runningTerminalIds,
   );
   const gitCwd = thread.worktreePath ?? props.projectCwd;
-  const gitStatus = useGitStatus(thread.branch != null ? gitCwd : null);
+  const gitStatus = useGitStatus({
+    environmentId: thread.environmentId,
+    cwd: thread.branch != null ? gitCwd : null,
+  });
 
   const isActive = props.routeThreadKey === threadKey;
   const isSelected = props.selectedThreadKeys.has(threadKey);
@@ -891,7 +895,7 @@ export default function Sidebar() {
     async (rawCwd: string) => {
       const cwd = rawCwd.trim();
       if (!cwd || isAddingProject) return;
-      const api = readNativeApi();
+      const api = activeEnvironmentId ? readEnvironmentNativeApi(activeEnvironmentId) : undefined;
       if (!api) return;
 
       setIsAddingProject(true);
@@ -1023,7 +1027,7 @@ export default function Sidebar() {
         finishRename();
         return;
       }
-      const api = readNativeApi();
+      const api = readEnvironmentNativeApi(threadRef.environmentId);
       if (!api) {
         finishRename();
         return;
@@ -1317,7 +1321,11 @@ export default function Sidebar() {
           clearComposerDraftForThread(projectDraftThread.threadRef);
         }
         clearProjectDraftThreadId(scopeProjectRef(project.environmentId, project.id));
-        await api.orchestration.dispatchCommand({
+        const projectApi = readEnvironmentNativeApi(project.environmentId);
+        if (!projectApi) {
+          throw new Error("Project API unavailable.");
+        }
+        await projectApi.orchestration.dispatchCommand({
           type: "project.delete",
           commandId: newCommandId(),
           projectId: project.id,

@@ -1,4 +1,9 @@
-import { type ContextMenuItem, type NativeApi } from "@t3tools/contracts";
+import {
+  type ContextMenuItem,
+  type EnvironmentNativeApi,
+  type LocalNativeApi,
+  type NativeApi,
+} from "@t3tools/contracts";
 
 import { resetGitStatusStateForTests } from "./lib/gitStatusState";
 import { showContextMenuFallback } from "./contextMenuFallback";
@@ -6,7 +11,11 @@ import { __resetWsRpcAtomClientForTests } from "./rpc/client";
 import { resetRequestLatencyStateForTests } from "./rpc/requestLatencyState";
 import { resetServerStateForTests } from "./rpc/serverState";
 import { resetWsConnectionStateForTests } from "./rpc/wsConnectionState";
-import { __resetWsRpcClientForTests, getWsRpcClient } from "./wsRpcClient";
+import {
+  __resetWsRpcClientForTests,
+  getPrimaryWsRpcClientEntry,
+  type WsRpcClient,
+} from "./wsRpcClient";
 
 let instance: { api: NativeApi } | null = null;
 
@@ -25,9 +34,19 @@ export function createWsNativeApi(): NativeApi {
     return instance.api;
   }
 
-  const rpcClient = getWsRpcClient();
+  const rpcClient = getPrimaryWsRpcClientEntry().client;
+  const api = {
+    ...createWsLocalNativeApi(rpcClient),
+    ...createWsEnvironmentNativeApiForRpcClient(rpcClient),
+  };
+  instance = { api };
+  return api;
+}
 
-  const api: NativeApi = {
+export function createWsLocalNativeApi(
+  rpcClient: WsRpcClient = getPrimaryWsRpcClientEntry().client,
+): LocalNativeApi {
+  return {
     dialogs: {
       pickFolder: async () => {
         if (!window.desktopBridge) return null;
@@ -39,19 +58,6 @@ export function createWsNativeApi(): NativeApi {
         }
         return window.confirm(message);
       },
-    },
-    terminal: {
-      open: (input) => rpcClient.terminal.open(input as never),
-      write: (input) => rpcClient.terminal.write(input as never),
-      resize: (input) => rpcClient.terminal.resize(input as never),
-      clear: (input) => rpcClient.terminal.clear(input as never),
-      restart: (input) => rpcClient.terminal.restart(input as never),
-      close: (input) => rpcClient.terminal.close(input as never),
-      onEvent: (callback) => rpcClient.terminal.onEvent(callback),
-    },
-    projects: {
-      searchEntries: rpcClient.projects.searchEntries,
-      writeFile: rpcClient.projects.writeFile,
     },
     shell: {
       openInEditor: (cwd, editor) => rpcClient.shell.openInEditor({ cwd, editor }),
@@ -66,19 +72,6 @@ export function createWsNativeApi(): NativeApi {
 
         window.open(url, "_blank", "noopener,noreferrer");
       },
-    },
-    git: {
-      pull: rpcClient.git.pull,
-      refreshStatus: rpcClient.git.refreshStatus,
-      onStatus: (input, callback, options) => rpcClient.git.onStatus(input, callback, options),
-      listBranches: rpcClient.git.listBranches,
-      createWorktree: rpcClient.git.createWorktree,
-      removeWorktree: rpcClient.git.removeWorktree,
-      createBranch: rpcClient.git.createBranch,
-      checkout: rpcClient.git.checkout,
-      init: rpcClient.git.init,
-      resolvePullRequest: rpcClient.git.resolvePullRequest,
-      preparePullRequestThread: rpcClient.git.preparePullRequestThread,
     },
     contextMenu: {
       show: async <T extends string>(
@@ -98,6 +91,39 @@ export function createWsNativeApi(): NativeApi {
       getSettings: rpcClient.server.getSettings,
       updateSettings: rpcClient.server.updateSettings,
     },
+  };
+}
+
+export function createWsEnvironmentNativeApiForRpcClient(
+  rpcClient: WsRpcClient,
+): EnvironmentNativeApi {
+  const api: EnvironmentNativeApi = {
+    terminal: {
+      open: (input) => rpcClient.terminal.open(input as never),
+      write: (input) => rpcClient.terminal.write(input as never),
+      resize: (input) => rpcClient.terminal.resize(input as never),
+      clear: (input) => rpcClient.terminal.clear(input as never),
+      restart: (input) => rpcClient.terminal.restart(input as never),
+      close: (input) => rpcClient.terminal.close(input as never),
+      onEvent: (callback) => rpcClient.terminal.onEvent(callback),
+    },
+    projects: {
+      searchEntries: rpcClient.projects.searchEntries,
+      writeFile: rpcClient.projects.writeFile,
+    },
+    git: {
+      pull: rpcClient.git.pull,
+      refreshStatus: rpcClient.git.refreshStatus,
+      onStatus: (input, callback, options) => rpcClient.git.onStatus(input, callback, options),
+      listBranches: rpcClient.git.listBranches,
+      createWorktree: rpcClient.git.createWorktree,
+      removeWorktree: rpcClient.git.removeWorktree,
+      createBranch: rpcClient.git.createBranch,
+      checkout: rpcClient.git.checkout,
+      init: rpcClient.git.init,
+      resolvePullRequest: rpcClient.git.resolvePullRequest,
+      preparePullRequestThread: rpcClient.git.preparePullRequestThread,
+    },
     orchestration: {
       getSnapshot: rpcClient.orchestration.getSnapshot,
       dispatchCommand: rpcClient.orchestration.dispatchCommand,
@@ -111,7 +137,5 @@ export function createWsNativeApi(): NativeApi {
         rpcClient.orchestration.onDomainEvent(callback, options),
     },
   };
-
-  instance = { api };
   return api;
 }

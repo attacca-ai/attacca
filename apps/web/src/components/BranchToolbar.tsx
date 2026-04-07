@@ -3,8 +3,8 @@ import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { FolderIcon, GitForkIcon } from "lucide-react";
 import { useCallback, useMemo } from "react";
 
+import { readEnvironmentNativeApi } from "../environmentNativeApi";
 import { newCommandId } from "../lib/utils";
-import { readNativeApi } from "../nativeApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useStore } from "../store";
 import { createProjectSelectorByRef, createThreadSelectorByRef } from "../storeSelectors";
@@ -69,7 +69,7 @@ export default function BranchToolbar({
   const setThreadBranch = useCallback(
     (branch: string | null, worktreePath: string | null) => {
       if (!activeThreadId || !activeProject) return;
-      const api = readNativeApi();
+      const api = readEnvironmentNativeApi(environmentId);
       // If the effective cwd is about to change, stop the running session so the
       // next message creates a new one with the correct cwd.
       if (serverSession && worktreePath !== activeWorktreePath && api) {
@@ -171,6 +171,7 @@ export default function BranchToolbar({
       )}
 
       <BranchToolbarBranchSelector
+        environmentId={environmentId}
         activeProjectCwd={activeProject.cwd}
         activeThreadBranch={activeThreadBranch}
         activeWorktreePath={activeWorktreePath}

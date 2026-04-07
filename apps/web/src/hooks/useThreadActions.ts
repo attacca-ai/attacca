@@ -1,13 +1,14 @@
 import { parseScopedThreadKey, scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
 import { type ScopedThreadRef, ThreadId } from "@t3tools/contracts";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useCallback } from "react";
 
 import { getFallbackThreadIdAfterDelete } from "../components/Sidebar.logic";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useHandleNewThread } from "./useHandleNewThread";
-import { gitRemoveWorktreeMutationOptions } from "../lib/gitReactQuery";
+import { ensureEnvironmentNativeApi, readEnvironmentNativeApi } from "../environmentNativeApi";
+import { invalidateGitQueries } from "../lib/gitReactQuery";
 import { newCommandId } from "../lib/utils";
 import { readNativeApi } from "../nativeApi";
 import {
@@ -36,7 +37,6 @@ export function useThreadActions() {
   const navigate = useNavigate();
   const { handleNewThread } = useHandleNewThread();
   const queryClient = useQueryClient();
-  const removeWorktreeMutation = useMutation(gitRemoveWorktreeMutationOptions({ queryClient }));
 
   const resolveThreadTarget = useCallback((target: ScopedThreadRef) => {
     const state = useStore.getState();
@@ -52,7 +52,7 @@ export function useThreadActions() {
 
   const archiveThread = useCallback(
     async (target: ScopedThreadRef) => {
-      const api = readNativeApi();
+      const api = readEnvironmentNativeApi(target.environmentId);
       if (!api) return;
       const resolved = resolveThreadTarget(target);
       if (!resolved) return;
@@ -78,7 +78,7 @@ export function useThreadActions() {
   );
 
   const unarchiveThread = useCallback(async (target: ScopedThreadRef) => {
-    const api = readNativeApi();
+    const api = readEnvironmentNativeApi(target.environmentId);
     if (!api) return;
     await api.orchestration.dispatchCommand({
       type: "thread.unarchive",
@@ -89,7 +89,7 @@ export function useThreadActions() {
 
   const deleteThread = useCallback(
     async (target: ScopedThreadRef, opts: { deletedThreadKeys?: ReadonlySet<string> } = {}) => {
-      const api = readNativeApi();
+      const api = readEnvironmentNativeApi(target.environmentId);
       if (!api) return;
       const resolved = resolveThreadTarget(target);
       if (!resolved) return;
@@ -121,9 +121,11 @@ export function useThreadActions() {
         ? formatWorktreePathForDisplay(orphanedWorktreePath)
         : null;
       const canDeleteWorktree = orphanedWorktreePath !== null && threadProject !== undefined;
+      const localApi = readNativeApi();
       const shouldDeleteWorktree =
         canDeleteWorktree &&
-        (await api.dialogs.confirm(
+        localApi &&
+        (await localApi.dialogs.confirm(
           [
             "This thread is the only one linked to this worktree:",
             displayWorktreePath ?? orphanedWorktreePath,
@@ -198,10 +200,13 @@ export function useThreadActions() {
       }
 
       try {
-        await removeWorktreeMutation.mutateAsync({
+        await ensureEnvironmentNativeApi(threadRef.environmentId).git.removeWorktree({
           cwd: threadProject.cwd,
           path: orphanedWorktreePath,
           force: true,
+        });
+        await invalidateGitQueries(queryClient, {
+          environmentId: threadRef.environmentId,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error removing worktree.";
@@ -224,7 +229,7 @@ export function useThreadActions() {
       clearTerminalState,
       appSettings.sidebarThreadSortOrder,
       navigate,
-      removeWorktreeMutation,
+      queryClient,
       resolveThreadTarget,
       routeThreadRef,
     ],
@@ -232,14 +237,15 @@ export function useThreadActions() {
 
   const confirmAndDeleteThread = useCallback(
     async (target: ScopedThreadRef) => {
-      const api = readNativeApi();
+      const api = readEnvironmentNativeApi(target.environmentId);
       if (!api) return;
+      const localApi = readNativeApi();
       const resolved = resolveThreadTarget(target);
       if (!resolved) return;
       const { thread } = resolved;
 
-      if (appSettings.confirmThreadDelete) {
-        const confirmed = await api.dialogs.confirm(
+      if (appSettings.confirmThreadDelete && localApi) {
+        const confirmed = await localApi.dialogs.confirm(
           [
             `Delete thread "${thread.title}"?`,
             "This permanently clears conversation history for this thread.",
