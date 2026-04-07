@@ -243,11 +243,6 @@ export function readWsRpcClientEntryForEnvironment(
     return entry ? toReadonlyEntry(entry) : null;
   }
 
-  if (wsRpcClientEntriesByKey.size === 1) {
-    const [entry] = wsRpcClientEntriesByKey.values();
-    return entry ? toReadonlyEntry(entry) : null;
-  }
-
   return null;
 }
 

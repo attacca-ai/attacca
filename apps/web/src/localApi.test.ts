@@ -230,9 +230,9 @@ afterEach(() => {
 describe("wsApi", () => {
   it("forwards server config fetches directly to the RPC client", async () => {
     rpcClientMock.server.getConfig.mockResolvedValue(baseServerConfig);
-    const { createWsLocalApi } = await import("./wsApi");
+    const { createLocalApi } = await import("./localApi");
 
-    const api = createWsLocalApi();
+    const api = createLocalApi();
 
     await expect(api.server.getConfig()).resolves.toEqual(baseServerConfig);
     expect(rpcClientMock.server.getConfig).toHaveBeenCalledWith();
@@ -241,9 +241,9 @@ describe("wsApi", () => {
   });
 
   it("forwards terminal and orchestration stream events", async () => {
-    const { createWsEnvironmentApiForRpcClient } = await import("./wsApi");
+    const { createEnvironmentApi } = await import("./environmentApi");
 
-    const api = createWsEnvironmentApiForRpcClient(rpcClientMock as never);
+    const api = createEnvironmentApi(rpcClientMock as never);
     const onTerminalEvent = vi.fn();
     const onDomainEvent = vi.fn();
 
@@ -290,9 +290,9 @@ describe("wsApi", () => {
   });
 
   it("forwards git status stream events", async () => {
-    const { createWsEnvironmentApiForRpcClient } = await import("./wsApi");
+    const { createEnvironmentApi } = await import("./environmentApi");
 
-    const api = createWsEnvironmentApiForRpcClient(rpcClientMock as never);
+    const api = createEnvironmentApi(rpcClientMock as never);
     const onStatus = vi.fn();
 
     api.git.onStatus({ cwd: "/repo" }, onStatus);
@@ -306,9 +306,9 @@ describe("wsApi", () => {
 
   it("forwards git status refreshes directly to the RPC client", async () => {
     rpcClientMock.git.refreshStatus.mockResolvedValue(baseGitStatus);
-    const { createWsEnvironmentApiForRpcClient } = await import("./wsApi");
+    const { createEnvironmentApi } = await import("./environmentApi");
 
-    const api = createWsEnvironmentApiForRpcClient(rpcClientMock as never);
+    const api = createEnvironmentApi(rpcClientMock as never);
 
     await api.git.refreshStatus({ cwd: "/repo" });
 
@@ -316,9 +316,9 @@ describe("wsApi", () => {
   });
 
   it("forwards orchestration stream subscription options to the RPC client", async () => {
-    const { createWsEnvironmentApiForRpcClient } = await import("./wsApi");
+    const { createEnvironmentApi } = await import("./environmentApi");
 
-    const api = createWsEnvironmentApiForRpcClient(rpcClientMock as never);
+    const api = createEnvironmentApi(rpcClientMock as never);
     const onDomainEvent = vi.fn();
     const onResubscribe = vi.fn();
 
@@ -331,9 +331,9 @@ describe("wsApi", () => {
 
   it("sends orchestration dispatch commands as the direct RPC payload", async () => {
     rpcClientMock.orchestration.dispatchCommand.mockResolvedValue({ sequence: 1 });
-    const { createWsEnvironmentApiForRpcClient } = await import("./wsApi");
+    const { createEnvironmentApi } = await import("./environmentApi");
 
-    const api = createWsEnvironmentApiForRpcClient(rpcClientMock as never);
+    const api = createEnvironmentApi(rpcClientMock as never);
     const command = {
       type: "project.create",
       commandId: CommandId.makeUnsafe("cmd-1"),
@@ -353,9 +353,9 @@ describe("wsApi", () => {
 
   it("forwards workspace file writes to the project RPC", async () => {
     rpcClientMock.projects.writeFile.mockResolvedValue({ relativePath: "plan.md" });
-    const { createWsEnvironmentApiForRpcClient } = await import("./wsApi");
+    const { createEnvironmentApi } = await import("./environmentApi");
 
-    const api = createWsEnvironmentApiForRpcClient(rpcClientMock as never);
+    const api = createEnvironmentApi(rpcClientMock as never);
     await api.projects.writeFile({
       cwd: "/tmp/project",
       relativePath: "plan.md",
@@ -371,9 +371,9 @@ describe("wsApi", () => {
 
   it("forwards full-thread diff requests to the orchestration RPC", async () => {
     rpcClientMock.orchestration.getFullThreadDiff.mockResolvedValue({ diff: "patch" });
-    const { createWsEnvironmentApiForRpcClient } = await import("./wsApi");
+    const { createEnvironmentApi } = await import("./environmentApi");
 
-    const api = createWsEnvironmentApiForRpcClient(rpcClientMock as never);
+    const api = createEnvironmentApi(rpcClientMock as never);
     await api.orchestration.getFullThreadDiff({
       threadId: ThreadId.makeUnsafe("thread-1"),
       toTurnCount: 1,
@@ -393,9 +393,9 @@ describe("wsApi", () => {
       },
     ];
     rpcClientMock.server.refreshProviders.mockResolvedValue({ providers: nextProviders });
-    const { createWsLocalApi } = await import("./wsApi");
+    const { createLocalApi } = await import("./localApi");
 
-    const api = createWsLocalApi();
+    const api = createLocalApi();
 
     await expect(api.server.refreshProviders()).resolves.toEqual({ providers: nextProviders });
     expect(rpcClientMock.server.refreshProviders).toHaveBeenCalledWith();
@@ -407,9 +407,9 @@ describe("wsApi", () => {
       enableAssistantStreaming: true,
     };
     rpcClientMock.server.updateSettings.mockResolvedValue(nextSettings);
-    const { createWsLocalApi } = await import("./wsApi");
+    const { createLocalApi } = await import("./localApi");
 
-    const api = createWsLocalApi();
+    const api = createLocalApi();
 
     await expect(api.server.updateSettings({ enableAssistantStreaming: true })).resolves.toEqual(
       nextSettings,
@@ -423,8 +423,8 @@ describe("wsApi", () => {
     const showContextMenu = vi.fn().mockResolvedValue("delete");
     getWindowForTest().desktopBridge = makeDesktopBridge({ showContextMenu });
 
-    const { createWsLocalApi } = await import("./wsApi");
-    const api = createWsLocalApi();
+    const { createLocalApi } = await import("./localApi");
+    const api = createLocalApi();
     const items = [{ id: "delete", label: "Delete" }] as const;
 
     await expect(api.contextMenu.show(items)).resolves.toBe("delete");
@@ -433,9 +433,9 @@ describe("wsApi", () => {
 
   it("falls back to the browser context menu helper when the desktop bridge is missing", async () => {
     showContextMenuFallbackMock.mockResolvedValue("rename");
-    const { createWsLocalApi } = await import("./wsApi");
+    const { createLocalApi } = await import("./localApi");
 
-    const api = createWsLocalApi();
+    const api = createLocalApi();
     const items = [{ id: "rename", label: "Rename" }] as const;
 
     await expect(api.contextMenu.show(items, { x: 4, y: 5 })).resolves.toBe("rename");
