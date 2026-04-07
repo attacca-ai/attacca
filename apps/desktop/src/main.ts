@@ -220,11 +220,13 @@ async function applyDesktopServerExposureMode(
     ...(advertisedHostOverride ? { advertisedHostOverride } : {}),
   });
 
+  let degraded = false;
   if (mode === "network-accessible" && exposure.mode !== "network-accessible") {
     if (options?.rejectIfUnavailable) {
       throw new Error("No reachable network address is available for this desktop right now.");
     }
     mode = "local-only";
+    degraded = true;
   }
 
   desktopServerExposureMode = exposure.mode;
@@ -241,7 +243,7 @@ async function applyDesktopServerExposureMode(
   backendEndpointUrl = exposure.endpointUrl;
   backendAdvertisedHost = exposure.advertisedHost;
 
-  if (options?.persist || exposure.mode !== mode) {
+  if (!degraded && (options?.persist || exposure.mode !== mode)) {
     writeDesktopSettings(DESKTOP_SETTINGS_PATH, desktopSettings);
   }
 

@@ -34,7 +34,7 @@ export function isLoopbackHostname(hostname: string): boolean {
     .trim()
     .toLowerCase()
     .replace(/^\[(.*)\]$/, "$1");
-  return LOOPBACK_HOSTNAMES.has(normalizedHostname);
+  return LOOPBACK_HOSTNAMES.has(normalizedHostname) || normalizedHostname.startsWith("127.");
 }
 
 export function resolveDevRedirectUrl(devUrl: URL, requestUrl: URL): string {
