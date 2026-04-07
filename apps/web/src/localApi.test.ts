@@ -79,6 +79,7 @@ const rpcClientMock = {
     updateSettings: vi.fn(),
     subscribeConfig: vi.fn(),
     subscribeLifecycle: vi.fn(),
+    subscribeAuthAccess: vi.fn(),
   },
   orchestration: {
     getSnapshot: vi.fn(),

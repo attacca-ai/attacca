@@ -4,6 +4,7 @@ import { Effect, Layer } from "effect";
 
 import type { ServerConfigShape } from "../../config.ts";
 import { ServerConfig } from "../../config.ts";
+import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { BootstrapCredentialService } from "../Services/BootstrapCredentialService.ts";
 import { BootstrapCredentialServiceLive } from "./BootstrapCredentialService.ts";
 
@@ -25,7 +26,11 @@ const makeServerConfigLayer = (
 
 const makeBootstrapCredentialLayer = (
   overrides?: Partial<Pick<ServerConfigShape, "desktopBootstrapToken">>,
-) => BootstrapCredentialServiceLive.pipe(Layer.provide(makeServerConfigLayer(overrides)));
+) =>
+  BootstrapCredentialServiceLive.pipe(
+    Layer.provide(SqlitePersistenceMemory),
+    Layer.provide(makeServerConfigLayer(overrides)),
+  );
 
 it.layer(NodeServices.layer)("BootstrapCredentialServiceLive", (it) => {
   it.effect("issues one-time bootstrap tokens that can only be consumed once", () =>
@@ -78,6 +83,7 @@ it.layer(NodeServices.layer)("BootstrapCredentialServiceLive", (it) => {
       expect(first.role).toBe("owner");
       expect(first.subject).toBe("desktop-bootstrap");
       expect(second._tag).toBe("BootstrapCredentialError");
+      expect(second.status).toBe(401);
     }).pipe(
       Effect.provide(
         makeBootstrapCredentialLayer({
@@ -85,5 +91,27 @@ it.layer(NodeServices.layer)("BootstrapCredentialServiceLive", (it) => {
         }),
       ),
     ),
+  );
+
+  it.effect("lists and revokes active pairing links", () =>
+    Effect.gen(function* () {
+      const bootstrapCredentials = yield* BootstrapCredentialService;
+      const first = yield* bootstrapCredentials.issueOneTimeToken();
+      const second = yield* bootstrapCredentials.issueOneTimeToken({ role: "owner" });
+
+      const activeBeforeRevoke = yield* bootstrapCredentials.listActive();
+      expect(activeBeforeRevoke.map((entry) => entry.id)).toContain(first.id);
+      expect(activeBeforeRevoke.map((entry) => entry.id)).toContain(second.id);
+
+      const revoked = yield* bootstrapCredentials.revoke(first.id);
+      const activeAfterRevoke = yield* bootstrapCredentials.listActive();
+      const revokedConsume = yield* Effect.flip(bootstrapCredentials.consume(first.credential));
+
+      expect(revoked).toBe(true);
+      expect(activeAfterRevoke.map((entry) => entry.id)).not.toContain(first.id);
+      expect(activeAfterRevoke.map((entry) => entry.id)).toContain(second.id);
+      expect(revokedConsume.message).toContain("no longer available");
+      expect(revokedConsume.status).toBe(401);
+    }).pipe(Effect.provide(makeBootstrapCredentialLayer())),
   );
 });

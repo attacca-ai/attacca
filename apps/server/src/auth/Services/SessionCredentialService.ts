@@ -1,10 +1,11 @@
-import type { ServerAuthSessionMethod } from "@t3tools/contracts";
+import type { AuthClientSession, AuthSessionId, ServerAuthSessionMethod } from "@t3tools/contracts";
 import { Data, DateTime, Duration, ServiceMap } from "effect";
-import type { Effect } from "effect";
+import type { Effect, Stream } from "effect";
 
 export type SessionRole = "owner" | "client";
 
 export interface IssuedSession {
+  readonly sessionId: AuthSessionId;
   readonly token: string;
   readonly method: ServerAuthSessionMethod;
   readonly expiresAt: DateTime.DateTime;
@@ -12,12 +13,23 @@ export interface IssuedSession {
 }
 
 export interface VerifiedSession {
+  readonly sessionId: AuthSessionId;
   readonly token: string;
   readonly method: ServerAuthSessionMethod;
   readonly expiresAt?: DateTime.DateTime;
   readonly subject: string;
   readonly role: SessionRole;
 }
+
+export type SessionCredentialChange =
+  | {
+      readonly type: "clientUpserted";
+      readonly clientSession: AuthClientSession;
+    }
+  | {
+      readonly type: "clientRemoved";
+      readonly sessionId: AuthSessionId;
+    };
 
 export class SessionCredentialError extends Data.TaggedError("SessionCredentialError")<{
   readonly message: string;
@@ -31,8 +43,19 @@ export interface SessionCredentialServiceShape {
     readonly subject?: string;
     readonly method?: ServerAuthSessionMethod;
     readonly role?: SessionRole;
-  }) => Effect.Effect<IssuedSession, never>;
+  }) => Effect.Effect<IssuedSession, SessionCredentialError>;
   readonly verify: (token: string) => Effect.Effect<VerifiedSession, SessionCredentialError>;
+  readonly listActive: () => Effect.Effect<
+    ReadonlyArray<AuthClientSession>,
+    SessionCredentialError
+  >;
+  readonly streamChanges: Stream.Stream<SessionCredentialChange>;
+  readonly revoke: (sessionId: AuthSessionId) => Effect.Effect<boolean, SessionCredentialError>;
+  readonly revokeAllExcept: (
+    sessionId: AuthSessionId,
+  ) => Effect.Effect<number, SessionCredentialError>;
+  readonly markConnected: (sessionId: AuthSessionId) => Effect.Effect<void, never>;
+  readonly markDisconnected: (sessionId: AuthSessionId) => Effect.Effect<void, never>;
 }
 
 export class SessionCredentialService extends ServiceMap.Service<

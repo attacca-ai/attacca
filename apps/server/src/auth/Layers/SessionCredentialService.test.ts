@@ -5,6 +5,7 @@ import { TestClock } from "effect/testing";
 
 import type { ServerConfigShape } from "../../config.ts";
 import { ServerConfig } from "../../config.ts";
+import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { SessionCredentialService } from "../Services/SessionCredentialService.ts";
 import { ServerSecretStoreLive } from "./ServerSecretStore.ts";
 import { SessionCredentialServiceLive } from "./SessionCredentialService.ts";
@@ -27,6 +28,7 @@ const makeSessionCredentialLayer = (
   overrides?: Partial<Pick<ServerConfigShape, "desktopBootstrapToken">>,
 ) =>
   SessionCredentialServiceLive.pipe(
+    Layer.provide(SqlitePersistenceMemory),
     Layer.provide(ServerSecretStoreLive),
     Layer.provide(makeServerConfigLayer(overrides)),
   );
@@ -69,5 +71,34 @@ it.layer(NodeServices.layer)("SessionCredentialServiceLive", (it) => {
       expect(verified.subject).toBe("test-clock");
       expect(verified.role).toBe("client");
     }).pipe(Effect.provide(Layer.merge(makeSessionCredentialLayer(), TestClock.layer()))),
+  );
+
+  it.effect("lists active sessions, tracks connectivity, and revokes other sessions", () =>
+    Effect.gen(function* () {
+      const sessions = yield* SessionCredentialService;
+      const owner = yield* sessions.issue({
+        subject: "desktop-bootstrap",
+        role: "owner",
+      });
+      const client = yield* sessions.issue({
+        subject: "one-time-token",
+        role: "client",
+      });
+
+      yield* sessions.markConnected(client.sessionId);
+      const beforeRevoke = yield* sessions.listActive();
+      const revokedCount = yield* sessions.revokeAllExcept(owner.sessionId);
+      const afterRevoke = yield* sessions.listActive();
+      const revokedClient = yield* Effect.flip(sessions.verify(client.token));
+
+      expect(beforeRevoke).toHaveLength(2);
+      expect(beforeRevoke.find((entry) => entry.sessionId === client.sessionId)?.connected).toBe(
+        true,
+      );
+      expect(revokedCount).toBe(1);
+      expect(afterRevoke).toHaveLength(1);
+      expect(afterRevoke[0]?.sessionId).toBe(owner.sessionId);
+      expect(revokedClient.message).toContain("revoked");
+    }).pipe(Effect.provide(makeSessionCredentialLayer())),
   );
 });

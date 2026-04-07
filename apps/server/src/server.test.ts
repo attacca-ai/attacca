@@ -69,6 +69,7 @@ import {
   type ProjectionSnapshotQueryShape,
 } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { PersistenceSqlError } from "./persistence/Errors.ts";
+import { SqlitePersistenceMemory } from "./persistence/Layers/Sqlite.ts";
 import {
   ProviderRegistry,
   type ProviderRegistryShape,
@@ -177,7 +178,10 @@ const browserOtlpTracingLayer = Layer.mergeAll(
   Layer.succeed(HttpClient.TracerDisabledWhen, () => true),
 );
 
-const authTestLayer = ServerAuthLive.pipe(Layer.provide(ServerSecretStoreLive));
+const authTestLayer = ServerAuthLive.pipe(
+  Layer.provide(SqlitePersistenceMemory),
+  Layer.provide(ServerSecretStoreLive),
+);
 
 const makeBrowserOtlpPayload = (spanName: string) =>
   Effect.gen(function* () {
@@ -786,6 +790,56 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("lists and revokes pairing links for owner sessions", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest({
+        config: {
+          host: "0.0.0.0",
+        },
+      });
+
+      const ownerCookie = yield* getAuthenticatedSessionCookieHeader();
+      const createdResponse = yield* HttpClient.post("/api/auth/pairing-token", {
+        headers: {
+          cookie: ownerCookie,
+        },
+      });
+      const createdBody = (yield* createdResponse.json) as {
+        readonly id: string;
+        readonly credential: string;
+      };
+
+      const listResponse = yield* HttpClient.get("/api/auth/pairing-links", {
+        headers: {
+          cookie: ownerCookie,
+        },
+      });
+      const listedLinks = (yield* listResponse.json) as ReadonlyArray<{
+        readonly id: string;
+        readonly credential: string;
+      }>;
+
+      const revokeUrl = yield* getHttpServerUrl("/api/auth/pairing-links/revoke");
+      const revokeResponse = yield* Effect.promise(() =>
+        fetch(revokeUrl, {
+          method: "POST",
+          headers: {
+            cookie: ownerCookie,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ id: createdBody.id }),
+        }),
+      );
+      const revokedBootstrap = yield* bootstrapBrowserSession(createdBody.credential);
+
+      assert.equal(createdResponse.status, 200);
+      assert.equal(listResponse.status, 200);
+      assert.isTrue(listedLinks.some((entry) => entry.id === createdBody.id));
+      assert.equal(revokeResponse.status, 200);
+      assert.equal(revokedBootstrap.response.status, 401);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("rejects pairing credential requests from non-owner paired sessions", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest({
@@ -816,6 +870,134 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       assert.equal(pairedResponse.status, 403);
       assert.equal(pairedBody.error, "Only owner sessions can create pairing credentials.");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("lists paired clients and revokes other sessions while keeping the owner", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest({
+        config: {
+          host: "0.0.0.0",
+        },
+      });
+
+      const ownerCookie = yield* getAuthenticatedSessionCookieHeader();
+      const ownerPairingResponse = yield* HttpClient.post("/api/auth/pairing-token", {
+        headers: {
+          cookie: ownerCookie,
+        },
+      });
+      const ownerPairingBody = (yield* ownerPairingResponse.json) as {
+        readonly credential: string;
+      };
+      const pairedSessionCookie = yield* getAuthenticatedSessionCookieHeader(
+        ownerPairingBody.credential,
+      );
+
+      const listBeforeResponse = yield* HttpClient.get("/api/auth/clients", {
+        headers: {
+          cookie: ownerCookie,
+        },
+      });
+      const clientsBefore = (yield* listBeforeResponse.json) as ReadonlyArray<{
+        readonly sessionId: string;
+        readonly current: boolean;
+      }>;
+      const pairedSessionId = clientsBefore.find((entry) => !entry.current)?.sessionId;
+
+      const revokeOthersResponse = yield* HttpClient.post("/api/auth/clients/revoke-others", {
+        headers: {
+          cookie: ownerCookie,
+        },
+      });
+      const revokeOthersBody = (yield* revokeOthersResponse.json) as {
+        readonly revokedCount: number;
+      };
+
+      const listAfterResponse = yield* HttpClient.get("/api/auth/clients", {
+        headers: {
+          cookie: ownerCookie,
+        },
+      });
+      const clientsAfter = (yield* listAfterResponse.json) as ReadonlyArray<{
+        readonly sessionId: string;
+        readonly current: boolean;
+      }>;
+
+      const pairedClientPairingResponse = yield* HttpClient.post("/api/auth/pairing-token", {
+        headers: {
+          cookie: pairedSessionCookie,
+        },
+      });
+      const pairedClientPairingBody = (yield* pairedClientPairingResponse.json) as {
+        readonly error: string;
+      };
+
+      assert.equal(listBeforeResponse.status, 200);
+      assert.lengthOf(clientsBefore, 2);
+      assert.isDefined(pairedSessionId);
+      assert.equal(revokeOthersResponse.status, 200);
+      assert.equal(revokeOthersBody.revokedCount, 1);
+      assert.equal(listAfterResponse.status, 200);
+      assert.lengthOf(clientsAfter, 1);
+      assert.equal(clientsAfter[0]?.current, true);
+      assert.equal(pairedClientPairingResponse.status, 401);
+      assert.equal(pairedClientPairingBody.error, "Unauthorized request.");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("revokes an individual paired client session", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest({
+        config: {
+          host: "0.0.0.0",
+        },
+      });
+
+      const ownerCookie = yield* getAuthenticatedSessionCookieHeader();
+      const pairingResponse = yield* HttpClient.post("/api/auth/pairing-token", {
+        headers: {
+          cookie: ownerCookie,
+        },
+      });
+      const pairingBody = (yield* pairingResponse.json) as {
+        readonly credential: string;
+      };
+      const pairedSessionCookie = yield* getAuthenticatedSessionCookieHeader(
+        pairingBody.credential,
+      );
+
+      const clientsResponse = yield* HttpClient.get("/api/auth/clients", {
+        headers: {
+          cookie: ownerCookie,
+        },
+      });
+      const clients = (yield* clientsResponse.json) as ReadonlyArray<{
+        readonly sessionId: string;
+        readonly current: boolean;
+      }>;
+      const pairedSessionId = clients.find((entry) => !entry.current)?.sessionId;
+      assert.isDefined(pairedSessionId);
+
+      const revokeUrl = yield* getHttpServerUrl("/api/auth/clients/revoke");
+      const revokeResponse = yield* Effect.promise(() =>
+        fetch(revokeUrl, {
+          method: "POST",
+          headers: {
+            cookie: ownerCookie,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ sessionId: pairedSessionId }),
+        }),
+      );
+      const pairedClientPairingResponse = yield* HttpClient.post("/api/auth/pairing-token", {
+        headers: {
+          cookie: pairedSessionCookie,
+        },
+      });
+
+      assert.equal(revokeResponse.status, 200);
+      assert.equal(pairedClientPairingResponse.status, 401);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

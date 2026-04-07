@@ -53,6 +53,11 @@ import { ObservabilityLive } from "./observability/Layers/Observability";
 import { ServerEnvironmentLive } from "./environment/Layers/ServerEnvironment";
 import {
   authBootstrapRouteLayer,
+  authClientsRevokeOthersRouteLayer,
+  authClientsRevokeRouteLayer,
+  authClientsRouteLayer,
+  authPairingLinksRevokeRouteLayer,
+  authPairingLinksRouteLayer,
   authPairingCredentialRouteLayer,
   authSessionRouteLayer,
 } from "./auth/http";
@@ -195,7 +200,10 @@ const WorkspaceLayerLive = Layer.mergeAll(
   ),
 );
 
-const AuthLayerLive = ServerAuthLive.pipe(Layer.provide(ServerSecretStoreLive));
+const AuthLayerLive = ServerAuthLive.pipe(
+  Layer.provideMerge(PersistenceLayerLive),
+  Layer.provide(ServerSecretStoreLive),
+);
 
 const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   // Core Services
@@ -226,6 +234,11 @@ const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
 
 export const makeRoutesLayer = Layer.mergeAll(
   authBootstrapRouteLayer,
+  authClientsRevokeOthersRouteLayer,
+  authClientsRevokeRouteLayer,
+  authClientsRouteLayer,
+  authPairingLinksRevokeRouteLayer,
+  authPairingLinksRouteLayer,
   authPairingCredentialRouteLayer,
   authSessionRouteLayer,
   attachmentsRouteLayer,

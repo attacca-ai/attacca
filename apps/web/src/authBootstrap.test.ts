@@ -98,9 +98,10 @@ describe("resolveInitialServerAuthGateState", () => {
 
     await Promise.all([resolveInitialServerAuthGateState(), resolveInitialServerAuthGateState()]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost/api/auth/session");
     expect(fetchMock.mock.calls[1]?.[0]).toBe("http://localhost/api/auth/bootstrap");
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("http://localhost/api/auth/session");
   });
 
   it("uses https fetch urls when the primary environment uses wss", async () => {
@@ -296,6 +297,76 @@ describe("resolveInitialServerAuthGateState", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it("waits for the authenticated session to become observable after silent desktop bootstrap", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          authenticated: false,
+          auth: {
+            policy: "desktop-managed-local",
+            bootstrapMethods: ["desktop-bootstrap"],
+            sessionMethods: ["browser-session-cookie"],
+            sessionCookieName: "t3_session",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          authenticated: true,
+          sessionMethod: "browser-session-cookie",
+          expiresAt: "2026-04-05T00:00:00.000Z",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          authenticated: false,
+          auth: {
+            policy: "desktop-managed-local",
+            bootstrapMethods: ["desktop-bootstrap"],
+            sessionMethods: ["browser-session-cookie"],
+            sessionCookieName: "t3_session",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          authenticated: true,
+          auth: {
+            policy: "desktop-managed-local",
+            bootstrapMethods: ["desktop-bootstrap"],
+            sessionMethods: ["browser-session-cookie"],
+            sessionCookieName: "t3_session",
+          },
+          sessionMethod: "browser-session-cookie",
+          expiresAt: "2026-04-05T00:00:00.000Z",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const testWindow = installTestBrowser("http://localhost/");
+    testWindow.desktopBridge = {
+      getLocalEnvironmentBootstrap: () => ({
+        label: "Local environment",
+        wsUrl: "ws://localhost:3773/ws",
+        bootstrapToken: "desktop-bootstrap-token",
+      }),
+    } as DesktopBridge;
+
+    const { resolveInitialServerAuthGateState } = await import("./authBootstrap");
+
+    const gateStatePromise = resolveInitialServerAuthGateState();
+    await vi.advanceTimersByTimeAsync(100);
+
+    await expect(gateStatePromise).resolves.toEqual({
+      status: "authenticated",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("http://localhost/api/auth/session");
+    expect(fetchMock.mock.calls[3]?.[0]).toBe("http://localhost/api/auth/session");
+  });
+
   it("revalidates the server session state after a previous authenticated result", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -345,6 +416,7 @@ describe("resolveInitialServerAuthGateState", () => {
   it("creates a pairing credential from the authenticated auth endpoint", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
       jsonResponse({
+        id: "pairing-link-1",
         credential: "pairing-token",
         expiresAt: "2026-04-05T00:00:00.000Z",
       }),
@@ -354,6 +426,7 @@ describe("resolveInitialServerAuthGateState", () => {
     const { createServerPairingCredential } = await import("./authBootstrap");
 
     await expect(createServerPairingCredential()).resolves.toEqual({
+      id: "pairing-link-1",
       credential: "pairing-token",
       expiresAt: "2026-04-05T00:00:00.000Z",
     });

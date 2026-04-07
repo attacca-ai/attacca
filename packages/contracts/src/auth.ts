@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-import { TrimmedNonEmptyString } from "./baseSchemas";
+import { AuthSessionId, TrimmedNonEmptyString } from "./baseSchemas";
 
 /**
  * Declares the server's overall authentication posture.
@@ -69,6 +69,9 @@ export const ServerAuthSessionMethod = Schema.Literals([
 ]);
 export type ServerAuthSessionMethod = typeof ServerAuthSessionMethod.Type;
 
+export const AuthSessionRole = Schema.Literals(["owner", "client"]);
+export type AuthSessionRole = typeof AuthSessionRole.Type;
+
 /**
  * Server-advertised auth capabilities for a specific execution environment.
  *
@@ -104,20 +107,116 @@ export type AuthBootstrapInput = typeof AuthBootstrapInput.Type;
 
 export const AuthBootstrapResult = Schema.Struct({
   authenticated: Schema.Literal(true),
+  role: AuthSessionRole,
   sessionMethod: ServerAuthSessionMethod,
   expiresAt: Schema.DateTimeUtc,
 });
 export type AuthBootstrapResult = typeof AuthBootstrapResult.Type;
 
 export const AuthPairingCredentialResult = Schema.Struct({
+  id: TrimmedNonEmptyString,
   credential: TrimmedNonEmptyString,
   expiresAt: Schema.DateTimeUtc,
 });
 export type AuthPairingCredentialResult = typeof AuthPairingCredentialResult.Type;
 
+export const AuthPairingLink = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  credential: TrimmedNonEmptyString,
+  role: AuthSessionRole,
+  subject: TrimmedNonEmptyString,
+  createdAt: Schema.DateTimeUtc,
+  expiresAt: Schema.DateTimeUtc,
+});
+export type AuthPairingLink = typeof AuthPairingLink.Type;
+
+export const AuthClientSession = Schema.Struct({
+  sessionId: AuthSessionId,
+  subject: TrimmedNonEmptyString,
+  role: AuthSessionRole,
+  method: ServerAuthSessionMethod,
+  issuedAt: Schema.DateTimeUtc,
+  expiresAt: Schema.DateTimeUtc,
+  connected: Schema.Boolean,
+  current: Schema.Boolean,
+});
+export type AuthClientSession = typeof AuthClientSession.Type;
+
+export const AuthAccessSnapshot = Schema.Struct({
+  pairingLinks: Schema.Array(AuthPairingLink),
+  clientSessions: Schema.Array(AuthClientSession),
+});
+export type AuthAccessSnapshot = typeof AuthAccessSnapshot.Type;
+
+export const AuthAccessStreamSnapshotEvent = Schema.Struct({
+  version: Schema.Literal(1),
+  revision: Schema.Number,
+  type: Schema.Literal("snapshot"),
+  payload: AuthAccessSnapshot,
+});
+export type AuthAccessStreamSnapshotEvent = typeof AuthAccessStreamSnapshotEvent.Type;
+
+export const AuthAccessStreamPairingLinkUpsertedEvent = Schema.Struct({
+  version: Schema.Literal(1),
+  revision: Schema.Number,
+  type: Schema.Literal("pairingLinkUpserted"),
+  payload: AuthPairingLink,
+});
+export type AuthAccessStreamPairingLinkUpsertedEvent =
+  typeof AuthAccessStreamPairingLinkUpsertedEvent.Type;
+
+export const AuthAccessStreamPairingLinkRemovedEvent = Schema.Struct({
+  version: Schema.Literal(1),
+  revision: Schema.Number,
+  type: Schema.Literal("pairingLinkRemoved"),
+  payload: Schema.Struct({
+    id: TrimmedNonEmptyString,
+  }),
+});
+export type AuthAccessStreamPairingLinkRemovedEvent =
+  typeof AuthAccessStreamPairingLinkRemovedEvent.Type;
+
+export const AuthAccessStreamClientUpsertedEvent = Schema.Struct({
+  version: Schema.Literal(1),
+  revision: Schema.Number,
+  type: Schema.Literal("clientUpserted"),
+  payload: AuthClientSession,
+});
+export type AuthAccessStreamClientUpsertedEvent = typeof AuthAccessStreamClientUpsertedEvent.Type;
+
+export const AuthAccessStreamClientRemovedEvent = Schema.Struct({
+  version: Schema.Literal(1),
+  revision: Schema.Number,
+  type: Schema.Literal("clientRemoved"),
+  payload: Schema.Struct({
+    sessionId: AuthSessionId,
+  }),
+});
+export type AuthAccessStreamClientRemovedEvent = typeof AuthAccessStreamClientRemovedEvent.Type;
+
+export const AuthAccessStreamEvent = Schema.Union([
+  AuthAccessStreamSnapshotEvent,
+  AuthAccessStreamPairingLinkUpsertedEvent,
+  AuthAccessStreamPairingLinkRemovedEvent,
+  AuthAccessStreamClientUpsertedEvent,
+  AuthAccessStreamClientRemovedEvent,
+]);
+export type AuthAccessStreamEvent = typeof AuthAccessStreamEvent.Type;
+
+export const AuthRevokePairingLinkInput = Schema.Struct({
+  id: TrimmedNonEmptyString,
+});
+export type AuthRevokePairingLinkInput = typeof AuthRevokePairingLinkInput.Type;
+
+export const AuthRevokeClientSessionInput = Schema.Struct({
+  sessionId: AuthSessionId,
+});
+export type AuthRevokeClientSessionInput = typeof AuthRevokeClientSessionInput.Type;
+
 export const AuthSessionState = Schema.Struct({
   authenticated: Schema.Boolean,
   auth: ServerAuthDescriptor,
+  role: Schema.optionalKey(AuthSessionRole),
   sessionMethod: Schema.optionalKey(ServerAuthSessionMethod),
   expiresAt: Schema.optionalKey(Schema.DateTimeUtc),
 });

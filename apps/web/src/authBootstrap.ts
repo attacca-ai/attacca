@@ -1,10 +1,33 @@
 import type {
   AuthBootstrapInput,
   AuthBootstrapResult,
+  AuthSessionId,
   AuthPairingCredentialResult,
+  AuthRevokeClientSessionInput,
+  AuthRevokePairingLinkInput,
   AuthSessionState,
 } from "@t3tools/contracts";
 import { resolveServerHttpUrl } from "./lib/utils";
+
+export interface ServerPairingLinkRecord {
+  readonly id: string;
+  readonly credential: string;
+  readonly role: "owner" | "client";
+  readonly subject: string;
+  readonly createdAt: string;
+  readonly expiresAt: string;
+}
+
+export interface ServerClientSessionRecord {
+  readonly sessionId: AuthSessionId;
+  readonly subject: string;
+  readonly role: "owner" | "client";
+  readonly method: "browser-session-cookie" | "bearer-session-token";
+  readonly issuedAt: string;
+  readonly expiresAt: string;
+  readonly connected: boolean;
+  readonly current: boolean;
+}
 
 export type ServerAuthGateState =
   | { status: "authenticated" }
@@ -18,6 +41,8 @@ let bootstrapPromise: Promise<ServerAuthGateState> | null = null;
 const TRANSIENT_AUTH_BOOTSTRAP_STATUS_CODES = new Set([502, 503, 504]);
 const AUTH_BOOTSTRAP_RETRY_TIMEOUT_MS = 15_000;
 const AUTH_BOOTSTRAP_RETRY_STEP_MS = 500;
+const AUTH_SESSION_ESTABLISH_TIMEOUT_MS = 2_000;
+const AUTH_SESSION_ESTABLISH_STEP_MS = 100;
 
 class AuthBootstrapHttpError extends Error {
   readonly status: number;
@@ -77,6 +102,11 @@ async function fetchSessionState(): Promise<AuthSessionState> {
     }
     return (await response.json()) as AuthSessionState;
   });
+}
+
+async function readErrorMessage(response: Response, fallbackMessage: string): Promise<string> {
+  const text = await response.text();
+  return text || fallbackMessage;
 }
 
 async function exchangeBootstrapCredential(credential: string): Promise<AuthBootstrapResult> {
@@ -140,6 +170,23 @@ function waitForAuthBootstrapRetry(delayMs: number): Promise<void> {
   });
 }
 
+async function waitForAuthenticatedSessionAfterBootstrap(): Promise<AuthSessionState> {
+  const startedAt = Date.now();
+
+  while (true) {
+    const session = await fetchSessionState();
+    if (session.authenticated) {
+      return session;
+    }
+
+    if (Date.now() - startedAt >= AUTH_SESSION_ESTABLISH_TIMEOUT_MS) {
+      throw new Error("Timed out waiting for authenticated session after bootstrap.");
+    }
+
+    await waitForAuthBootstrapRetry(AUTH_SESSION_ESTABLISH_STEP_MS);
+  }
+}
+
 async function bootstrapServerAuth(): Promise<ServerAuthGateState> {
   const bootstrapCredential = getBootstrapCredential();
   const currentSession = await fetchSessionState();
@@ -156,6 +203,7 @@ async function bootstrapServerAuth(): Promise<ServerAuthGateState> {
 
   try {
     await exchangeBootstrapCredential(bootstrapCredential);
+    await waitForAuthenticatedSessionAfterBootstrap();
     return { status: "authenticated" };
   } catch (error) {
     return {
@@ -184,11 +232,100 @@ export async function createServerPairingCredential(): Promise<AuthPairingCreden
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Failed to create pairing credential (${response.status}).`);
+    throw new Error(
+      await readErrorMessage(response, `Failed to create pairing credential (${response.status}).`),
+    );
   }
 
   return (await response.json()) as AuthPairingCredentialResult;
+}
+
+export async function listServerPairingLinks(): Promise<ReadonlyArray<ServerPairingLinkRecord>> {
+  const response = await fetch(resolveServerHttpUrl({ pathname: "/api/auth/pairing-links" }), {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readErrorMessage(response, `Failed to load pairing links (${response.status}).`),
+    );
+  }
+
+  return (await response.json()) as ReadonlyArray<ServerPairingLinkRecord>;
+}
+
+export async function revokeServerPairingLink(id: string): Promise<void> {
+  const payload: AuthRevokePairingLinkInput = { id };
+  const response = await fetch(
+    resolveServerHttpUrl({ pathname: "/api/auth/pairing-links/revoke" }),
+    {
+      body: JSON.stringify(payload),
+      credentials: "include",
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await readErrorMessage(response, `Failed to revoke pairing link (${response.status}).`),
+    );
+  }
+}
+
+export async function listServerClientSessions(): Promise<
+  ReadonlyArray<ServerClientSessionRecord>
+> {
+  const response = await fetch(resolveServerHttpUrl({ pathname: "/api/auth/clients" }), {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readErrorMessage(response, `Failed to load paired clients (${response.status}).`),
+    );
+  }
+
+  return (await response.json()) as ReadonlyArray<ServerClientSessionRecord>;
+}
+
+export async function revokeServerClientSession(sessionId: AuthSessionId): Promise<void> {
+  const payload: AuthRevokeClientSessionInput = { sessionId };
+  const response = await fetch(resolveServerHttpUrl({ pathname: "/api/auth/clients/revoke" }), {
+    body: JSON.stringify(payload),
+    credentials: "include",
+    headers: {
+      "content-type": "application/json",
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readErrorMessage(response, `Failed to revoke client access (${response.status}).`),
+    );
+  }
+}
+
+export async function revokeOtherServerClientSessions(): Promise<number> {
+  const response = await fetch(
+    resolveServerHttpUrl({ pathname: "/api/auth/clients/revoke-others" }),
+    {
+      credentials: "include",
+      method: "POST",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await readErrorMessage(response, `Failed to revoke other clients (${response.status}).`),
+    );
+  }
+
+  const body = (await response.json()) as { readonly revokedCount: number };
+  return body.revokedCount;
 }
 
 export function resolveInitialServerAuthGateState(): Promise<ServerAuthGateState> {

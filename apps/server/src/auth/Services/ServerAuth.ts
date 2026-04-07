@@ -1,6 +1,9 @@
 import type {
   AuthBootstrapResult,
+  AuthClientSession,
+  AuthPairingLink,
   AuthPairingCredentialResult,
+  AuthSessionId,
   AuthSessionState,
   ServerAuthDescriptor,
   ServerAuthSessionMethod,
@@ -11,6 +14,7 @@ import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest"
 import type { SessionRole } from "./SessionCredentialService.ts";
 
 export interface AuthenticatedSession {
+  readonly sessionId: AuthSessionId;
   readonly subject: string;
   readonly method: ServerAuthSessionMethod;
   readonly role: SessionRole;
@@ -19,7 +23,7 @@ export interface AuthenticatedSession {
 
 export class AuthError extends Data.TaggedError("AuthError")<{
   readonly message: string;
-  readonly status?: 401 | 403;
+  readonly status?: 400 | 401 | 403 | 500;
   readonly cause?: unknown;
 }> {}
 
@@ -37,14 +41,26 @@ export interface ServerAuthShape {
   >;
   readonly issuePairingCredential: (input?: {
     readonly role?: SessionRole;
-  }) => Effect.Effect<AuthPairingCredentialResult, never>;
+  }) => Effect.Effect<AuthPairingCredentialResult, AuthError>;
+  readonly listPairingLinks: () => Effect.Effect<ReadonlyArray<AuthPairingLink>, AuthError>;
+  readonly revokePairingLink: (id: string) => Effect.Effect<boolean, AuthError>;
+  readonly listClientSessions: (
+    currentSessionId: AuthSessionId,
+  ) => Effect.Effect<ReadonlyArray<AuthClientSession>, AuthError>;
+  readonly revokeClientSession: (
+    currentSessionId: AuthSessionId,
+    targetSessionId: AuthSessionId,
+  ) => Effect.Effect<boolean, AuthError>;
+  readonly revokeOtherClientSessions: (
+    currentSessionId: AuthSessionId,
+  ) => Effect.Effect<number, AuthError>;
   readonly authenticateHttpRequest: (
     request: HttpServerRequest.HttpServerRequest,
   ) => Effect.Effect<AuthenticatedSession, AuthError>;
   readonly authenticateWebSocketUpgrade: (
     request: HttpServerRequest.HttpServerRequest,
   ) => Effect.Effect<AuthenticatedSession, AuthError>;
-  readonly issueStartupPairingUrl: (baseUrl: string) => Effect.Effect<string, never>;
+  readonly issueStartupPairingUrl: (baseUrl: string) => Effect.Effect<string, AuthError>;
 }
 
 export class ServerAuth extends ServiceMap.Service<ServerAuth, ServerAuthShape>()(
