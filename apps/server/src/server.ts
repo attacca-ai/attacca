@@ -51,7 +51,11 @@ import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths";
 import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner";
 import { ObservabilityLive } from "./observability/Layers/Observability";
 import { ServerEnvironmentLive } from "./environment/Layers/ServerEnvironment";
-import { authBootstrapRouteLayer, authSessionRouteLayer } from "./auth/http";
+import {
+  authBootstrapRouteLayer,
+  authPairingCredentialRouteLayer,
+  authSessionRouteLayer,
+} from "./auth/http";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore";
 import { ServerAuthLive } from "./auth/Layers/ServerAuth";
 
@@ -222,6 +226,7 @@ const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
 
 export const makeRoutesLayer = Layer.mergeAll(
   authBootstrapRouteLayer,
+  authPairingCredentialRouteLayer,
   authSessionRouteLayer,
   attachmentsRouteLayer,
   otlpTracesProxyRouteLayer,

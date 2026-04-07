@@ -42,6 +42,23 @@ it.layer(NodeServices.layer)("ServerAuthPolicyLive", (it) => {
     ),
   );
 
+  it.effect("uses remote-reachable policy for desktop mode when bound beyond loopback", () =>
+    Effect.gen(function* () {
+      const policy = yield* ServerAuthPolicy;
+      const descriptor = yield* policy.getDescriptor();
+
+      expect(descriptor.policy).toBe("remote-reachable");
+      expect(descriptor.bootstrapMethods).toEqual(["desktop-bootstrap", "one-time-token"]);
+    }).pipe(
+      Effect.provide(
+        makeServerAuthPolicyLayer({
+          mode: "desktop",
+          host: "0.0.0.0",
+        }),
+      ),
+    ),
+  );
+
   it.effect("uses loopback-browser policy for loopback web hosts", () =>
     Effect.gen(function* () {
       const policy = yield* ServerAuthPolicy;

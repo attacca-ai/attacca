@@ -37,11 +37,13 @@ it.layer(NodeServices.layer)("SessionCredentialServiceLive", (it) => {
       const sessions = yield* SessionCredentialService;
       const issued = yield* sessions.issue({
         subject: "desktop-bootstrap",
+        role: "owner",
       });
       const verified = yield* sessions.verify(issued.token);
 
       expect(verified.method).toBe("browser-session-cookie");
       expect(verified.subject).toBe("desktop-bootstrap");
+      expect(verified.role).toBe("owner");
       expect(verified.expiresAt?.toString()).toBe(issued.expiresAt.toString());
     }).pipe(Effect.provide(makeSessionCredentialLayer())),
   );
@@ -65,6 +67,7 @@ it.layer(NodeServices.layer)("SessionCredentialServiceLive", (it) => {
 
       expect(verified.method).toBe("bearer-session-token");
       expect(verified.subject).toBe("test-clock");
+      expect(verified.role).toBe("client");
     }).pipe(Effect.provide(Layer.merge(makeSessionCredentialLayer(), TestClock.layer()))),
   );
 });

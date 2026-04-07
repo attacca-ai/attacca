@@ -19,6 +19,8 @@ import type { MenuItemConstructorOptions } from "electron";
 import * as Effect from "effect/Effect";
 import type {
   DesktopTheme,
+  DesktopServerExposureMode,
+  DesktopServerExposureState,
   DesktopUpdateActionResult,
   DesktopUpdateCheckResult,
   DesktopUpdateState,
@@ -29,7 +31,14 @@ import type { ContextMenuItem } from "@t3tools/contracts";
 import { NetService } from "@t3tools/shared/Net";
 import { RotatingFileSink } from "@t3tools/shared/logging";
 import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serverSettings";
+import {
+  DEFAULT_DESKTOP_SETTINGS,
+  readDesktopSettings,
+  writeDesktopSettings,
+} from "./desktopSettings";
+import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness";
 import { showDesktopConfirmDialog } from "./confirmDialog";
+import { resolveDesktopServerExposure } from "./serverExposure";
 import { syncShellEnvironment } from "./syncShellEnvironment";
 import { getAutoUpdateDisabledReason, shouldBroadcastDownloadProgress } from "./updateState";
 import {
@@ -61,8 +70,11 @@ const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const UPDATE_CHECK_CHANNEL = "desktop:update-check";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
 const GET_LOCAL_ENVIRONMENT_BOOTSTRAP_CHANNEL = "desktop:get-local-environment-bootstrap";
+const GET_SERVER_EXPOSURE_STATE_CHANNEL = "desktop:get-server-exposure-state";
+const SET_SERVER_EXPOSURE_MODE_CHANNEL = "desktop:set-server-exposure-mode";
 const BASE_DIR = process.env.T3CODE_HOME?.trim() || Path.join(OS.homedir(), ".t3");
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
+const DESKTOP_SETTINGS_PATH = Path.join(STATE_DIR, "desktop-settings.json");
 const DESKTOP_SCHEME = "t3";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -93,9 +105,13 @@ type LinuxDesktopNamedApp = Electron.App & {
 let mainWindow: BrowserWindow | null = null;
 let backendProcess: ChildProcess.ChildProcess | null = null;
 let backendPort = 0;
+let backendBindHost = DESKTOP_LOOPBACK_HOST;
 let backendBootstrapToken = "";
 let backendHttpUrl = "";
 let backendWsUrl = "";
+let backendEndpointUrl: string | null = null;
+let backendAdvertisedHost: string | null = null;
+let backendReadinessAbortController: AbortController | null = null;
 let restartAttempt = 0;
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
 let isQuitting = false;
@@ -105,6 +121,8 @@ let desktopLogSink: RotatingFileSink | null = null;
 let backendLogSink: RotatingFileSink | null = null;
 let restoreStdIoCapture: (() => void) | null = null;
 let backendObservabilitySettings = readPersistedBackendObservabilitySettings();
+let desktopSettings = readDesktopSettings(DESKTOP_SETTINGS_PATH);
+let desktopServerExposureMode: DesktopServerExposureMode = desktopSettings.serverExposureMode;
 
 let destructiveMenuIconCache: Electron.NativeImage | null | undefined;
 const expectedBackendExitChildren = new WeakSet<ChildProcess.ChildProcess>();
@@ -172,7 +190,89 @@ function backendChildEnv(): NodeJS.ProcessEnv {
   delete env.T3CODE_NO_BROWSER;
   delete env.T3CODE_HOST;
   delete env.T3CODE_DESKTOP_WS_URL;
+  delete env.T3CODE_DESKTOP_LAN_ACCESS;
+  delete env.T3CODE_DESKTOP_LAN_HOST;
   return env;
+}
+
+function getDesktopServerExposureState(): DesktopServerExposureState {
+  return {
+    mode: desktopServerExposureMode,
+    endpointUrl: backendEndpointUrl,
+    advertisedHost: backendAdvertisedHost,
+  };
+}
+
+function resolveAdvertisedHostOverride(): string | undefined {
+  const override = process.env.T3CODE_DESKTOP_LAN_HOST?.trim();
+  return override && override.length > 0 ? override : undefined;
+}
+
+async function applyDesktopServerExposureMode(
+  mode: DesktopServerExposureMode,
+  options?: { readonly persist?: boolean; readonly rejectIfUnavailable?: boolean },
+): Promise<DesktopServerExposureState> {
+  const advertisedHostOverride = resolveAdvertisedHostOverride();
+  const exposure = resolveDesktopServerExposure({
+    mode,
+    port: backendPort,
+    networkInterfaces: OS.networkInterfaces(),
+    ...(advertisedHostOverride ? { advertisedHostOverride } : {}),
+  });
+
+  if (mode === "network-accessible" && exposure.mode !== "network-accessible") {
+    if (options?.rejectIfUnavailable) {
+      throw new Error("No reachable network address is available for this desktop right now.");
+    }
+    mode = "local-only";
+  }
+
+  desktopServerExposureMode = exposure.mode;
+  desktopSettings =
+    exposure.mode === desktopSettings.serverExposureMode
+      ? desktopSettings
+      : {
+          ...desktopSettings,
+          serverExposureMode: exposure.mode,
+        };
+  backendBindHost = exposure.bindHost;
+  backendHttpUrl = exposure.localHttpUrl;
+  backendWsUrl = exposure.localWsUrl;
+  backendEndpointUrl = exposure.endpointUrl;
+  backendAdvertisedHost = exposure.advertisedHost;
+
+  if (options?.persist || exposure.mode !== mode) {
+    writeDesktopSettings(DESKTOP_SETTINGS_PATH, desktopSettings);
+  }
+
+  return getDesktopServerExposureState();
+}
+
+function relaunchDesktopApp(reason: string): void {
+  writeDesktopLogHeader(`desktop relaunch requested reason=${reason}`);
+  setImmediate(() => {
+    isQuitting = true;
+    clearUpdatePollTimer();
+    cancelBackendReadinessWait();
+    void stopBackendAndWaitForExit()
+      .catch((error) => {
+        writeDesktopLogHeader(
+          `desktop relaunch backend shutdown warning message=${formatErrorMessage(error)}`,
+        );
+      })
+      .finally(() => {
+        restoreStdIoCapture?.();
+        if (isDevelopment) {
+          app.exit(75);
+          return;
+        }
+        app.relaunch({
+          execPath: process.execPath,
+          args: process.argv.slice(1),
+        });
+        app.exit(0);
+      });
+  });
 }
 
 function writeDesktopLogHeader(message: string): void {
@@ -223,26 +323,24 @@ function getSafeTheme(rawTheme: unknown): DesktopTheme | null {
 }
 
 async function waitForBackendHttpReady(baseUrl: string): Promise<void> {
-  const deadline = Date.now() + 10_000;
+  cancelBackendReadinessWait();
+  const controller = new AbortController();
+  backendReadinessAbortController = controller;
 
-  for (;;) {
-    try {
-      const response = await fetch(`${baseUrl}/api/auth/session`, {
-        redirect: "manual",
-      });
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // Retry until the backend becomes reachable or the deadline expires.
+  try {
+    await waitForHttpReady(baseUrl, {
+      signal: controller.signal,
+    });
+  } finally {
+    if (backendReadinessAbortController === controller) {
+      backendReadinessAbortController = null;
     }
-
-    if (Date.now() >= deadline) {
-      throw new Error(`Timed out waiting for backend readiness at ${baseUrl}.`);
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
   }
+}
+
+function cancelBackendReadinessWait(): void {
+  backendReadinessAbortController?.abort();
+  backendReadinessAbortController = null;
 }
 
 function writeDesktopStreamChunk(
@@ -1099,7 +1197,7 @@ function startBackend(): void {
         noBrowser: true,
         port: backendPort,
         t3Home: BASE_DIR,
-        host: DESKTOP_LOOPBACK_HOST,
+        host: backendBindHost,
         desktopBootstrapToken: backendBootstrapToken,
         ...(backendObservabilitySettings.otlpTracesUrl
           ? { otlpTracesUrl: backendObservabilitySettings.otlpTracesUrl }
@@ -1159,6 +1257,7 @@ function startBackend(): void {
 }
 
 function stopBackend(): void {
+  cancelBackendReadinessWait();
   if (restartTimer) {
     clearTimeout(restartTimer);
     restartTimer = null;
@@ -1180,6 +1279,7 @@ function stopBackend(): void {
 }
 
 async function stopBackendAndWaitForExit(timeoutMs = 5_000): Promise<void> {
+  cancelBackendReadinessWait();
   if (restartTimer) {
     clearTimeout(restartTimer);
     restartTimer = null;
@@ -1244,6 +1344,28 @@ function registerIpcHandlers(): void {
       wsUrl: backendWsUrl || null,
       bootstrapToken: backendBootstrapToken || undefined,
     } as const;
+  });
+
+  ipcMain.removeHandler(GET_SERVER_EXPOSURE_STATE_CHANNEL);
+  ipcMain.handle(GET_SERVER_EXPOSURE_STATE_CHANNEL, async () => getDesktopServerExposureState());
+
+  ipcMain.removeHandler(SET_SERVER_EXPOSURE_MODE_CHANNEL);
+  ipcMain.handle(SET_SERVER_EXPOSURE_MODE_CHANNEL, async (_event, rawMode: unknown) => {
+    if (rawMode !== "local-only" && rawMode !== "network-accessible") {
+      throw new Error("Invalid desktop server exposure mode.");
+    }
+
+    const nextMode = rawMode as DesktopServerExposureMode;
+    if (nextMode === desktopServerExposureMode) {
+      return getDesktopServerExposureState();
+    }
+
+    const nextState = await applyDesktopServerExposureMode(nextMode, {
+      persist: true,
+      rejectIfUnavailable: true,
+    });
+    relaunchDesktopApp(`serverExposureMode=${nextMode}`);
+    return nextState;
   });
 
   ipcMain.removeHandler(PICK_FOLDER_CHANNEL);
@@ -1540,9 +1662,27 @@ async function bootstrap(): Promise<void> {
       : `using configured backend port port=${backendPort}`,
   );
   backendBootstrapToken = Crypto.randomBytes(24).toString("hex");
-  backendHttpUrl = `http://${DESKTOP_LOOPBACK_HOST}:${backendPort}`;
-  backendWsUrl = `ws://${DESKTOP_LOOPBACK_HOST}:${backendPort}`;
+  if (desktopSettings.serverExposureMode !== DEFAULT_DESKTOP_SETTINGS.serverExposureMode) {
+    writeDesktopLogHeader(
+      `bootstrap restoring persisted server exposure mode mode=${desktopSettings.serverExposureMode}`,
+    );
+  }
+  const serverExposureState = await applyDesktopServerExposureMode(
+    desktopSettings.serverExposureMode,
+    {
+      persist: desktopSettings.serverExposureMode !== DEFAULT_DESKTOP_SETTINGS.serverExposureMode,
+    },
+  );
   writeDesktopLogHeader(`bootstrap resolved backend endpoint baseUrl=${backendHttpUrl}`);
+  if (serverExposureState.endpointUrl) {
+    writeDesktopLogHeader(
+      `bootstrap enabled network access endpointUrl=${serverExposureState.endpointUrl}`,
+    );
+  } else if (desktopSettings.serverExposureMode === "network-accessible") {
+    writeDesktopLogHeader(
+      "bootstrap fell back to local-only because no advertised network host was available",
+    );
+  }
 
   registerIpcHandlers();
   writeDesktopLogHeader("bootstrap ipc handlers registered");
@@ -1557,7 +1697,13 @@ async function bootstrap(): Promise<void> {
         writeDesktopLogHeader("bootstrap backend ready");
       })
       .catch((error) => {
-        handleFatalStartupError("bootstrap", error);
+        if (isBackendReadinessAborted(error)) {
+          return;
+        }
+        writeDesktopLogHeader(
+          `bootstrap backend readiness warning message=${formatErrorMessage(error)}`,
+        );
+        console.warn("[desktop] backend readiness check timed out during dev bootstrap", error);
       });
     return;
   }
@@ -1573,6 +1719,7 @@ app.on("before-quit", () => {
   updateInstallInFlight = false;
   writeDesktopLogHeader("before-quit received");
   clearUpdatePollTimer();
+  cancelBackendReadinessWait();
   stopBackend();
   restoreStdIoCapture?.();
 });
@@ -1611,6 +1758,7 @@ if (process.platform !== "win32") {
     isQuitting = true;
     writeDesktopLogHeader("SIGINT received");
     clearUpdatePollTimer();
+    cancelBackendReadinessWait();
     stopBackend();
     restoreStdIoCapture?.();
     app.quit();

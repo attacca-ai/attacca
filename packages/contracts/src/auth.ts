@@ -109,6 +109,12 @@ export const AuthBootstrapResult = Schema.Struct({
 });
 export type AuthBootstrapResult = typeof AuthBootstrapResult.Type;
 
+export const AuthPairingCredentialResult = Schema.Struct({
+  credential: TrimmedNonEmptyString,
+  expiresAt: Schema.DateTimeUtc,
+});
+export type AuthPairingCredentialResult = typeof AuthPairingCredentialResult.Type;
+
 export const AuthSessionState = Schema.Struct({
   authenticated: Schema.Boolean,
   auth: ServerAuthDescriptor,

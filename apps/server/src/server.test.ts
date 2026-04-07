@@ -621,11 +621,14 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         config: { devUrl: new URL("http://127.0.0.1:5173") },
       });
 
-      const url = yield* getHttpServerUrl("/foo/bar");
+      const url = yield* getHttpServerUrl("/foo/bar?token=test-token");
       const response = yield* Effect.promise(() => fetch(url, { redirect: "manual" }));
 
       assert.equal(response.status, 302);
-      assert.equal(response.headers.get("location"), "http://127.0.0.1:5173/");
+      assert.equal(
+        response.headers.get("location"),
+        "http://127.0.0.1:5173/foo/bar?token=test-token",
+      );
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
@@ -744,6 +747,75 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(sessionResponse.status, 200);
       assert.equal(sessionBody.authenticated, true);
       assert.equal(sessionBody.sessionMethod, "browser-session-cookie");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("issues authenticated one-time pairing credentials for additional clients", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+
+      const response = yield* HttpClient.post("/api/auth/pairing-token", {
+        headers: {
+          cookie: yield* getAuthenticatedSessionCookieHeader(),
+        },
+      });
+      const body = (yield* response.json) as {
+        readonly credential: string;
+        readonly expiresAt: string;
+      };
+
+      assert.equal(response.status, 200);
+      assert.equal(typeof body.credential, "string");
+      assert.isTrue(body.credential.length > 0);
+      assert.equal(typeof body.expiresAt, "string");
+
+      const bootstrapResult = yield* bootstrapBrowserSession(body.credential);
+      assert.equal(bootstrapResult.response.status, 200);
+
+      const reusedResult = yield* bootstrapBrowserSession(body.credential);
+      assert.equal(reusedResult.response.status, 401);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("rejects unauthenticated pairing credential requests", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+
+      const response = yield* HttpClient.post("/api/auth/pairing-token");
+      assert.equal(response.status, 401);
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("rejects pairing credential requests from non-owner paired sessions", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest({
+        config: {
+          host: "0.0.0.0",
+        },
+      });
+
+      const ownerResponse = yield* HttpClient.post("/api/auth/pairing-token", {
+        headers: {
+          cookie: yield* getAuthenticatedSessionCookieHeader(),
+        },
+      });
+      const ownerBody = (yield* ownerResponse.json) as {
+        readonly credential: string;
+      };
+      assert.equal(ownerResponse.status, 200);
+
+      const pairedSessionCookie = yield* getAuthenticatedSessionCookieHeader(ownerBody.credential);
+      const pairedResponse = yield* HttpClient.post("/api/auth/pairing-token", {
+        headers: {
+          cookie: pairedSessionCookie,
+        },
+      });
+      const pairedBody = (yield* pairedResponse.json) as {
+        readonly error: string;
+      };
+
+      assert.equal(pairedResponse.status, 403);
+      assert.equal(pairedBody.error, "Only owner sessions can create pairing credentials.");
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

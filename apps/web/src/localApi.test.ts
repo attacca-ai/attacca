@@ -134,6 +134,16 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
   return {
     getWsUrl: () => null,
     getLocalEnvironmentBootstrap: () => null,
+    getServerExposureState: async () => ({
+      mode: "local-only",
+      endpointUrl: null,
+      advertisedHost: null,
+    }),
+    setServerExposureMode: async () => ({
+      mode: "local-only",
+      endpointUrl: null,
+      advertisedHost: null,
+    }),
     pickFolder: async () => null,
     confirm: async () => true,
     setTheme: async () => undefined,

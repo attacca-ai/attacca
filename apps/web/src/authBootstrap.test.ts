@@ -38,12 +38,14 @@ function installTestBrowser(url: string) {
 describe("resolveInitialServerAuthGateState", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
     installTestBrowser("http://localhost/");
   });
 
   afterEach(async () => {
     const { __resetServerAuthBootstrapForTests } = await import("./authBootstrap");
     __resetServerAuthBootstrapForTests();
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -193,6 +195,43 @@ describe("resolveInitialServerAuthGateState", () => {
     });
   });
 
+  it("retries transient auth session bootstrap failures after restart", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("Bad Gateway", { status: 502 }))
+      .mockResolvedValueOnce(new Response("Bad Gateway", { status: 502 }))
+      .mockResolvedValueOnce(new Response("Bad Gateway", { status: 502 }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          authenticated: false,
+          auth: {
+            policy: "loopback-browser",
+            bootstrapMethods: ["one-time-token"],
+            sessionMethods: ["browser-session-cookie"],
+            sessionCookieName: "t3_session",
+          },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { resolveInitialServerAuthGateState } = await import("./authBootstrap");
+
+    const gateStatePromise = resolveInitialServerAuthGateState();
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await expect(gateStatePromise).resolves.toEqual({
+      status: "requires-auth",
+      auth: {
+        policy: "loopback-browser",
+        bootstrapMethods: ["one-time-token"],
+        sessionMethods: ["browser-session-cookie"],
+        sessionCookieName: "t3_session",
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   it("takes a pairing token from the location and strips it immediately", async () => {
     const testWindow = installTestBrowser("http://localhost/?token=pairing-token");
     const { takePairingTokenFromUrl } = await import("./authBootstrap");
@@ -301,5 +340,26 @@ describe("resolveInitialServerAuthGateState", () => {
       },
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("creates a pairing credential from the authenticated auth endpoint", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        credential: "pairing-token",
+        expiresAt: "2026-04-05T00:00:00.000Z",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { createServerPairingCredential } = await import("./authBootstrap");
+
+    await expect(createServerPairingCredential()).resolves.toEqual({
+      credential: "pairing-token",
+      expiresAt: "2026-04-05T00:00:00.000Z",
+    });
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost/api/auth/pairing-token", {
+      credentials: "include",
+      method: "POST",
+    });
   });
 });

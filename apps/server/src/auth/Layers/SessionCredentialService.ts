@@ -22,6 +22,7 @@ const SessionClaims = Schema.Struct({
   v: Schema.Literal(1),
   kind: Schema.Literal("session"),
   sub: Schema.String,
+  role: Schema.Literals(["owner", "client"]),
   method: Schema.Literals(["browser-session-cookie", "bearer-session-token"]),
   iat: Schema.Number,
   exp: Schema.Number,
@@ -41,6 +42,7 @@ export const makeSessionCredentialService = Effect.gen(function* () {
       v: 1,
       kind: "session",
       sub: input?.subject ?? "browser",
+      role: input?.role ?? "client",
       method: input?.method ?? "browser-session-cookie",
       iat: issuedAt.epochMilliseconds,
       exp: expiresAt.epochMilliseconds,
@@ -52,6 +54,7 @@ export const makeSessionCredentialService = Effect.gen(function* () {
       token: `${encodedPayload}.${signature}`,
       method: claims.method,
       expiresAt: expiresAt,
+      role: claims.role,
     } satisfies IssuedSession;
   });
 
@@ -92,6 +95,7 @@ export const makeSessionCredentialService = Effect.gen(function* () {
       method: claims.method,
       expiresAt: DateTime.makeUnsafe(claims.exp),
       subject: claims.sub,
+      role: claims.role,
     } satisfies VerifiedSession;
   });
 
