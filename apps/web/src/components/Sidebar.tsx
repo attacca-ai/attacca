@@ -12,23 +12,7 @@ import {
 } from "lucide-react";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { autoAnimate } from "@formkit/auto-animate";
-import {
-  useCallback,
-  useEffect,
-  memo,
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type Dispatch,
-  type FocusEvent,
-  type KeyboardEvent,
-  type MouseEvent,
-  type MutableRefObject,
-  type PointerEvent,
-  type ReactNode,
-  type SetStateAction,
-} from "react";
+import React, { useCallback, useEffect, memo, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   DndContext,
@@ -287,13 +271,13 @@ interface SidebarThreadRowProps {
   renamingThreadKey: string | null;
   renamingTitle: string;
   setRenamingTitle: (title: string) => void;
-  renamingInputRef: MutableRefObject<HTMLInputElement | null>;
-  renamingCommittedRef: MutableRefObject<boolean>;
+  renamingInputRef: React.RefObject<HTMLInputElement | null>;
+  renamingCommittedRef: React.RefObject<boolean>;
   confirmingArchiveThreadKey: string | null;
-  setConfirmingArchiveThreadKey: Dispatch<SetStateAction<string | null>>;
-  confirmArchiveButtonRefs: MutableRefObject<Map<string, HTMLButtonElement>>;
+  setConfirmingArchiveThreadKey: React.Dispatch<React.SetStateAction<string | null>>;
+  confirmArchiveButtonRefs: React.RefObject<Map<string, HTMLButtonElement>>;
   handleThreadClick: (
-    event: MouseEvent,
+    event: React.MouseEvent,
     threadRef: ScopedThreadRef,
     orderedProjectThreadKeys: readonly string[],
   ) => void;
@@ -311,7 +295,7 @@ interface SidebarThreadRowProps {
   ) => Promise<void>;
   cancelRename: () => void;
   attemptArchiveThread: (threadRef: ScopedThreadRef) => Promise<void>;
-  openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
+  openPrLink: (event: React.MouseEvent<HTMLElement>, prUrl: string) => void;
 }
 
 const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowProps) {
@@ -378,7 +362,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     clearConfirmingArchive();
   }, [clearConfirmingArchive]);
   const handleBlurCapture = useCallback(
-    (event: FocusEvent<HTMLLIElement>) => {
+    (event: React.FocusEvent<HTMLLIElement>) => {
       const currentTarget = event.currentTarget;
       requestAnimationFrame(() => {
         if (currentTarget.contains(document.activeElement)) {
@@ -390,13 +374,13 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     [clearConfirmingArchive],
   );
   const handleRowClick = useCallback(
-    (event: MouseEvent) => {
+    (event: React.MouseEvent) => {
       handleThreadClick(event, threadRef, orderedProjectThreadKeys);
     },
     [handleThreadClick, orderedProjectThreadKeys, threadRef],
   );
   const handleRowKeyDown = useCallback(
-    (event: KeyboardEvent) => {
+    (event: React.KeyboardEvent) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       navigateToThread(threadRef);
@@ -404,7 +388,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     [navigateToThread, threadRef],
   );
   const handleRowContextMenu = useCallback(
-    (event: MouseEvent) => {
+    (event: React.MouseEvent) => {
       event.preventDefault();
       if (hasSelection && isSelected) {
         void handleMultiSelectContextMenu({
@@ -432,7 +416,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     ],
   );
   const handlePrClick = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
+    (event: React.MouseEvent<HTMLButtonElement>) => {
       if (!prStatus) return;
       openPrLink(event, prStatus.url);
     },
@@ -449,13 +433,13 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     [renamingInputRef],
   );
   const handleRenameInputChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
+    (event: React.ChangeEvent<HTMLInputElement>) => {
       setRenamingTitle(event.target.value);
     },
     [setRenamingTitle],
   );
   const handleRenameInputKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
       event.stopPropagation();
       if (event.key === "Enter") {
         event.preventDefault();
@@ -474,7 +458,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       void commitRename(threadRef, renamingTitle, thread.title);
     }
   }, [commitRename, renamingCommittedRef, renamingTitle, thread.title, threadRef]);
-  const handleRenameInputClick = useCallback((event: MouseEvent<HTMLInputElement>) => {
+  const handleRenameInputClick = useCallback((event: React.MouseEvent<HTMLInputElement>) => {
     event.stopPropagation();
   }, []);
   const handleConfirmArchiveRef = useCallback(
@@ -487,11 +471,14 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     },
     [confirmArchiveButtonRefs, threadKey],
   );
-  const stopPropagationOnPointerDown = useCallback((event: PointerEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-  }, []);
+  const stopPropagationOnPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+    },
+    [],
+  );
   const handleConfirmArchiveClick = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
+    (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
       clearConfirmingArchive();
@@ -500,7 +487,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     [attemptArchiveThread, clearConfirmingArchive, threadRef],
   );
   const handleStartArchiveConfirmation = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
+    (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
       setConfirmingArchiveThreadKey(threadKey);
@@ -511,7 +498,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     [confirmArchiveButtonRefs, setConfirmingArchiveThreadKey, threadKey],
   );
   const handleArchiveImmediateClick = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
+    (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
       void attemptArchiveThread(threadRef);
@@ -680,14 +667,14 @@ interface SidebarProjectThreadListProps {
   renamingThreadKey: string | null;
   renamingTitle: string;
   setRenamingTitle: (title: string) => void;
-  renamingInputRef: MutableRefObject<HTMLInputElement | null>;
-  renamingCommittedRef: MutableRefObject<boolean>;
+  renamingInputRef: React.RefObject<HTMLInputElement | null>;
+  renamingCommittedRef: React.RefObject<boolean>;
   confirmingArchiveThreadKey: string | null;
-  setConfirmingArchiveThreadKey: Dispatch<SetStateAction<string | null>>;
-  confirmArchiveButtonRefs: MutableRefObject<Map<string, HTMLButtonElement>>;
+  setConfirmingArchiveThreadKey: React.Dispatch<React.SetStateAction<string | null>>;
+  confirmArchiveButtonRefs: React.RefObject<Map<string, HTMLButtonElement>>;
   attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
   handleThreadClick: (
-    event: MouseEvent,
+    event: React.MouseEvent,
     threadRef: ScopedThreadRef,
     orderedProjectThreadKeys: readonly string[],
   ) => void;
@@ -705,7 +692,7 @@ interface SidebarProjectThreadListProps {
   ) => Promise<void>;
   cancelRename: () => void;
   attemptArchiveThread: (threadRef: ScopedThreadRef) => Promise<void>;
-  openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
+  openPrLink: (event: React.MouseEvent<HTMLElement>, prUrl: string) => void;
   expandThreadListForProject: (projectKey: string) => void;
   collapseThreadListForProject: (projectKey: string) => void;
 }
@@ -848,9 +835,9 @@ interface SidebarProjectItemProps {
   attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
   expandThreadListForProject: (projectKey: string) => void;
   collapseThreadListForProject: (projectKey: string) => void;
-  dragInProgressRef: MutableRefObject<boolean>;
-  suppressProjectClickAfterDragRef: MutableRefObject<boolean>;
-  suppressProjectClickForContextMenuRef: MutableRefObject<boolean>;
+  dragInProgressRef: React.RefObject<boolean>;
+  suppressProjectClickAfterDragRef: React.RefObject<boolean>;
+  suppressProjectClickForContextMenuRef: React.RefObject<boolean>;
   isManualProjectSorting: boolean;
   dragHandleProps: SortableProjectHandleProps | null;
 }
@@ -938,7 +925,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       });
     },
   });
-  const openPrLink = useCallback((event: MouseEvent<HTMLElement>, prUrl: string) => {
+  const openPrLink = useCallback((event: React.MouseEvent<HTMLElement>, prUrl: string) => {
     event.preventDefault();
     event.stopPropagation();
 
@@ -1119,7 +1106,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   ]);
 
   const handleProjectButtonClick = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
+    (event: React.MouseEvent<HTMLButtonElement>) => {
       if (suppressProjectClickForContextMenuRef.current) {
         suppressProjectClickForContextMenuRef.current = false;
         event.preventDefault();
@@ -1154,7 +1141,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   );
 
   const handleProjectButtonKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLButtonElement>) => {
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       if (dragInProgressRef.current) {
@@ -1166,7 +1153,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   );
 
   const handleProjectButtonPointerDownCapture = useCallback(
-    (event: PointerEvent<HTMLButtonElement>) => {
+    (event: React.PointerEvent<HTMLButtonElement>) => {
       suppressProjectClickForContextMenuRef.current = false;
       if (
         isContextMenuPointerDown({
@@ -1184,7 +1171,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   );
 
   const handleProjectButtonContextMenu = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
+    (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       suppressProjectClickForContextMenuRef.current = true;
       void (async () => {
@@ -1278,7 +1265,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
   const handleThreadClick = useCallback(
     (
-      event: MouseEvent,
+      event: React.MouseEvent,
       threadRef: ScopedThreadRef,
       orderedProjectThreadKeys: readonly string[],
     ) => {
@@ -1370,7 +1357,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   );
 
   const handleCreateThreadClick = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
+    (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
       const currentRouteParams =
@@ -1775,7 +1762,7 @@ function SortableProjectItem({
 }: {
   projectId: string;
   disabled?: boolean;
-  children: (handleProps: SortableProjectHandleProps) => ReactNode;
+  children: (handleProps: SortableProjectHandleProps) => React.ReactNode;
 }) {
   const {
     attributes,
@@ -1847,11 +1834,8 @@ const SidebarChromeHeader = memo(function SidebarChromeHeader({
   );
 });
 
-const SidebarChromeFooter = memo(function SidebarChromeFooter({
-  navigate,
-}: {
-  navigate: ReturnType<typeof useNavigate>;
-}) {
+const SidebarChromeFooter = memo(function SidebarChromeFooter() {
+  const navigate = useNavigate();
   const handleSettingsClick = useCallback(() => {
     void navigate({ to: "/settings" });
   }, [navigate]);
@@ -1890,13 +1874,13 @@ interface SidebarProjectsContentProps {
   isPickingFolder: boolean;
   isAddingProject: boolean;
   handlePickFolder: () => Promise<void>;
-  addProjectInputRef: MutableRefObject<HTMLInputElement | null>;
+  addProjectInputRef: React.RefObject<HTMLInputElement | null>;
   addProjectError: string | null;
   newCwd: string;
-  setNewCwd: Dispatch<SetStateAction<string>>;
-  setAddProjectError: Dispatch<SetStateAction<string | null>>;
+  setNewCwd: React.Dispatch<React.SetStateAction<string>>;
+  setAddProjectError: React.Dispatch<React.SetStateAction<string | null>>;
   handleAddProject: () => void;
-  setAddingProject: Dispatch<SetStateAction<boolean>>;
+  setAddingProject: React.Dispatch<React.SetStateAction<boolean>>;
   canAddProject: boolean;
   isManualProjectSorting: boolean;
   projectDnDSensors: ReturnType<typeof useSensors>;
@@ -1916,9 +1900,9 @@ interface SidebarProjectsContentProps {
   attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
   expandThreadListForProject: (projectKey: string) => void;
   collapseThreadListForProject: (projectKey: string) => void;
-  dragInProgressRef: MutableRefObject<boolean>;
-  suppressProjectClickAfterDragRef: MutableRefObject<boolean>;
-  suppressProjectClickForContextMenuRef: MutableRefObject<boolean>;
+  dragInProgressRef: React.RefObject<boolean>;
+  suppressProjectClickAfterDragRef: React.RefObject<boolean>;
+  suppressProjectClickForContextMenuRef: React.RefObject<boolean>;
   attachProjectListAutoAnimateRef: (node: HTMLElement | null) => void;
   projectsLength: number;
 }
@@ -1987,14 +1971,14 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     [updateSettings],
   );
   const handleAddProjectInputChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
+    (event: React.ChangeEvent<HTMLInputElement>) => {
       setNewCwd(event.target.value);
       setAddProjectError(null);
     },
     [setAddProjectError, setNewCwd],
   );
   const handleAddProjectInputKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (event.key === "Enter") handleAddProject();
       if (event.key === "Escape") {
         setAddingProject(false);
@@ -2898,7 +2882,7 @@ export default function Sidebar() {
           />
 
           <SidebarSeparator />
-          <SidebarChromeFooter navigate={navigate} />
+          <SidebarChromeFooter />
         </>
       )}
     </>
