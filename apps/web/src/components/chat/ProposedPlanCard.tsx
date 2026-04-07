@@ -25,7 +25,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { toastManager } from "../ui/toast";
-import { readEnvironmentNativeApi } from "~/environmentNativeApi";
+import { readEnvironmentApi } from "~/environmentApi";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 
 export const ProposedPlanCard = memo(function ProposedPlanCard({
@@ -85,7 +85,7 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
   };
 
   const handleSaveToWorkspace = () => {
-    const api = readEnvironmentNativeApi(environmentId);
+    const api = readEnvironmentApi(environmentId);
     const relativePath = savePath.trim();
     if (!api || !workspaceRoot) {
       return;

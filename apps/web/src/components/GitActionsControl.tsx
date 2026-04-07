@@ -49,8 +49,8 @@ import {
 import { refreshGitStatus, useGitStatus } from "~/lib/gitStatusState";
 import { newCommandId, randomUUID } from "~/lib/utils";
 import { resolvePathLinkTarget } from "~/terminal-links";
-import { readEnvironmentNativeApi } from "~/environmentNativeApi";
-import { readNativeApi } from "~/nativeApi";
+import { readEnvironmentApi } from "~/environmentApi";
+import { readLocalApi } from "~/localApi";
 import { useStore } from "~/store";
 import { createThreadSelectorByRef } from "~/storeSelectors";
 
@@ -252,7 +252,7 @@ export default function GitActionsControl({ gitCwd, activeThreadRef }: GitAction
       }
 
       const worktreePath = activeServerThread.worktreePath;
-      const api = activeEnvironmentId ? readEnvironmentNativeApi(activeEnvironmentId) : undefined;
+      const api = activeEnvironmentId ? readEnvironmentApi(activeEnvironmentId) : undefined;
       if (api) {
         void api.orchestration
           .dispatchCommand({
@@ -413,7 +413,7 @@ export default function GitActionsControl({ gitCwd, activeThreadRef }: GitAction
   }, [activeEnvironmentId, gitCwd]);
 
   const openExistingPr = useCallback(async () => {
-    const api = readNativeApi();
+    const api = readLocalApi();
     if (!api) {
       toastManager.add({
         type: "error",
@@ -620,7 +620,7 @@ export default function GitActionsControl({ gitCwd, activeThreadRef }: GitAction
           toastActionProps = {
             children: toastCta.label,
             onClick: () => {
-              const api = readNativeApi();
+              const api = readLocalApi();
               if (!api) return;
               closeResultToast();
               void api.shell.openExternal(toastCta.url);
@@ -779,7 +779,7 @@ export default function GitActionsControl({ gitCwd, activeThreadRef }: GitAction
 
   const openChangedFileInEditor = useCallback(
     (filePath: string) => {
-      const api = readNativeApi();
+      const api = readLocalApi();
       if (!api || !gitCwd) {
         toastManager.add({
           type: "error",

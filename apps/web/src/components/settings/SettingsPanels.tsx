@@ -46,7 +46,7 @@ import {
   getCustomModelOptionsByProvider,
   resolveAppModelSelectionState,
 } from "../../modelSelection";
-import { ensureNativeApi, readNativeApi } from "../../nativeApi";
+import { ensureLocalApi, readLocalApi } from "../../localApi";
 import {
   selectProjectsAcrossEnvironments,
   selectThreadsAcrossEnvironments,
@@ -501,8 +501,8 @@ export function useSettingsRestore(onRestored?: () => void) {
 
   const restoreDefaults = useCallback(async () => {
     if (changedSettingLabels.length === 0) return;
-    const api = readNativeApi();
-    const confirmed = await (api ?? ensureNativeApi()).dialogs.confirm(
+    const api = readLocalApi();
+    const confirmed = await (api ?? ensureLocalApi()).dialogs.confirm(
       ["Restore default settings?", `This will reset: ${changedSettingLabels.join(", ")}.`].join(
         "\n",
       ),
@@ -559,7 +559,7 @@ export function GeneralSettingsPanel() {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
     setIsRefreshingProviders(true);
-    void ensureNativeApi()
+    void ensureLocalApi()
       .server.refreshProviders()
       .catch((error: unknown) => {
         console.warn("Failed to refresh providers", error);
@@ -619,7 +619,7 @@ export function GeneralSettingsPanel() {
         return;
       }
 
-      void ensureNativeApi()
+      void ensureLocalApi()
         .shell.openInEditor(path, editor)
         .catch((error) => {
           setOpenPathErrorByTarget((existing) => ({
@@ -1504,7 +1504,7 @@ export function ArchivedThreadsPanel() {
 
   const handleArchivedThreadContextMenu = useCallback(
     async (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
-      const api = readNativeApi();
+      const api = readLocalApi();
       if (!api) return;
       const clicked = await api.contextMenu.show(
         [

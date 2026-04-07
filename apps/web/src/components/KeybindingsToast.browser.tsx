@@ -19,7 +19,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { render } from "vitest-browser-react";
 
 import { useComposerDraftStore } from "../composerDraftStore";
-import { __resetNativeApiForTests } from "../nativeApi";
+import { __resetLocalApiForTests } from "../localApi";
 import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
 import { getServerConfig } from "../rpc/serverState";
 import { getRouter } from "../router";
@@ -365,7 +365,7 @@ describe("Keybindings update toast", () => {
         return [];
       },
     });
-    await __resetNativeApiForTests();
+    await __resetLocalApiForTests();
     localStorage.clear();
     document.body.innerHTML = "";
     useComposerDraftStore.setState({

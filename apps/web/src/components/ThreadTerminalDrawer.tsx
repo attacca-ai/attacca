@@ -32,8 +32,8 @@ import {
   MAX_TERMINALS_PER_GROUP,
   type ThreadTerminalGroup,
 } from "../types";
-import { readEnvironmentNativeApi } from "~/environmentNativeApi";
-import { readNativeApi } from "~/nativeApi";
+import { readEnvironmentApi } from "~/environmentApi";
+import { readLocalApi } from "~/localApi";
 import { selectTerminalEventEntries, useTerminalStateStore } from "../terminalStateStore";
 
 const MIN_DRAWER_HEIGHT = 180;
@@ -281,8 +281,8 @@ function TerminalViewport({
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
-    const api = readEnvironmentNativeApi(threadRef.environmentId);
-    const localApi = readNativeApi();
+    const api = readEnvironmentApi(threadRef.environmentId);
+    const localApi = readLocalApi();
     if (!api || !localApi) return;
 
     const clearSelectionAction = () => {
@@ -697,7 +697,7 @@ function TerminalViewport({
   }, [autoFocus, focusRequestId]);
 
   useEffect(() => {
-    const api = readEnvironmentNativeApi(threadRef.environmentId);
+    const api = readEnvironmentApi(threadRef.environmentId);
     const terminal = terminalRef.current;
     const fitAddon = fitAddonRef.current;
     if (!api || !terminal || !fitAddon) return;

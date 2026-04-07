@@ -7,10 +7,10 @@ import { useCallback } from "react";
 import { getFallbackThreadIdAfterDelete } from "../components/Sidebar.logic";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useHandleNewThread } from "./useHandleNewThread";
-import { ensureEnvironmentNativeApi, readEnvironmentNativeApi } from "../environmentNativeApi";
+import { ensureEnvironmentApi, readEnvironmentApi } from "../environmentApi";
 import { invalidateGitQueries } from "../lib/gitReactQuery";
 import { newCommandId } from "../lib/utils";
-import { readNativeApi } from "../nativeApi";
+import { readLocalApi } from "../localApi";
 import {
   selectProjectByRef,
   selectThreadByRef,
@@ -52,7 +52,7 @@ export function useThreadActions() {
 
   const archiveThread = useCallback(
     async (target: ScopedThreadRef) => {
-      const api = readEnvironmentNativeApi(target.environmentId);
+      const api = readEnvironmentApi(target.environmentId);
       if (!api) return;
       const resolved = resolveThreadTarget(target);
       if (!resolved) return;
@@ -78,7 +78,7 @@ export function useThreadActions() {
   );
 
   const unarchiveThread = useCallback(async (target: ScopedThreadRef) => {
-    const api = readEnvironmentNativeApi(target.environmentId);
+    const api = readEnvironmentApi(target.environmentId);
     if (!api) return;
     await api.orchestration.dispatchCommand({
       type: "thread.unarchive",
@@ -89,7 +89,7 @@ export function useThreadActions() {
 
   const deleteThread = useCallback(
     async (target: ScopedThreadRef, opts: { deletedThreadKeys?: ReadonlySet<string> } = {}) => {
-      const api = readEnvironmentNativeApi(target.environmentId);
+      const api = readEnvironmentApi(target.environmentId);
       if (!api) return;
       const resolved = resolveThreadTarget(target);
       if (!resolved) return;
@@ -121,7 +121,7 @@ export function useThreadActions() {
         ? formatWorktreePathForDisplay(orphanedWorktreePath)
         : null;
       const canDeleteWorktree = orphanedWorktreePath !== null && threadProject !== undefined;
-      const localApi = readNativeApi();
+      const localApi = readLocalApi();
       const shouldDeleteWorktree =
         canDeleteWorktree &&
         localApi &&
@@ -200,7 +200,7 @@ export function useThreadActions() {
       }
 
       try {
-        await ensureEnvironmentNativeApi(threadRef.environmentId).git.removeWorktree({
+        await ensureEnvironmentApi(threadRef.environmentId).git.removeWorktree({
           cwd: threadProject.cwd,
           path: orphanedWorktreePath,
           force: true,
@@ -237,9 +237,9 @@ export function useThreadActions() {
 
   const confirmAndDeleteThread = useCallback(
     async (target: ScopedThreadRef) => {
-      const api = readEnvironmentNativeApi(target.environmentId);
+      const api = readEnvironmentApi(target.environmentId);
       if (!api) return;
-      const localApi = readNativeApi();
+      const localApi = readLocalApi();
       const resolved = resolveThreadTarget(target);
       if (!resolved) return;
       const { thread } = resolved;

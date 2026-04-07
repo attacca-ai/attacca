@@ -6,7 +6,7 @@ import {
 } from "@t3tools/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import { Option, Schema } from "effect";
-import { ensureEnvironmentNativeApi } from "../environmentNativeApi";
+import { ensureEnvironmentApi } from "../environmentApi";
 
 interface CheckpointDiffQueryInput {
   environmentId: EnvironmentId | null;
@@ -101,7 +101,7 @@ export function checkpointDiffQueryOptions(input: CheckpointDiffQueryInput) {
       if (!input.environmentId || !input.threadId || decodedRequest._tag === "None") {
         throw new Error("Checkpoint diff is unavailable.");
       }
-      const api = ensureEnvironmentNativeApi(input.environmentId);
+      const api = ensureEnvironmentApi(input.environmentId);
       try {
         if (decodedRequest.value.kind === "fullThreadDiff") {
           return await api.orchestration.getFullThreadDiff(decodedRequest.value.input);

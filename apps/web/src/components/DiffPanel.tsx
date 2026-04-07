@@ -23,7 +23,7 @@ import { openInPreferredEditor } from "../editorPreferences";
 import { useGitStatus } from "~/lib/gitStatusState";
 import { checkpointDiffQueryOptions } from "~/lib/providerReactQuery";
 import { cn } from "~/lib/utils";
-import { readNativeApi } from "../nativeApi";
+import { readLocalApi } from "../localApi";
 import { resolvePathLinkTarget } from "../terminal-links";
 import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
 import { useTheme } from "../hooks/useTheme";
@@ -333,7 +333,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
 
   const openDiffFileInEditor = useCallback(
     (filePath: string) => {
-      const api = readNativeApi();
+      const api = readLocalApi();
       if (!api) return;
       const targetPath = activeCwd ? resolvePathLinkTarget(filePath, activeCwd) : filePath;
       void openInPreferredEditor(api, targetPath).catch((error) => {

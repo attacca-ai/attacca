@@ -31,7 +31,7 @@ import {
 import { Button } from "../components/ui/button";
 import { AnchoredToastProvider, ToastProvider, toastManager } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
-import { readNativeApi } from "../nativeApi";
+import { readLocalApi } from "../localApi";
 import {
   getServerConfigUpdatedNotification,
   ServerConfigUpdatedNotification,
@@ -80,7 +80,7 @@ export const Route = createRootRouteWithContext<{
 });
 
 function RootRouteView() {
-  if (!readNativeApi()) {
+  if (!readLocalApi()) {
     return (
       <div className="flex h-screen flex-col bg-background text-foreground">
         <div className="flex flex-1 items-center justify-center">
@@ -328,7 +328,7 @@ function EventRouter() {
         actionProps: {
           children: "Open keybindings.json",
           onClick: () => {
-            const api = readNativeApi();
+            const api = readLocalApi();
             if (!api) {
               return;
             }

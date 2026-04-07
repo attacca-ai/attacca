@@ -129,7 +129,17 @@ export interface DesktopBridge {
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
 }
 
-export interface LocalNativeApi {
+/**
+ * APIs bound to the local app shell, not to any particular backend environment.
+ *
+ * These capabilities describe the desktop/browser host that the user is
+ * currently running: dialogs, editor/external-link opening, context menus, and
+ * app-level settings/config access. They must not be used as a proxy for
+ * "whatever environment the user is targeting", because in a multi-environment
+ * world the local shell and a selected backend environment are distinct
+ * concepts.
+ */
+export interface LocalApi {
   dialogs: {
     pickFolder: () => Promise<string | null>;
     confirm: (message: string) => Promise<boolean>;
@@ -153,7 +163,16 @@ export interface LocalNativeApi {
   };
 }
 
-export interface EnvironmentNativeApi {
+/**
+ * APIs bound to a specific backend environment connection.
+ *
+ * These operations must always be routed with explicit environment context.
+ * They represent remote stateful capabilities such as orchestration, terminal,
+ * project, and git operations. In multi-environment mode, each environment gets
+ * its own instance of this surface, and callers should resolve it by
+ * `environmentId` rather than reaching through the local desktop bridge.
+ */
+export interface EnvironmentApi {
   terminal: {
     open: (input: typeof TerminalOpenInput.Encoded) => Promise<TerminalSessionSnapshot>;
     write: (input: typeof TerminalWriteInput.Encoded) => Promise<void>;
@@ -204,5 +223,3 @@ export interface EnvironmentNativeApi {
     ) => () => void;
   };
 }
-
-export type NativeApi = LocalNativeApi & EnvironmentNativeApi;

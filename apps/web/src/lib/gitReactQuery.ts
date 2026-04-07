@@ -10,7 +10,7 @@ import {
   queryOptions,
   type QueryClient,
 } from "@tanstack/react-query";
-import { ensureEnvironmentNativeApi } from "../environmentNativeApi";
+import { ensureEnvironmentApi } from "../environmentApi";
 import { getWsRpcClientForEnvironment } from "../wsRpcClient";
 
 const GIT_BRANCHES_STALE_TIME_MS = 15_000;
@@ -77,7 +77,7 @@ export function gitBranchSearchInfiniteQueryOptions(input: {
     queryFn: async ({ pageParam }) => {
       if (!input.cwd) throw new Error("Git branches are unavailable.");
       if (!input.environmentId) throw new Error("Git branches are unavailable.");
-      const api = ensureEnvironmentNativeApi(input.environmentId);
+      const api = ensureEnvironmentApi(input.environmentId);
       return api.git.listBranches({
         cwd: input.cwd,
         ...(normalizedQuery.length > 0 ? { query: normalizedQuery } : {}),
@@ -111,7 +111,7 @@ export function gitResolvePullRequestQueryOptions(input: {
       if (!input.cwd || !input.reference || !input.environmentId) {
         throw new Error("Pull request lookup is unavailable.");
       }
-      const api = ensureEnvironmentNativeApi(input.environmentId);
+      const api = ensureEnvironmentApi(input.environmentId);
       return api.git.resolvePullRequest({ cwd: input.cwd, reference: input.reference });
     },
     enabled: input.environmentId !== null && input.cwd !== null && input.reference !== null,
@@ -130,7 +130,7 @@ export function gitInitMutationOptions(input: {
     mutationKey: gitMutationKeys.init(input.environmentId, input.cwd),
     mutationFn: async () => {
       if (!input.cwd || !input.environmentId) throw new Error("Git init is unavailable.");
-      const api = ensureEnvironmentNativeApi(input.environmentId);
+      const api = ensureEnvironmentApi(input.environmentId);
       return api.git.init({ cwd: input.cwd });
     },
     onSettled: async () => {
@@ -148,7 +148,7 @@ export function gitCheckoutMutationOptions(input: {
     mutationKey: gitMutationKeys.checkout(input.environmentId, input.cwd),
     mutationFn: async (branch: string) => {
       if (!input.cwd || !input.environmentId) throw new Error("Git checkout is unavailable.");
-      const api = ensureEnvironmentNativeApi(input.environmentId);
+      const api = ensureEnvironmentApi(input.environmentId);
       return api.git.checkout({ cwd: input.cwd, branch });
     },
     onSettled: async () => {
@@ -207,7 +207,7 @@ export function gitPullMutationOptions(input: {
     mutationKey: gitMutationKeys.pull(input.environmentId, input.cwd),
     mutationFn: async () => {
       if (!input.cwd || !input.environmentId) throw new Error("Git pull is unavailable.");
-      const api = ensureEnvironmentNativeApi(input.environmentId);
+      const api = ensureEnvironmentApi(input.environmentId);
       return api.git.pull({ cwd: input.cwd });
     },
     onSuccess: async () => {
@@ -223,12 +223,12 @@ export function gitCreateWorktreeMutationOptions(input: {
   return mutationOptions({
     mutationKey: ["git", "mutation", "create-worktree", input.environmentId ?? null] as const,
     mutationFn: (
-      args: Parameters<ReturnType<typeof ensureEnvironmentNativeApi>["git"]["createWorktree"]>[0],
+      args: Parameters<ReturnType<typeof ensureEnvironmentApi>["git"]["createWorktree"]>[0],
     ) => {
       if (!input.environmentId) {
         throw new Error("Worktree creation is unavailable.");
       }
-      return ensureEnvironmentNativeApi(input.environmentId).git.createWorktree(args);
+      return ensureEnvironmentApi(input.environmentId).git.createWorktree(args);
     },
     onSuccess: async () => {
       await invalidateGitQueries(input.queryClient, { environmentId: input.environmentId });
@@ -243,12 +243,12 @@ export function gitRemoveWorktreeMutationOptions(input: {
   return mutationOptions({
     mutationKey: ["git", "mutation", "remove-worktree", input.environmentId ?? null] as const,
     mutationFn: (
-      args: Parameters<ReturnType<typeof ensureEnvironmentNativeApi>["git"]["removeWorktree"]>[0],
+      args: Parameters<ReturnType<typeof ensureEnvironmentApi>["git"]["removeWorktree"]>[0],
     ) => {
       if (!input.environmentId) {
         throw new Error("Worktree removal is unavailable.");
       }
-      return ensureEnvironmentNativeApi(input.environmentId).git.removeWorktree(args);
+      return ensureEnvironmentApi(input.environmentId).git.removeWorktree(args);
     },
     onSuccess: async () => {
       await invalidateGitQueries(input.queryClient, { environmentId: input.environmentId });
@@ -271,7 +271,7 @@ export function gitPreparePullRequestThreadMutationOptions(input: {
       if (!input.cwd || !input.environmentId) {
         throw new Error("Pull request thread preparation is unavailable.");
       }
-      const api = ensureEnvironmentNativeApi(input.environmentId);
+      const api = ensureEnvironmentApi(input.environmentId);
       return api.git.preparePullRequestThread({
         cwd: input.cwd,
         reference: args.reference,

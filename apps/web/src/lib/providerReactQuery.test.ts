@@ -1,8 +1,8 @@
-import { EnvironmentId, ThreadId, type NativeApi } from "@t3tools/contracts";
+import { EnvironmentId, ThreadId, type EnvironmentApi } from "@t3tools/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkpointDiffQueryOptions, providerQueryKeys } from "./providerReactQuery";
-import * as environmentNativeApi from "../environmentNativeApi";
+import * as environmentApi from "../environmentApi";
 
 const threadId = ThreadId.makeUnsafe("thread-id");
 const environmentId = EnvironmentId.makeUnsafe("environment-local");
@@ -11,12 +11,12 @@ function mockNativeApi(input: {
   getTurnDiff: ReturnType<typeof vi.fn>;
   getFullThreadDiff: ReturnType<typeof vi.fn>;
 }) {
-  vi.spyOn(environmentNativeApi, "ensureEnvironmentNativeApi").mockReturnValue({
+  vi.spyOn(environmentApi, "ensureEnvironmentApi").mockReturnValue({
     orchestration: {
       getTurnDiff: input.getTurnDiff,
       getFullThreadDiff: input.getFullThreadDiff,
     },
-  } as unknown as NativeApi);
+  } as unknown as EnvironmentApi);
 }
 
 afterEach(() => {

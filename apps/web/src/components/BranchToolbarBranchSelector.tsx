@@ -16,7 +16,7 @@ import {
 
 import { gitBranchSearchInfiniteQueryOptions, gitQueryKeys } from "../lib/gitReactQuery";
 import { useGitStatus } from "../lib/gitStatusState";
-import { readEnvironmentNativeApi } from "../environmentNativeApi";
+import { readEnvironmentApi } from "../environmentApi";
 import { parsePullRequestReference } from "../pullRequestReference";
 import {
   deriveLocalBranchNameFromRemoteRef,
@@ -193,7 +193,7 @@ export function BranchToolbarBranchSelector({
   };
 
   const selectBranch = (branch: GitBranch) => {
-    const api = readEnvironmentNativeApi(environmentId);
+    const api = readEnvironmentApi(environmentId);
     if (!api || !branchCwd || isBranchActionPending) return;
 
     // In new-worktree mode, selecting a branch sets the base branch.
@@ -251,7 +251,7 @@ export function BranchToolbarBranchSelector({
 
   const createBranch = (rawName: string) => {
     const name = rawName.trim();
-    const api = readEnvironmentNativeApi(environmentId);
+    const api = readEnvironmentApi(environmentId);
     if (!api || !branchCwd || !name || isBranchActionPending) return;
 
     setIsBranchMenuOpen(false);

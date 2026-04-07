@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { DesktopBridge, LocalNativeApi } from "@t3tools/contracts";
+import type { DesktopBridge, LocalApi } from "@t3tools/contracts";
 
 interface ImportMetaEnv {
   readonly APP_VERSION: string;
@@ -12,7 +12,7 @@ interface ImportMeta {
 
 declare global {
   interface Window {
-    nativeApi?: LocalNativeApi;
+    nativeApi?: LocalApi;
     desktopBridge?: DesktopBridge;
   }
 }

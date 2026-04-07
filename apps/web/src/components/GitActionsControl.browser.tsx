@@ -135,20 +135,38 @@ vi.mock("~/lib/utils", async () => {
   };
 });
 
-vi.mock("~/nativeApi", () => ({
-  readNativeApi: vi.fn(() => null),
+vi.mock("~/localApi", () => ({
+  readLocalApi: vi.fn(() => null),
 }));
 
-vi.mock("~/store", () => ({
-  useStore: (selector: (state: unknown) => unknown) =>
-    selector({
-      setThreadBranch: setThreadBranchSpy,
-      threadShellById: {
-        [THREAD_A]: { id: THREAD_A, branch: BRANCH_NAME, worktreePath: null },
-        [THREAD_B]: { id: THREAD_B, branch: BRANCH_NAME, worktreePath: null },
-      },
-    }),
-}));
+vi.mock("~/store", async () => {
+  const actual = await vi.importActual<typeof import("~/store")>("~/store");
+  return {
+    ...actual,
+    useStore: (selector: (state: unknown) => unknown) =>
+      selector({
+        setThreadBranch: setThreadBranchSpy,
+        environmentStateById: {
+          [ENVIRONMENT_ID]: {
+            threadShellById: {
+              [THREAD_A]: { id: THREAD_A, branch: BRANCH_NAME, worktreePath: null },
+              [THREAD_B]: { id: THREAD_B, branch: BRANCH_NAME, worktreePath: null },
+            },
+            threadSessionById: {},
+            threadTurnStateById: {},
+            messageIdsByThreadId: {},
+            messageByThreadId: {},
+            activityIdsByThreadId: {},
+            activityByThreadId: {},
+            proposedPlanIdsByThreadId: {},
+            proposedPlanByThreadId: {},
+            turnDiffIdsByThreadId: {},
+            turnDiffSummaryByThreadId: {},
+          },
+        },
+      }),
+  };
+});
 
 vi.mock("~/terminal-links", () => ({
   resolvePathLinkTarget: vi.fn(),
@@ -275,7 +293,10 @@ describe("GitActionsControl thread-scoped progress toast", () => {
 
       await vi.advanceTimersByTimeAsync(1);
       expect(refreshGitStatusSpy).toHaveBeenCalledTimes(1);
-      expect(refreshGitStatusSpy).toHaveBeenCalledWith(GIT_CWD);
+      expect(refreshGitStatusSpy).toHaveBeenCalledWith({
+        environmentId: ENVIRONMENT_ID,
+        cwd: GIT_CWD,
+      });
     } finally {
       if (originalVisibilityState) {
         Object.defineProperty(document, "visibilityState", originalVisibilityState);

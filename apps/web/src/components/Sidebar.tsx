@@ -82,7 +82,7 @@ import {
   threadTraversalDirectionFromCommand,
 } from "../keybindings";
 import { useGitStatus } from "../lib/gitStatusState";
-import { readNativeApi } from "../nativeApi";
+import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 
@@ -138,7 +138,7 @@ import {
 } from "./Sidebar.logic";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
-import { readEnvironmentNativeApi } from "../environmentNativeApi";
+import { readEnvironmentApi } from "../environmentApi";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "../rpc/serverState";
 import type { Project, SidebarThreadSummary } from "../types";
@@ -839,7 +839,7 @@ export default function Sidebar() {
     event.preventDefault();
     event.stopPropagation();
 
-    const api = readNativeApi();
+    const api = readLocalApi();
     if (!api) {
       toastManager.add({
         type: "error",
@@ -895,7 +895,7 @@ export default function Sidebar() {
     async (rawCwd: string) => {
       const cwd = rawCwd.trim();
       if (!cwd || isAddingProject) return;
-      const api = activeEnvironmentId ? readEnvironmentNativeApi(activeEnvironmentId) : undefined;
+      const api = activeEnvironmentId ? readEnvironmentApi(activeEnvironmentId) : undefined;
       if (!api) return;
 
       setIsAddingProject(true);
@@ -972,7 +972,7 @@ export default function Sidebar() {
   const canAddProject = newCwd.trim().length > 0 && !isAddingProject;
 
   const handlePickFolder = async () => {
-    const api = readNativeApi();
+    const api = readLocalApi();
     if (!api || isPickingFolder) return;
     setIsPickingFolder(true);
     let pickedPath: string | null = null;
@@ -1027,7 +1027,7 @@ export default function Sidebar() {
         finishRename();
         return;
       }
-      const api = readEnvironmentNativeApi(threadRef.environmentId);
+      const api = readEnvironmentApi(threadRef.environmentId);
       if (!api) {
         finishRename();
         return;
@@ -1089,7 +1089,7 @@ export default function Sidebar() {
   });
   const handleThreadContextMenu = useCallback(
     async (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
-      const api = readNativeApi();
+      const api = readLocalApi();
       if (!api) return;
       const threadKey = scopedThreadKey(threadRef);
       const thread = sidebarThreadByKey.get(threadKey);
@@ -1165,7 +1165,7 @@ export default function Sidebar() {
 
   const handleMultiSelectContextMenu = useCallback(
     async (position: { x: number; y: number }) => {
-      const api = readNativeApi();
+      const api = readLocalApi();
       if (!api) return;
       const threadKeys = [...selectedThreadKeys];
       if (threadKeys.length === 0) return;
@@ -1282,7 +1282,7 @@ export default function Sidebar() {
 
   const handleProjectContextMenu = useCallback(
     async (projectKey: string, position: { x: number; y: number }) => {
-      const api = readNativeApi();
+      const api = readLocalApi();
       if (!api) return;
       const project = sidebarProjectByKey.get(projectKey);
       if (!project) return;
@@ -1321,7 +1321,7 @@ export default function Sidebar() {
           clearComposerDraftForThread(projectDraftThread.threadRef);
         }
         clearProjectDraftThreadId(scopeProjectRef(project.environmentId, project.id));
-        const projectApi = readEnvironmentNativeApi(project.environmentId);
+        const projectApi = readEnvironmentApi(project.environmentId);
         if (!projectApi) {
           throw new Error("Project API unavailable.");
         }

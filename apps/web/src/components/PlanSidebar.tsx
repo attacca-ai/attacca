@@ -25,7 +25,7 @@ import {
   stripDisplayedPlanMarkdown,
 } from "../proposedPlan";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
-import { readEnvironmentNativeApi } from "~/environmentNativeApi";
+import { readEnvironmentApi } from "~/environmentApi";
 import { toastManager } from "./ui/toast";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 
@@ -90,7 +90,7 @@ const PlanSidebar = memo(function PlanSidebar({
   }, [planMarkdown]);
 
   const handleSaveToWorkspace = useCallback(() => {
-    const api = readEnvironmentNativeApi(environmentId);
+    const api = readEnvironmentApi(environmentId);
     if (!api || !workspaceRoot || !planMarkdown) return;
     const filename = buildProposedPlanMarkdownFilename(planMarkdown);
     setIsSavingToWorkspace(true);

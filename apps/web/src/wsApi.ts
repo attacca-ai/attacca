@@ -1,9 +1,4 @@
-import {
-  type ContextMenuItem,
-  type EnvironmentNativeApi,
-  type LocalNativeApi,
-  type NativeApi,
-} from "@t3tools/contracts";
+import { type ContextMenuItem, type EnvironmentApi, type LocalApi } from "@t3tools/contracts";
 
 import { resetGitStatusStateForTests } from "./lib/gitStatusState";
 import { showContextMenuFallback } from "./contextMenuFallback";
@@ -17,10 +12,7 @@ import {
   type WsRpcClient,
 } from "./wsRpcClient";
 
-let instance: { api: NativeApi } | null = null;
-
-export async function __resetWsNativeApiForTests() {
-  instance = null;
+export async function __resetWsApiForTests() {
   await __resetWsRpcAtomClientForTests();
   await __resetWsRpcClientForTests();
   resetGitStatusStateForTests();
@@ -29,23 +21,9 @@ export async function __resetWsNativeApiForTests() {
   resetWsConnectionStateForTests();
 }
 
-export function createWsNativeApi(): NativeApi {
-  if (instance) {
-    return instance.api;
-  }
-
-  const rpcClient = getPrimaryWsRpcClientEntry().client;
-  const api = {
-    ...createWsLocalNativeApi(rpcClient),
-    ...createWsEnvironmentNativeApiForRpcClient(rpcClient),
-  };
-  instance = { api };
-  return api;
-}
-
-export function createWsLocalNativeApi(
+export function createWsLocalApi(
   rpcClient: WsRpcClient = getPrimaryWsRpcClientEntry().client,
-): LocalNativeApi {
+): LocalApi {
   return {
     dialogs: {
       pickFolder: async () => {
@@ -94,10 +72,8 @@ export function createWsLocalNativeApi(
   };
 }
 
-export function createWsEnvironmentNativeApiForRpcClient(
-  rpcClient: WsRpcClient,
-): EnvironmentNativeApi {
-  const api: EnvironmentNativeApi = {
+export function createWsEnvironmentApiForRpcClient(rpcClient: WsRpcClient): EnvironmentApi {
+  const api: EnvironmentApi = {
     terminal: {
       open: (input) => rpcClient.terminal.open(input as never),
       write: (input) => rpcClient.terminal.write(input as never),

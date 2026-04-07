@@ -37,9 +37,9 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 import { useGitStatus } from "~/lib/gitStatusState";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
-import { readEnvironmentNativeApi } from "../environmentNativeApi";
+import { readEnvironmentApi } from "../environmentApi";
 import { isElectron } from "../env";
-import { readNativeApi } from "../nativeApi";
+import { readLocalApi } from "../localApi";
 import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
 import {
   clampCollapsedComposerCursor,
@@ -562,7 +562,7 @@ function PersistentThreadTerminalDrawer({
 
   const closeTerminal = useCallback(
     (terminalId: string) => {
-      const api = readEnvironmentNativeApi(threadRef.environmentId);
+      const api = readEnvironmentApi(threadRef.environmentId);
       if (!api) return;
       const isFinalTerminal = terminalState.terminalIds.length <= 1;
       const fallbackExitWrite = () =>
@@ -1819,7 +1819,7 @@ export default function ChatView({ environmentId, threadId, routeKind }: ChatVie
   }, [activeThreadRef, storeNewTerminal]);
   const closeTerminal = useCallback(
     (terminalId: string) => {
-      const api = readEnvironmentNativeApi(environmentId);
+      const api = readEnvironmentApi(environmentId);
       if (!activeThreadId || !api) return;
       const isFinalTerminal = terminalState.terminalIds.length <= 1;
       const fallbackExitWrite = () =>
@@ -1866,7 +1866,7 @@ export default function ChatView({ environmentId, threadId, routeKind }: ChatVie
         rememberAsLastInvoked?: boolean;
       },
     ) => {
-      const api = readEnvironmentNativeApi(environmentId);
+      const api = readEnvironmentApi(environmentId);
       if (!api || !activeThreadId || !activeProject || !activeThread) return;
       if (options?.rememberAsLastInvoked !== false) {
         setLastInvokedScriptByProjectId((current) => {
@@ -1969,7 +1969,7 @@ export default function ChatView({ environmentId, threadId, routeKind }: ChatVie
       keybinding?: string | null;
       keybindingCommand: KeybindingCommand;
     }) => {
-      const api = readEnvironmentNativeApi(environmentId);
+      const api = readEnvironmentApi(environmentId);
       if (!api) return;
 
       await api.orchestration.dispatchCommand({
@@ -1985,7 +1985,7 @@ export default function ChatView({ environmentId, threadId, routeKind }: ChatVie
       });
 
       if (isElectron && keybindingRule) {
-        const localApi = readNativeApi();
+        const localApi = readLocalApi();
         if (!localApi) {
           throw new Error("Local API unavailable.");
         }
@@ -2163,7 +2163,7 @@ export default function ChatView({ environmentId, threadId, routeKind }: ChatVie
       if (!serverThread) {
         return;
       }
-      const api = readEnvironmentNativeApi(environmentId);
+      const api = readEnvironmentApi(environmentId);
       if (!api) {
         return;
       }
@@ -2966,8 +2966,8 @@ export default function ChatView({ environmentId, threadId, routeKind }: ChatVie
 
   const onRevertToTurnCount = useCallback(
     async (turnCount: number) => {
-      const api = readEnvironmentNativeApi(environmentId);
-      const localApi = readNativeApi();
+      const api = readEnvironmentApi(environmentId);
+      const localApi = readLocalApi();
       if (!api || !localApi || !activeThread || isRevertingCheckpoint) return;
 
       if (phase === "running" || isSendBusy || isConnecting) {
@@ -3016,7 +3016,7 @@ export default function ChatView({ environmentId, threadId, routeKind }: ChatVie
 
   const onSend = async (e?: { preventDefault: () => void }) => {
     e?.preventDefault();
-    const api = readEnvironmentNativeApi(environmentId);
+    const api = readEnvironmentApi(environmentId);
     if (!api || !activeThread || isSendBusy || isConnecting || sendInFlightRef.current) return;
     if (activePendingProgress) {
       onAdvanceActivePendingUserInput();
@@ -3296,7 +3296,7 @@ export default function ChatView({ environmentId, threadId, routeKind }: ChatVie
   };
 
   const onInterrupt = async () => {
-    const api = readEnvironmentNativeApi(environmentId);
+    const api = readEnvironmentApi(environmentId);
     if (!api || !activeThread) return;
     await api.orchestration.dispatchCommand({
       type: "thread.turn.interrupt",
@@ -3308,7 +3308,7 @@ export default function ChatView({ environmentId, threadId, routeKind }: ChatVie
 
   const onRespondToApproval = useCallback(
     async (requestId: ApprovalRequestId, decision: ProviderApprovalDecision) => {
-      const api = readEnvironmentNativeApi(environmentId);
+      const api = readEnvironmentApi(environmentId);
       if (!api || !activeThreadId) return;
 
       setRespondingRequestIds((existing) =>
@@ -3336,7 +3336,7 @@ export default function ChatView({ environmentId, threadId, routeKind }: ChatVie
 
   const onRespondToUserInput = useCallback(
     async (requestId: ApprovalRequestId, answers: Record<string, unknown>) => {
-      const api = readEnvironmentNativeApi(environmentId);
+      const api = readEnvironmentApi(environmentId);
       if (!api || !activeThreadId) return;
 
       setRespondingUserInputRequestIds((existing) =>
@@ -3461,7 +3461,7 @@ export default function ChatView({ environmentId, threadId, routeKind }: ChatVie
       text: string;
       interactionMode: "default" | "plan";
     }) => {
-      const api = readEnvironmentNativeApi(environmentId);
+      const api = readEnvironmentApi(environmentId);
       if (
         !api ||
         !activeThread ||
@@ -3588,7 +3588,7 @@ export default function ChatView({ environmentId, threadId, routeKind }: ChatVie
   );
 
   const onImplementPlanInNewThread = useCallback(async () => {
-    const api = readEnvironmentNativeApi(environmentId);
+    const api = readEnvironmentApi(environmentId);
     if (
       !api ||
       !activeThread ||

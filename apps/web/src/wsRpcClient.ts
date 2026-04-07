@@ -4,7 +4,7 @@ import {
   type GitRunStackedActionResult,
   type GitStatusResult,
   type GitStatusStreamEvent,
-  type LocalNativeApi,
+  type LocalApi,
   ORCHESTRATION_WS_METHODS,
   type EnvironmentId,
   type ServerSettingsPatch,
@@ -67,9 +67,9 @@ export interface WsRpcClient {
   };
   readonly shell: {
     readonly openInEditor: (input: {
-      readonly cwd: Parameters<LocalNativeApi["shell"]["openInEditor"]>[0];
-      readonly editor: Parameters<LocalNativeApi["shell"]["openInEditor"]>[1];
-    }) => ReturnType<LocalNativeApi["shell"]["openInEditor"]>;
+      readonly cwd: Parameters<LocalApi["shell"]["openInEditor"]>[0];
+      readonly editor: Parameters<LocalApi["shell"]["openInEditor"]>[1];
+    }) => ReturnType<LocalApi["shell"]["openInEditor"]>;
   };
   readonly git: {
     readonly pull: RpcUnaryMethod<typeof WS_METHODS.gitPull>;

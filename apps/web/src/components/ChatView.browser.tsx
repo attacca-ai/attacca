@@ -32,7 +32,7 @@ import {
   removeInlineTerminalContextPlaceholder,
 } from "../lib/terminalContext";
 import { isMacPlatform } from "../lib/utils";
-import { __resetNativeApiForTests } from "../nativeApi";
+import { __resetLocalApiForTests } from "../localApi";
 import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
 import { getServerConfig } from "../rpc/serverState";
 import { getRouter } from "../router";
@@ -1194,7 +1194,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         return [];
       },
     });
-    await __resetNativeApiForTests();
+    await __resetLocalApiForTests();
     await setViewport(DEFAULT_VIEWPORT);
     localStorage.clear();
     document.body.innerHTML = "";

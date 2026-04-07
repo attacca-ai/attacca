@@ -1,6 +1,6 @@
 import type { EnvironmentId, ProjectSearchEntriesResult } from "@t3tools/contracts";
 import { queryOptions } from "@tanstack/react-query";
-import { ensureEnvironmentNativeApi } from "~/environmentNativeApi";
+import { ensureEnvironmentApi } from "~/environmentApi";
 
 export const projectQueryKeys = {
   all: ["projects"] as const,
@@ -34,7 +34,7 @@ export function projectSearchEntriesQueryOptions(input: {
       if (!input.cwd || !input.environmentId) {
         throw new Error("Workspace entry search is unavailable.");
       }
-      const api = ensureEnvironmentNativeApi(input.environmentId);
+      const api = ensureEnvironmentApi(input.environmentId);
       return api.projects.searchEntries({
         cwd: input.cwd,
         query: input.query,
