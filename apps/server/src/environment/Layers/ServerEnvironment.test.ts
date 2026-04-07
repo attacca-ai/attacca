@@ -10,11 +10,11 @@ import { ServerEnvironmentLive } from "./ServerEnvironment.ts";
 const makeServerEnvironmentLayer = (baseDir: string) =>
   ServerEnvironmentLive.pipe(Layer.provide(ServerConfig.layerTest(process.cwd(), baseDir)));
 
-const makeServerConfig = (baseDir: string): ServerConfigShape => {
-  const stateDir = nodePath.join(baseDir, "userdata");
+const makeServerConfig = Effect.fn(function* (baseDir: string) {
+  const derivedPaths = yield* deriveServerPaths(baseDir, undefined);
 
   return {
-    ...deriveServerPaths(baseDir, undefined),
+    ...derivedPaths,
     logLevel: "Error",
     traceMinLevel: "Info",
     traceTimingEnabled: true,
@@ -27,7 +27,6 @@ const makeServerConfig = (baseDir: string): ServerConfigShape => {
     otlpServiceName: "t3-server",
     cwd: process.cwd(),
     baseDir,
-    stateDir,
     mode: "web",
     autoBootstrapProjectFromCwd: false,
     logWebSocketEvents: false,
@@ -37,8 +36,8 @@ const makeServerConfig = (baseDir: string): ServerConfigShape => {
     staticDir: undefined,
     devUrl: undefined,
     noBrowser: false,
-  };
-};
+  } satisfies ServerConfigShape;
+});
 
 it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
   it.effect("persists the environment id across service restarts", () =>
@@ -68,7 +67,7 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-server-environment-read-error-test-",
       });
-      const serverConfig = makeServerConfig(baseDir);
+      const serverConfig = yield* makeServerConfig(baseDir);
       const environmentIdPath = serverConfig.environmentIdPath;
       yield* fileSystem.makeDirectory(nodePath.dirname(environmentIdPath), { recursive: true });
       yield* fileSystem.writeFileString(environmentIdPath, "persisted-environment-id\n");
