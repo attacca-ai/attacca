@@ -45,7 +45,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
       },
     },
     draftThreadsByThreadKey: {},
-    projectDraftThreadKeyByProjectKey: {},
+    logicalProjectDraftThreadKeyByLogicalProjectKey: {},
   });
   const host = document.createElement("div");
   document.body.append(host);
@@ -160,7 +160,7 @@ describe("CompactComposerControlsMenu", () => {
     useComposerDraftStore.setState({
       draftsByThreadKey: {},
       draftThreadsByThreadKey: {},
-      projectDraftThreadKeyByProjectKey: {},
+      logicalProjectDraftThreadKeyByLogicalProjectKey: {},
       stickyModelSelectionByProvider: {},
     });
   });

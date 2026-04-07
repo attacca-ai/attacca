@@ -1,4 +1,9 @@
-import { scopedThreadKey, scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
+import {
+  scopedProjectKey,
+  scopedThreadKey,
+  scopeProjectRef,
+  scopeThreadRef,
+} from "@t3tools/client-runtime";
 import * as Schema from "effect/Schema";
 import {
   EnvironmentId,
@@ -77,7 +82,7 @@ function resetComposerDraftStore() {
   useComposerDraftStore.setState({
     draftsByThreadKey: {},
     draftThreadsByThreadKey: {},
-    projectDraftThreadKeyByProjectKey: {},
+    logicalProjectDraftThreadKeyByLogicalProjectKey: {},
     stickyModelSelectionByProvider: {},
     stickyActiveProvider: null,
   });
@@ -107,11 +112,15 @@ function threadKeyFor(
   threadId: ThreadId,
   environmentId: EnvironmentId = LEGACY_TEST_ENVIRONMENT_ID,
 ): string {
+  if (environmentId === LEGACY_TEST_ENVIRONMENT_ID) {
+    return threadId;
+  }
   return scopedThreadKey(scopeThreadRef(environmentId, threadId));
 }
 
 function draftFor(threadId: ThreadId, environmentId: EnvironmentId = LEGACY_TEST_ENVIRONMENT_ID) {
-  return useComposerDraftStore.getState().draftsByThreadKey[threadKeyFor(threadId, environmentId)];
+  const store = useComposerDraftStore.getState().draftsByThreadKey;
+  return store[threadKeyFor(threadId, environmentId)] ?? store[threadId] ?? undefined;
 }
 
 describe("composerDraftStore addImages", () => {
@@ -238,7 +247,7 @@ describe("composerDraftStore syncPersistedAttachments", () => {
     useComposerDraftStore.setState({
       draftsByThreadKey: {},
       draftThreadsByThreadKey: {},
-      projectDraftThreadKeyByProjectKey: {},
+      logicalProjectDraftThreadKeyByLogicalProjectKey: {},
       stickyModelSelectionByProvider: {},
       stickyActiveProvider: null,
     });
@@ -292,7 +301,7 @@ describe("composerDraftStore terminal contexts", () => {
     useComposerDraftStore.setState({
       draftsByThreadKey: {},
       draftThreadsByThreadKey: {},
-      projectDraftThreadKeyByProjectKey: {},
+      logicalProjectDraftThreadKeyByLogicalProjectKey: {},
       stickyModelSelectionByProvider: {},
       stickyActiveProvider: null,
     });
@@ -456,7 +465,7 @@ describe("composerDraftStore terminal contexts", () => {
 
     expect(mergedState.draftsByThreadKey[threadKeyFor(threadId)]).toBeUndefined();
     expect(mergedState.draftThreadsByThreadKey).toEqual({});
-    expect(mergedState.projectDraftThreadKeyByProjectKey).toEqual({});
+    expect(mergedState.logicalProjectDraftThreadKeyByLogicalProjectKey).toEqual({});
   });
 });
 
@@ -482,10 +491,12 @@ describe("composerDraftStore project draft thread mapping", () => {
       worktreePath: "/tmp/worktree-test",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
-    expect(useComposerDraftStore.getState().getDraftThreadByProjectRef(projectRef)).toEqual({
+    expect(useComposerDraftStore.getState().getDraftThreadByProjectRef(projectRef)).toMatchObject({
       threadId,
       environmentId: TEST_ENVIRONMENT_ID,
       projectId,
+      logicalProjectKey: scopedProjectKey(projectRef),
+      isLocalDraft: true,
       branch: "feature/test",
       worktreePath: "/tmp/worktree-test",
       envMode: "worktree",
@@ -496,6 +507,7 @@ describe("composerDraftStore project draft thread mapping", () => {
     expect(useComposerDraftStore.getState().getDraftThread(threadId)).toEqual({
       environmentId: TEST_ENVIRONMENT_ID,
       projectId,
+      logicalProjectKey: scopedProjectKey(projectRef),
       branch: "feature/test",
       worktreePath: "/tmp/worktree-test",
       envMode: "worktree",

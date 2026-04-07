@@ -201,7 +201,7 @@ async function mountClaudePicker(props?: {
   useComposerDraftStore.setState({
     draftsByThreadKey,
     draftThreadsByThreadKey: {},
-    projectDraftThreadKeyByProjectKey: {},
+    logicalProjectDraftThreadKeyByLogicalProjectKey: {},
   });
   const host = document.createElement("div");
   document.body.append(host);
@@ -239,7 +239,7 @@ describe("TraitsPicker (Claude)", () => {
     useComposerDraftStore.setState({
       draftsByThreadKey: {},
       draftThreadsByThreadKey: {},
-      projectDraftThreadKeyByProjectKey: {},
+      logicalProjectDraftThreadKeyByLogicalProjectKey: {},
       stickyModelSelectionByProvider: {},
     });
   });
@@ -400,7 +400,7 @@ async function mountCodexPicker(props: { model?: string; options?: CodexModelOpt
   useComposerDraftStore.setState({
     draftsByThreadKey,
     draftThreadsByThreadKey: {},
-    projectDraftThreadKeyByProjectKey: {
+    logicalProjectDraftThreadKeyByLogicalProjectKey: {
       "environment-local:project-codex-traits": CODEX_THREAD_KEY,
     },
   });
@@ -437,7 +437,7 @@ describe("TraitsPicker (Codex)", () => {
     useComposerDraftStore.setState({
       draftsByThreadKey: {},
       draftThreadsByThreadKey: {},
-      projectDraftThreadKeyByProjectKey: {},
+      logicalProjectDraftThreadKeyByLogicalProjectKey: {},
       stickyModelSelectionByProvider: {},
     });
   });

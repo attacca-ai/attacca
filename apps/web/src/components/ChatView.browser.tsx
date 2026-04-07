@@ -54,9 +54,7 @@ const PROJECT_ID = "project-1" as ProjectId;
 const LOCAL_ENVIRONMENT_ID = EnvironmentId.makeUnsafe("environment-local");
 const THREAD_REF = scopeThreadRef(LOCAL_ENVIRONMENT_ID, THREAD_ID);
 const THREAD_KEY = scopedThreadKey(THREAD_REF);
-const UUID_ROUTE_RE = new RegExp(
-  `^/${LOCAL_ENVIRONMENT_ID}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`,
-);
+const UUID_ROUTE_RE = /^\/draft\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PROJECT_DRAFT_KEY = `${LOCAL_ENVIRONMENT_ID}:${PROJECT_ID}`;
 const NOW_ISO = "2026-03-04T12:00:00.000Z";
 const BASE_TIME_MS = Date.parse(NOW_ISO);
@@ -449,9 +447,10 @@ function threadKeyFor(threadId: ThreadId): string {
 }
 
 function threadIdFromPath(pathname: string): ThreadId {
-  const [, , threadId] = pathname.split("/");
+  const segments = pathname.split("/");
+  const threadId = segments[segments.length - 1];
   if (!threadId) {
-    throw new Error(`Expected scoped thread path, received "${pathname}".`);
+    throw new Error(`Expected thread path, received "${pathname}".`);
   }
   return threadId as ThreadId;
 }
@@ -511,6 +510,7 @@ function setDraftThreadWithoutWorktree(): void {
       [THREAD_KEY]: {
         environmentId: LOCAL_ENVIRONMENT_ID,
         projectId: PROJECT_ID,
+        logicalProjectKey: PROJECT_DRAFT_KEY,
         createdAt: NOW_ISO,
         runtimeMode: "full-access",
         interactionMode: "default",
@@ -519,7 +519,7 @@ function setDraftThreadWithoutWorktree(): void {
         envMode: "local",
       },
     },
-    projectDraftThreadKeyByProjectKey: {
+    logicalProjectDraftThreadKeyByLogicalProjectKey: {
       [PROJECT_DRAFT_KEY]: THREAD_KEY,
     },
   });
@@ -1203,7 +1203,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     useComposerDraftStore.setState({
       draftsByThreadKey: {},
       draftThreadsByThreadKey: {},
-      projectDraftThreadKeyByProjectKey: {},
+      logicalProjectDraftThreadKeyByLogicalProjectKey: {},
       stickyModelSelectionByProvider: {},
       stickyActiveProvider: null,
     });
@@ -1717,6 +1717,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         [THREAD_KEY]: {
           environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
+          logicalProjectKey: PROJECT_DRAFT_KEY,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
           interactionMode: "default",
@@ -1725,7 +1726,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "local",
         },
       },
-      projectDraftThreadKeyByProjectKey: {
+      logicalProjectDraftThreadKeyByLogicalProjectKey: {
         [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
@@ -1794,6 +1795,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         [THREAD_KEY]: {
           environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
+          logicalProjectKey: PROJECT_DRAFT_KEY,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
           interactionMode: "default",
@@ -1802,7 +1804,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      projectDraftThreadKeyByProjectKey: {
+      logicalProjectDraftThreadKeyByLogicalProjectKey: {
         [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
@@ -1858,6 +1860,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         [THREAD_KEY]: {
           environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
+          logicalProjectKey: PROJECT_DRAFT_KEY,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
           interactionMode: "default",
@@ -1866,7 +1869,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "local",
         },
       },
-      projectDraftThreadKeyByProjectKey: {
+      logicalProjectDraftThreadKeyByLogicalProjectKey: {
         [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
@@ -1984,6 +1987,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         [THREAD_KEY]: {
           environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
+          logicalProjectKey: PROJECT_DRAFT_KEY,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
           interactionMode: "default",
@@ -1992,7 +1996,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      projectDraftThreadKeyByProjectKey: {
+      logicalProjectDraftThreadKeyByLogicalProjectKey: {
         [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
@@ -2085,6 +2089,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         [THREAD_KEY]: {
           environmentId: LOCAL_ENVIRONMENT_ID,
           projectId: PROJECT_ID,
+          logicalProjectKey: PROJECT_DRAFT_KEY,
           createdAt: NOW_ISO,
           runtimeMode: "full-access",
           interactionMode: "default",
@@ -2093,7 +2098,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
           envMode: "worktree",
         },
       },
-      projectDraftThreadKeyByProjectKey: {
+      logicalProjectDraftThreadKeyByLogicalProjectKey: {
         [PROJECT_DRAFT_KEY]: THREAD_KEY,
       },
     });
@@ -2555,9 +2560,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
       const newThreadId = threadIdFromPath(newThreadPath);
 
-      expect(
-        useComposerDraftStore.getState().draftsByThreadKey[threadKeyFor(newThreadId)],
-      ).toMatchObject({
+      expect(useComposerDraftStore.getState().draftsByThreadKey[newThreadId]).toMatchObject({
         modelSelectionByProvider: {
           codex: {
             provider: "codex",
@@ -2610,9 +2613,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
       const newThreadId = threadIdFromPath(newThreadPath);
 
-      expect(
-        useComposerDraftStore.getState().draftsByThreadKey[threadKeyFor(newThreadId)],
-      ).toMatchObject({
+      expect(useComposerDraftStore.getState().draftsByThreadKey[newThreadId]).toMatchObject({
         modelSelectionByProvider: {
           claudeAgent: {
             provider: "claudeAgent",
@@ -2652,9 +2653,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
       const newThreadId = threadIdFromPath(newThreadPath);
 
-      expect(useComposerDraftStore.getState().draftsByThreadKey[threadKeyFor(newThreadId)]).toBe(
-        undefined,
-      );
+      expect(useComposerDraftStore.getState().draftsByThreadKey[newThreadId]).toBe(undefined);
     } finally {
       await mounted.cleanup();
     }
@@ -2696,9 +2695,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
       const threadId = threadIdFromPath(threadPath);
 
-      expect(
-        useComposerDraftStore.getState().draftsByThreadKey[threadKeyFor(threadId)],
-      ).toMatchObject({
+      expect(useComposerDraftStore.getState().draftsByThreadKey[threadId]).toMatchObject({
         modelSelectionByProvider: {
           codex: {
             provider: "codex",
@@ -2727,9 +2724,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         (path) => path === threadPath,
         "New-thread should reuse the existing project draft thread.",
       );
-      expect(
-        useComposerDraftStore.getState().draftsByThreadKey[threadKeyFor(threadId)],
-      ).toMatchObject({
+      expect(useComposerDraftStore.getState().draftsByThreadKey[threadId]).toMatchObject({
         modelSelectionByProvider: {
           codex: {
             provider: "codex",

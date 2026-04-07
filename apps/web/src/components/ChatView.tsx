@@ -131,6 +131,8 @@ import {
 import { useSettings } from "../hooks/useSettings";
 import { resolveAppModelSelection } from "../modelSelection";
 import { isTerminalFocused } from "../lib/terminalFocus";
+import { deriveLogicalProjectKey } from "../logicalProject";
+import { buildDraftThreadRouteParams } from "../threadRoutes";
 import {
   type ComposerImageAttachment,
   type DraftThreadEnvMode,
@@ -378,6 +380,7 @@ const terminalContextIdListsEqual = (
 interface ChatViewProps {
   environmentId: EnvironmentId;
   threadId: ThreadId;
+  routeKind: "server" | "draft";
 }
 
 interface TerminalLaunchContext {
@@ -628,19 +631,23 @@ function PersistentThreadTerminalDrawer({
   );
 }
 
-export default function ChatView({ environmentId, threadId }: ChatViewProps) {
+export default function ChatView({ environmentId, threadId, routeKind }: ChatViewProps) {
   const routeThreadRef = useMemo(
     () => scopeThreadRef(environmentId, threadId),
     [environmentId, threadId],
   );
   const serverThread = useStore(
-    useMemo(() => createThreadSelectorByRef(routeThreadRef), [routeThreadRef]),
+    useMemo(
+      () => createThreadSelectorByRef(routeKind === "server" ? routeThreadRef : null),
+      [routeKind, routeThreadRef],
+    ),
   );
   const setStoreThreadError = useStore((store) => store.setError);
   const markThreadVisited = useUiStateStore((store) => store.markThreadVisited);
-  const activeThreadLastVisitedAt = useUiStateStore(
-    (store) =>
-      store.threadLastVisitedAtById[scopedThreadKey(scopeThreadRef(environmentId, threadId))],
+  const activeThreadLastVisitedAt = useUiStateStore((store) =>
+    routeKind === "server"
+      ? store.threadLastVisitedAtById[scopedThreadKey(scopeThreadRef(environmentId, threadId))]
+      : undefined,
   );
   const settings = useSettings();
   const setStickyComposerModelSelection = useComposerDraftStore(
@@ -653,7 +660,7 @@ export default function ChatView({ environmentId, threadId }: ChatViewProps) {
     select: (params) => parseDiffRouteSearch(params),
   });
   const { resolvedTheme } = useTheme();
-  const composerDraft = useComposerThreadDraft(routeThreadRef);
+  const composerDraft = useComposerThreadDraft(routeKind === "server" ? routeThreadRef : threadId);
   const prompt = composerDraft.prompt;
   const composerImages = composerDraft.images;
   const composerTerminalContexts = composerDraft.terminalContexts;
@@ -696,15 +703,18 @@ export default function ChatView({ environmentId, threadId }: ChatViewProps) {
   );
   const clearComposerDraftContent = useComposerDraftStore((store) => store.clearComposerContent);
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
-  const getDraftThreadByProjectRef = useComposerDraftStore(
-    (store) => store.getDraftThreadByProjectRef,
+  const getDraftThreadByLogicalProjectKey = useComposerDraftStore(
+    (store) => store.getDraftThreadByLogicalProjectKey,
   );
-  const getDraftThreadByRef = useComposerDraftStore((store) => store.getDraftThreadByRef);
-  const setProjectDraftThreadId = useComposerDraftStore((store) => store.setProjectDraftThreadId);
-  const clearProjectDraftThreadId = useComposerDraftStore(
-    (store) => store.clearProjectDraftThreadId,
+  const getDraftThread = useComposerDraftStore((store) => store.getDraftThread);
+  const setLogicalProjectDraftThreadId = useComposerDraftStore(
+    (store) => store.setLogicalProjectDraftThreadId,
   );
-  const draftThread = useComposerDraftStore((store) => store.getDraftThreadByRef(routeThreadRef));
+  const draftThread = useComposerDraftStore((store) =>
+    routeKind === "server"
+      ? store.getDraftThreadByRef(routeThreadRef)
+      : store.getDraftThread(threadId),
+  );
   const promptRef = useRef(prompt);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isDragOverComposer, setIsDragOverComposer] = useState(false);
@@ -888,7 +898,8 @@ export default function ChatView({ environmentId, threadId }: ChatViewProps) {
   const fallbackDraftProject = useStore(
     useMemo(() => createProjectSelectorByRef(fallbackDraftProjectRef), [fallbackDraftProjectRef]),
   );
-  const localDraftError = serverThread ? null : (localDraftErrorsByThreadId[threadId] ?? null);
+  const localDraftError =
+    routeKind === "server" && serverThread ? null : (localDraftErrorsByThreadId[threadId] ?? null);
   const localDraftThread = useMemo(
     () =>
       draftThread
@@ -904,12 +915,12 @@ export default function ChatView({ environmentId, threadId }: ChatViewProps) {
         : undefined,
     [draftThread, fallbackDraftProject?.defaultModelSelection, localDraftError, threadId],
   );
-  const activeThread = serverThread ?? localDraftThread;
+  const isServerThread = routeKind === "server" && serverThread !== undefined;
+  const activeThread = isServerThread ? serverThread : localDraftThread;
   const runtimeMode =
     composerDraft.runtimeMode ?? activeThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE;
   const interactionMode =
     composerDraft.interactionMode ?? activeThread?.interactionMode ?? DEFAULT_INTERACTION_MODE;
-  const isServerThread = serverThread !== undefined;
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
   const diffOpen = rawSearch.diff === "1";
@@ -988,57 +999,69 @@ export default function ChatView({ environmentId, threadId }: ChatViewProps) {
         throw new Error("No active project is available for this pull request.");
       }
       const activeProjectRef = scopeProjectRef(activeProject.environmentId, activeProject.id);
-      const storedDraftThread = getDraftThreadByProjectRef(activeProjectRef);
+      const logicalProjectKey = deriveLogicalProjectKey(activeProject);
+      const storedDraftThread = getDraftThreadByLogicalProjectKey(logicalProjectKey);
       if (storedDraftThread) {
         setDraftThreadContext(storedDraftThread.threadRef, input);
-        setProjectDraftThreadId(activeProjectRef, storedDraftThread.threadRef, input);
+        setLogicalProjectDraftThreadId(
+          logicalProjectKey,
+          activeProjectRef,
+          storedDraftThread.isLocalDraft ? storedDraftThread.threadId : storedDraftThread.threadRef,
+          input,
+        );
         if (storedDraftThread.threadId !== threadId) {
-          await navigate({
-            to: "/$environmentId/$threadId",
-            params: {
-              environmentId: activeProject.environmentId,
-              threadId: storedDraftThread.threadId,
-            },
-          });
+          if (storedDraftThread.isLocalDraft) {
+            await navigate({
+              to: "/draft/$threadId",
+              params: buildDraftThreadRouteParams(storedDraftThread.threadId),
+            });
+          } else {
+            await navigate({
+              to: "/$environmentId/$threadId",
+              params: {
+                environmentId: activeProject.environmentId,
+                threadId: storedDraftThread.threadId,
+              },
+            });
+          }
         }
         return storedDraftThread.threadId;
       }
 
-      const activeDraftThread = getDraftThreadByRef(routeThreadRef);
-      if (!isServerThread && activeDraftThread?.projectId === activeProject.id) {
-        setDraftThreadContext(routeThreadRef, input);
-        setProjectDraftThreadId(activeProjectRef, routeThreadRef, input);
+      const activeDraftThread = routeKind === "draft" ? getDraftThread(threadId) : null;
+      if (!isServerThread && activeDraftThread?.logicalProjectKey === logicalProjectKey) {
+        setDraftThreadContext(threadId, input);
+        setLogicalProjectDraftThreadId(logicalProjectKey, activeProjectRef, threadId, {
+          createdAt: activeDraftThread.createdAt,
+          runtimeMode: activeDraftThread.runtimeMode,
+          interactionMode: activeDraftThread.interactionMode,
+          ...input,
+        });
         return threadId;
       }
 
-      clearProjectDraftThreadId(activeProjectRef);
       const nextThreadId = newThreadId();
-      const nextThreadRef = scopeThreadRef(activeProject.environmentId, nextThreadId);
-      setProjectDraftThreadId(activeProjectRef, nextThreadRef, {
+      setLogicalProjectDraftThreadId(logicalProjectKey, activeProjectRef, nextThreadId, {
         createdAt: new Date().toISOString(),
         runtimeMode: DEFAULT_RUNTIME_MODE,
         interactionMode: DEFAULT_INTERACTION_MODE,
         ...input,
       });
       await navigate({
-        to: "/$environmentId/$threadId",
-        params: {
-          environmentId: activeProject.environmentId,
-          threadId: nextThreadId,
-        },
+        to: "/draft/$threadId",
+        params: buildDraftThreadRouteParams(nextThreadId),
       });
       return nextThreadId;
     },
     [
       activeProject,
-      clearProjectDraftThreadId,
-      getDraftThreadByRef,
-      getDraftThreadByProjectRef,
+      getDraftThread,
+      getDraftThreadByLogicalProjectKey,
       isServerThread,
       navigate,
-      routeThreadRef,
+      routeKind,
       setDraftThreadContext,
-      setProjectDraftThreadId,
+      setLogicalProjectDraftThreadId,
       threadId,
     ],
   );
@@ -1661,6 +1684,9 @@ export default function ChatView({ environmentId, threadId }: ChatViewProps) {
     [keybindings, nonTerminalShortcutLabelOptions],
   );
   const onToggleDiff = useCallback(() => {
+    if (!isServerThread) {
+      return;
+    }
     void navigate({
       to: "/$environmentId/$threadId",
       params: {
@@ -1673,7 +1699,7 @@ export default function ChatView({ environmentId, threadId }: ChatViewProps) {
         return diffOpen ? { ...rest, diff: undefined } : { ...rest, diff: "1" };
       },
     });
-  }, [diffOpen, environmentId, navigate, threadId]);
+  }, [diffOpen, environmentId, isServerThread, navigate, threadId]);
 
   const envLocked = Boolean(
     activeThread &&
@@ -4000,6 +4026,9 @@ export default function ChatView({ environmentId, threadId }: ChatViewProps) {
   const expandedImageItem = expandedImage ? expandedImage.images[expandedImage.index] : null;
   const onOpenTurnDiff = useCallback(
     (turnId: TurnId, filePath?: string) => {
+      if (!isServerThread) {
+        return;
+      }
       void navigate({
         to: "/$environmentId/$threadId",
         params: {
@@ -4014,7 +4043,7 @@ export default function ChatView({ environmentId, threadId }: ChatViewProps) {
         },
       });
     },
-    [environmentId, navigate, threadId],
+    [environmentId, isServerThread, navigate, threadId],
   );
   const onRevertUserMessage = (messageId: MessageId) => {
     const targetTurnCount = revertTurnCountByUserMessageId.get(messageId);

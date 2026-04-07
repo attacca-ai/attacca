@@ -371,7 +371,7 @@ describe("Keybindings update toast", () => {
     useComposerDraftStore.setState({
       draftsByThreadKey: {},
       draftThreadsByThreadKey: {},
-      projectDraftThreadKeyByProjectKey: {},
+      logicalProjectDraftThreadKeyByLogicalProjectKey: {},
     });
     useStore.setState({
       activeEnvironmentId: null,
