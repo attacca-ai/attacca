@@ -50,6 +50,7 @@ afterEach(() => {
 
 describe("resolveServerHttpUrl", () => {
   it("uses the Vite dev origin for local HTTP requests automatically", () => {
+    resolvePrimaryEnvironmentBootstrapUrlMock.mockReturnValueOnce("");
     vi.stubEnv("VITE_WS_URL", "ws://127.0.0.1:3775/ws");
 
     assert.equal(
@@ -90,6 +91,7 @@ describe("resolveServerUrl", () => {
   });
 
   it("keeps the backend origin for websocket requests", () => {
+    resolvePrimaryEnvironmentBootstrapUrlMock.mockReturnValueOnce("");
     vi.stubEnv("VITE_WS_URL", "ws://127.0.0.1:3775/ws");
 
     assert.equal(
