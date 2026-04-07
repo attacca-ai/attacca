@@ -314,27 +314,6 @@ interface SidebarThreadRowProps {
   openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
 }
 
-function areSidebarThreadRowPropsEqual(
-  prev: Readonly<SidebarThreadRowProps>,
-  next: Readonly<SidebarThreadRowProps>,
-): boolean {
-  return (
-    prev.thread === next.thread &&
-    prev.projectCwd === next.projectCwd &&
-    prev.orderedProjectThreadKeys === next.orderedProjectThreadKeys &&
-    prev.isActive === next.isActive &&
-    prev.jumpLabel === next.jumpLabel &&
-    prev.appSettingsConfirmThreadArchive === next.appSettingsConfirmThreadArchive &&
-    prev.renamingThreadKey === next.renamingThreadKey &&
-    prev.renamingTitle === next.renamingTitle &&
-    prev.renamingInputRef === next.renamingInputRef &&
-    prev.renamingCommittedRef === next.renamingCommittedRef &&
-    prev.confirmingArchiveThreadKey === next.confirmingArchiveThreadKey &&
-    prev.setConfirmingArchiveThreadKey === next.setConfirmingArchiveThreadKey &&
-    prev.confirmArchiveButtonRefs === next.confirmArchiveButtonRefs
-  );
-}
-
 const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowProps) {
   const {
     orderedProjectThreadKeys,
@@ -682,7 +661,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       </SidebarMenuSubButton>
     </SidebarMenuSubItem>
   );
-}, areSidebarThreadRowPropsEqual);
+});
 
 interface SidebarProjectThreadListProps {
   projectKey: string;
@@ -729,34 +708,6 @@ interface SidebarProjectThreadListProps {
   openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
   expandThreadListForProject: (projectKey: string) => void;
   collapseThreadListForProject: (projectKey: string) => void;
-}
-
-function areSidebarProjectThreadListPropsEqual(
-  prev: Readonly<SidebarProjectThreadListProps>,
-  next: Readonly<SidebarProjectThreadListProps>,
-): boolean {
-  return (
-    prev.projectKey === next.projectKey &&
-    prev.projectExpanded === next.projectExpanded &&
-    prev.hasOverflowingThreads === next.hasOverflowingThreads &&
-    prev.hiddenThreadStatus === next.hiddenThreadStatus &&
-    prev.orderedProjectThreadKeys === next.orderedProjectThreadKeys &&
-    prev.renderedThreads === next.renderedThreads &&
-    prev.showEmptyThreadState === next.showEmptyThreadState &&
-    prev.shouldShowThreadPanel === next.shouldShowThreadPanel &&
-    prev.isThreadListExpanded === next.isThreadListExpanded &&
-    prev.projectCwd === next.projectCwd &&
-    prev.activeRouteThreadKey === next.activeRouteThreadKey &&
-    prev.threadJumpLabelByKey === next.threadJumpLabelByKey &&
-    prev.appSettingsConfirmThreadArchive === next.appSettingsConfirmThreadArchive &&
-    prev.renamingThreadKey === next.renamingThreadKey &&
-    prev.renamingTitle === next.renamingTitle &&
-    prev.renamingInputRef === next.renamingInputRef &&
-    prev.renamingCommittedRef === next.renamingCommittedRef &&
-    prev.confirmingArchiveThreadKey === next.confirmingArchiveThreadKey &&
-    prev.setConfirmingArchiveThreadKey === next.setConfirmingArchiveThreadKey &&
-    prev.confirmArchiveButtonRefs === next.confirmArchiveButtonRefs
-  );
 }
 
 const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
@@ -883,7 +834,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
       )}
     </SidebarMenuSub>
   );
-}, areSidebarProjectThreadListPropsEqual);
+});
 
 interface SidebarProjectItemProps {
   project: SidebarProjectSnapshot;
@@ -935,7 +886,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const defaultThreadEnvMode = useSettings<ThreadEnvMode>(
     (settings) => settings.defaultThreadEnvMode,
   );
-  const navigate = useNavigate();
   const router = useRouter();
   const markThreadUnread = useUiStateStore((state) => state.markThreadUnread);
   const toggleProject = useUiStateStore((state) => state.toggleProject);
@@ -1318,12 +1268,12 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         clearSelection();
       }
       setSelectionAnchor(scopedThreadKey(threadRef));
-      void navigate({
+      void router.navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(threadRef),
       });
     },
-    [clearSelection, navigate, setSelectionAnchor],
+    [clearSelection, router, setSelectionAnchor],
   );
 
   const handleThreadClick = useCallback(
@@ -1354,12 +1304,12 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         clearSelection();
       }
       setSelectionAnchor(threadKey);
-      void navigate({
+      void router.navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(threadRef),
       });
     },
-    [clearSelection, navigate, rangeSelectTo, setSelectionAnchor, toggleThreadSelection],
+    [clearSelection, rangeSelectTo, router, setSelectionAnchor, toggleThreadSelection],
   );
 
   const handleMultiSelectContextMenu = useCallback(

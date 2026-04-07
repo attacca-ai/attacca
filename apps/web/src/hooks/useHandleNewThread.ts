@@ -1,6 +1,6 @@
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime";
 import { DEFAULT_RUNTIME_MODE, type ScopedProjectRef } from "@t3tools/contracts";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useParams, useRouter } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -19,7 +19,7 @@ import { useUiStateStore } from "../uiStateStore";
 export function useHandleNewThread() {
   const projects = useStore(useShallow((store) => selectProjectsAcrossEnvironments(store)));
   const projectOrder = useUiStateStore((store) => store.projectOrder);
-  const navigate = useNavigate();
+  const router = useRouter();
   const routeTarget = useParams({
     strict: false,
     select: (params) => resolveThreadRouteTarget(params),
@@ -43,6 +43,10 @@ export function useHandleNewThread() {
       getId: (project) => scopedProjectKey(scopeProjectRef(project.environmentId, project.id)),
     });
   }, [projectOrder, projects]);
+  const getCurrentRouteTarget = useCallback(() => {
+    const currentRouteParams = router.state.matches[router.state.matches.length - 1]?.params ?? {};
+    return resolveThreadRouteTarget(currentRouteParams);
+  }, [router]);
 
   const handleNewThread = useCallback(
     (
@@ -56,10 +60,12 @@ export function useHandleNewThread() {
       const {
         getDraftSessionByLogicalProjectKey,
         getDraftSession,
+        getDraftThread,
         applyStickyState,
         setDraftThreadContext,
         setLogicalProjectDraftThreadId,
       } = useComposerDraftStore.getState();
+      const currentRouteTarget = getCurrentRouteTarget();
       const project = projects.find(
         (candidate) =>
           candidate.id === projectRef.projectId &&
@@ -72,10 +78,10 @@ export function useHandleNewThread() {
       const hasWorktreePathOption = options?.worktreePath !== undefined;
       const hasEnvModeOption = options?.envMode !== undefined;
       const storedDraftThread = getDraftSessionByLogicalProjectKey(logicalProjectKey);
-      const latestActiveDraftThread: DraftThreadState | null = routeTarget
-        ? routeTarget.kind === "server"
-          ? getDraftThread(routeTarget.threadRef)
-          : getDraftSession(routeTarget.draftId)
+      const latestActiveDraftThread: DraftThreadState | null = currentRouteTarget
+        ? currentRouteTarget.kind === "server"
+          ? getDraftThread(currentRouteTarget.threadRef)
+          : getDraftSession(currentRouteTarget.draftId)
         : null;
       if (storedDraftThread) {
         return (async () => {
@@ -89,10 +95,13 @@ export function useHandleNewThread() {
           setLogicalProjectDraftThreadId(logicalProjectKey, projectRef, storedDraftThread.draftId, {
             threadId: storedDraftThread.threadId,
           });
-          if (routeTarget?.kind === "draft" && routeTarget.draftId === storedDraftThread.draftId) {
+          if (
+            currentRouteTarget?.kind === "draft" &&
+            currentRouteTarget.draftId === storedDraftThread.draftId
+          ) {
             return;
           }
-          await navigate({
+          await router.navigate({
             to: "/draft/$draftId",
             params: { draftId: storedDraftThread.draftId },
           });
@@ -101,17 +110,17 @@ export function useHandleNewThread() {
 
       if (
         latestActiveDraftThread &&
-        routeTarget?.kind === "draft" &&
+        currentRouteTarget?.kind === "draft" &&
         latestActiveDraftThread.logicalProjectKey === logicalProjectKey
       ) {
         if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
-          setDraftThreadContext(routeTarget.draftId, {
+          setDraftThreadContext(currentRouteTarget.draftId, {
             ...(hasBranchOption ? { branch: options?.branch ?? null } : {}),
             ...(hasWorktreePathOption ? { worktreePath: options?.worktreePath ?? null } : {}),
             ...(hasEnvModeOption ? { envMode: options?.envMode } : {}),
           });
         }
-        setLogicalProjectDraftThreadId(logicalProjectKey, projectRef, routeTarget.draftId, {
+        setLogicalProjectDraftThreadId(logicalProjectKey, projectRef, currentRouteTarget.draftId, {
           threadId: latestActiveDraftThread.threadId,
           createdAt: latestActiveDraftThread.createdAt,
           runtimeMode: latestActiveDraftThread.runtimeMode,
@@ -137,13 +146,13 @@ export function useHandleNewThread() {
         });
         applyStickyState(draftId);
 
-        await navigate({
+        await router.navigate({
           to: "/draft/$draftId",
           params: { draftId },
         });
       })();
     },
-    [getDraftThread, navigate, projects, routeTarget],
+    [getCurrentRouteTarget, router, projects],
   );
 
   return {

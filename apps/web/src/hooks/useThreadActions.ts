@@ -1,7 +1,7 @@
 import { parseScopedThreadKey, scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
 import { type ScopedThreadRef, ThreadId } from "@t3tools/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 import { useCallback } from "react";
 
 import { getFallbackThreadIdAfterDelete } from "../components/Sidebar.logic";
@@ -24,17 +24,14 @@ import { toastManager } from "../components/ui/toast";
 import { useSettings } from "./useSettings";
 
 export function useThreadActions() {
-  const appSettings = useSettings();
+  const sidebarThreadSortOrder = useSettings((settings) => settings.sidebarThreadSortOrder);
+  const confirmThreadDelete = useSettings((settings) => settings.confirmThreadDelete);
   const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearDraftThread);
   const clearProjectDraftThreadById = useComposerDraftStore(
     (store) => store.clearProjectDraftThreadById,
   );
   const clearTerminalState = useTerminalStateStore((state) => state.clearTerminalState);
-  const routeThreadRef = useParams({
-    strict: false,
-    select: (params) => resolveThreadRouteRef(params),
-  });
-  const navigate = useNavigate();
+  const router = useRouter();
   const { handleNewThread } = useHandleNewThread();
   const queryClient = useQueryClient();
 
@@ -49,6 +46,10 @@ export function useThreadActions() {
       threadRef: target,
     };
   }, []);
+  const getCurrentRouteThreadRef = useCallback(() => {
+    const currentRouteParams = router.state.matches[router.state.matches.length - 1]?.params ?? {};
+    return resolveThreadRouteRef(currentRouteParams);
+  }, [router]);
 
   const archiveThread = useCallback(
     async (target: ScopedThreadRef) => {
@@ -66,15 +67,16 @@ export function useThreadActions() {
         commandId: newCommandId(),
         threadId: threadRef.threadId,
       });
+      const currentRouteThreadRef = getCurrentRouteThreadRef();
 
       if (
-        routeThreadRef?.threadId === threadRef.threadId &&
-        routeThreadRef.environmentId === threadRef.environmentId
+        currentRouteThreadRef?.threadId === threadRef.threadId &&
+        currentRouteThreadRef.environmentId === threadRef.environmentId
       ) {
         await handleNewThread(scopeProjectRef(thread.environmentId, thread.projectId));
       }
     },
-    [handleNewThread, resolveThreadTarget, routeThreadRef],
+    [getCurrentRouteThreadRef, handleNewThread, resolveThreadTarget],
   );
 
   const unarchiveThread = useCallback(async (target: ScopedThreadRef) => {
@@ -152,14 +154,15 @@ export function useThreadActions() {
       }
 
       const deletedThreadIds = deletedIds ?? new Set<ThreadId>();
+      const currentRouteThreadRef = getCurrentRouteThreadRef();
       const shouldNavigateToFallback =
-        routeThreadRef?.threadId === threadRef.threadId &&
-        routeThreadRef.environmentId === threadRef.environmentId;
+        currentRouteThreadRef?.threadId === threadRef.threadId &&
+        currentRouteThreadRef.environmentId === threadRef.environmentId;
       const fallbackThreadId = getFallbackThreadIdAfterDelete({
         threads,
         deletedThreadId: threadRef.threadId,
         deletedThreadIds,
-        sortOrder: appSettings.sidebarThreadSortOrder,
+        sortOrder: sidebarThreadSortOrder,
       });
       await api.orchestration.dispatchCommand({
         type: "thread.delete",
@@ -180,7 +183,7 @@ export function useThreadActions() {
             scopeThreadRef(threadRef.environmentId, fallbackThreadId),
           );
           if (fallbackThread) {
-            await navigate({
+            await router.navigate({
               to: "/$environmentId/$threadId",
               params: buildThreadRouteParams(
                 scopeThreadRef(fallbackThread.environmentId, fallbackThread.id),
@@ -188,10 +191,10 @@ export function useThreadActions() {
               replace: true,
             });
           } else {
-            await navigate({ to: "/", replace: true });
+            await router.navigate({ to: "/", replace: true });
           }
         } else {
-          await navigate({ to: "/", replace: true });
+          await router.navigate({ to: "/", replace: true });
         }
       }
 
@@ -227,11 +230,11 @@ export function useThreadActions() {
       clearComposerDraftForThread,
       clearProjectDraftThreadById,
       clearTerminalState,
-      appSettings.sidebarThreadSortOrder,
-      navigate,
+      getCurrentRouteThreadRef,
+      router,
       queryClient,
       resolveThreadTarget,
-      routeThreadRef,
+      sidebarThreadSortOrder,
     ],
   );
 
@@ -244,7 +247,7 @@ export function useThreadActions() {
       if (!resolved) return;
       const { thread } = resolved;
 
-      if (appSettings.confirmThreadDelete && localApi) {
+      if (confirmThreadDelete && localApi) {
         const confirmed = await localApi.dialogs.confirm(
           [
             `Delete thread "${thread.title}"?`,
@@ -258,7 +261,7 @@ export function useThreadActions() {
 
       await deleteThread(target);
     },
-    [appSettings.confirmThreadDelete, deleteThread, resolveThreadTarget],
+    [confirmThreadDelete, deleteThread, resolveThreadTarget],
   );
 
   return {
