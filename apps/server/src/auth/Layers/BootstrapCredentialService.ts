@@ -23,7 +23,6 @@ type ConsumeResult =
     };
 
 const DEFAULT_ONE_TIME_TOKEN_TTL_MINUTES = Duration.minutes(5);
-
 export const makeBootstrapCredentialService = Effect.gen(function* () {
   const config = yield* ServerConfig;
   const grantsRef = yield* Ref.make(new Map<string, StoredBootstrapGrant>());
@@ -39,6 +38,8 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
     const now = yield* DateTime.now;
     yield* seedGrant(config.desktopBootstrapToken, {
       method: "desktop-bootstrap",
+      role: "owner",
+      subject: "desktop-bootstrap",
       expiresAt: DateTime.add(now, {
         milliseconds: Duration.toMillis(DEFAULT_ONE_TIME_TOKEN_TTL_MINUTES),
       }),
@@ -53,10 +54,15 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
       const now = yield* DateTime.now;
       yield* seedGrant(credential, {
         method: "one-time-token",
+        role: input?.role ?? "client",
+        subject: input?.subject ?? "one-time-token",
         expiresAt: DateTime.add(now, { milliseconds: Duration.toMillis(ttl) }),
         remainingUses: 1,
       });
-      return credential;
+      return {
+        credential,
+        expiresAt: DateTime.toUtc(DateTime.add(now, { milliseconds: Duration.toMillis(ttl) })),
+      } as const;
     });
 
   const consume: BootstrapCredentialServiceShape["consume"] = (credential) =>
@@ -109,6 +115,8 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
               _tag: "success",
               grant: {
                 method: grant.method,
+                role: grant.role,
+                subject: grant.subject,
                 expiresAt: grant.expiresAt,
               } satisfies BootstrapGrant,
             },

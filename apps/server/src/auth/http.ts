@@ -9,7 +9,7 @@ export const toUnauthorizedResponse = (error: AuthError) =>
     {
       error: error.message,
     },
-    { status: 401 },
+    { status: error.status ?? 401 },
   );
 
 export const authSessionRouteLayer = HttpRouter.add(
@@ -48,5 +48,23 @@ export const authBootstrapRouteLayer = HttpRouter.add(
         sameSite: "lax",
       }),
     );
+  }).pipe(Effect.catchTag("AuthError", (error) => Effect.succeed(toUnauthorizedResponse(error)))),
+);
+
+export const authPairingCredentialRouteLayer = HttpRouter.add(
+  "POST",
+  "/api/auth/pairing-token",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const serverAuth = yield* ServerAuth;
+    const session = yield* serverAuth.authenticateHttpRequest(request);
+    if (session.role !== "owner") {
+      return yield* new AuthError({
+        message: "Only owner sessions can create pairing credentials.",
+        status: 403,
+      });
+    }
+    const result = yield* serverAuth.issuePairingCredential();
+    return HttpServerResponse.jsonUnsafe(result, { status: 200 });
   }).pipe(Effect.catchTag("AuthError", (error) => Effect.succeed(toUnauthorizedResponse(error)))),
 );

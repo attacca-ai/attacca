@@ -1,4 +1,8 @@
-import { type AuthBootstrapResult, type AuthSessionState } from "@t3tools/contracts";
+import {
+  type AuthBootstrapResult,
+  type AuthPairingCredentialResult,
+  type AuthSessionState,
+} from "@t3tools/contracts";
 import { DateTime, Effect, Layer } from "effect";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 
@@ -42,6 +46,7 @@ export const makeServerAuth = Effect.gen(function* () {
       Effect.map((session) => ({
         subject: session.subject,
         method: session.method,
+        role: session.role,
         ...(session.expiresAt ? { expiresAt: session.expiresAt } : {}),
       })),
       Effect.mapError(
@@ -100,7 +105,8 @@ export const makeServerAuth = Effect.gen(function* () {
       Effect.flatMap((grant) =>
         sessions.issue({
           method: "browser-session-cookie",
-          subject: grant.method,
+          subject: grant.subject,
+          role: grant.role,
         }),
       ),
       Effect.map(
@@ -116,12 +122,28 @@ export const makeServerAuth = Effect.gen(function* () {
       ),
     );
 
+  const issuePairingCredential: ServerAuthShape["issuePairingCredential"] = (input) =>
+    bootstrapCredentials
+      .issueOneTimeToken({
+        role: input?.role ?? "client",
+        subject: input?.role === "owner" ? "owner-bootstrap" : "one-time-token",
+      })
+      .pipe(
+        Effect.map(
+          (issued) =>
+            ({
+              credential: issued.credential,
+              expiresAt: issued.expiresAt,
+            }) satisfies AuthPairingCredentialResult,
+        ),
+      );
+
   const issueStartupPairingUrl: ServerAuthShape["issueStartupPairingUrl"] = (baseUrl) =>
-    bootstrapCredentials.issueOneTimeToken().pipe(
-      Effect.map((credential) => {
+    issuePairingCredential({ role: "owner" }).pipe(
+      Effect.map((issued) => {
         const url = new URL(baseUrl);
         url.pathname = "/pair";
-        url.searchParams.set("token", credential);
+        url.searchParams.set("token", issued.credential);
         return url.toString();
       }),
     );
@@ -130,6 +152,7 @@ export const makeServerAuth = Effect.gen(function* () {
     getDescriptor: () => Effect.succeed(descriptor),
     getSessionState,
     exchangeBootstrapCredential,
+    issuePairingCredential,
     authenticateHttpRequest: authenticateRequest,
     authenticateWebSocketUpgrade: authenticateRequest,
     issueStartupPairingUrl,

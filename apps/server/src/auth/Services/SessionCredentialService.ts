@@ -2,10 +2,13 @@ import type { ServerAuthSessionMethod } from "@t3tools/contracts";
 import { Data, DateTime, Duration, ServiceMap } from "effect";
 import type { Effect } from "effect";
 
+export type SessionRole = "owner" | "client";
+
 export interface IssuedSession {
   readonly token: string;
   readonly method: ServerAuthSessionMethod;
   readonly expiresAt: DateTime.DateTime;
+  readonly role: SessionRole;
 }
 
 export interface VerifiedSession {
@@ -13,6 +16,7 @@ export interface VerifiedSession {
   readonly method: ServerAuthSessionMethod;
   readonly expiresAt?: DateTime.DateTime;
   readonly subject: string;
+  readonly role: SessionRole;
 }
 
 export class SessionCredentialError extends Data.TaggedError("SessionCredentialError")<{
@@ -26,6 +30,7 @@ export interface SessionCredentialServiceShape {
     readonly ttl?: Duration.Duration;
     readonly subject?: string;
     readonly method?: ServerAuthSessionMethod;
+    readonly role?: SessionRole;
   }) => Effect.Effect<IssuedSession, never>;
   readonly verify: (token: string) => Effect.Effect<VerifiedSession, SessionCredentialError>;
 }

@@ -31,11 +31,13 @@ it.layer(NodeServices.layer)("BootstrapCredentialServiceLive", (it) => {
   it.effect("issues one-time bootstrap tokens that can only be consumed once", () =>
     Effect.gen(function* () {
       const bootstrapCredentials = yield* BootstrapCredentialService;
-      const token = yield* bootstrapCredentials.issueOneTimeToken();
-      const first = yield* bootstrapCredentials.consume(token);
-      const second = yield* Effect.flip(bootstrapCredentials.consume(token));
+      const issued = yield* bootstrapCredentials.issueOneTimeToken();
+      const first = yield* bootstrapCredentials.consume(issued.credential);
+      const second = yield* Effect.flip(bootstrapCredentials.consume(issued.credential));
 
       expect(first.method).toBe("one-time-token");
+      expect(first.role).toBe("client");
+      expect(first.subject).toBe("one-time-token");
       expect(second._tag).toBe("BootstrapCredentialError");
       expect(second.message).toContain("Unknown bootstrap credential");
     }).pipe(Effect.provide(makeBootstrapCredentialLayer())),
@@ -46,7 +48,9 @@ it.layer(NodeServices.layer)("BootstrapCredentialServiceLive", (it) => {
       const bootstrapCredentials = yield* BootstrapCredentialService;
       const token = yield* bootstrapCredentials.issueOneTimeToken();
       const results = yield* Effect.all(
-        Array.from({ length: 8 }, () => Effect.result(bootstrapCredentials.consume(token))),
+        Array.from({ length: 8 }, () =>
+          Effect.result(bootstrapCredentials.consume(token.credential)),
+        ),
         {
           concurrency: "unbounded",
         },
@@ -71,6 +75,8 @@ it.layer(NodeServices.layer)("BootstrapCredentialServiceLive", (it) => {
       const second = yield* Effect.flip(bootstrapCredentials.consume("desktop-bootstrap-token"));
 
       expect(first.method).toBe("desktop-bootstrap");
+      expect(first.role).toBe("owner");
+      expect(first.subject).toBe("desktop-bootstrap");
       expect(second._tag).toBe("BootstrapCredentialError");
     }).pipe(
       Effect.provide(

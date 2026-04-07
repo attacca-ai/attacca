@@ -13,6 +13,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   PROVIDER_DISPLAY_NAMES,
+  type DesktopServerExposureState,
   type ScopedThreadRef,
   type ProviderKind,
   type ServerProvider,
@@ -23,6 +24,7 @@ import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
 import { normalizeModelSlug } from "@t3tools/shared/model";
 import { Equal } from "effect";
 import { APP_VERSION } from "../../branding";
+import { createServerPairingCredential } from "../../authBootstrap";
 import {
   canCheckForUpdate,
   getDesktopUpdateButtonTooltip,
@@ -34,6 +36,7 @@ import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { TraitsPicker } from "../chat/TraitsPicker";
 import { resolveAndPersistPreferredEditor } from "../../editorPreferences";
 import { isElectron } from "../../env";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
@@ -55,10 +58,20 @@ import {
 import { formatRelativeTime, formatRelativeTimeLabel } from "../../timestampFormat";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { Collapsible, CollapsibleContent } from "../ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { Spinner } from "../ui/spinner";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -447,6 +460,13 @@ function AboutVersionSection() {
   );
 }
 
+function resolveDesktopPairingUrl(endpointUrl: string, credential: string): string {
+  const url = new URL(endpointUrl);
+  url.pathname = "/pair";
+  url.searchParams.set("token", credential);
+  return url.toString();
+}
+
 export function useSettingsRestore(onRestored?: () => void) {
   const { theme, setTheme } = useTheme();
   const settings = useSettings();
@@ -781,6 +801,121 @@ export function GeneralSettingsPanel() {
           serverProviders[0]!.checkedAt,
         )
       : null;
+  const [desktopServerExposureState, setDesktopServerExposureState] =
+    useState<DesktopServerExposureState | null>(null);
+  const [desktopServerExposureError, setDesktopServerExposureError] = useState<string | null>(null);
+  const [isUpdatingDesktopServerExposure, setIsUpdatingDesktopServerExposure] = useState(false);
+  const [pendingDesktopServerExposureMode, setPendingDesktopServerExposureMode] = useState<
+    DesktopServerExposureState["mode"] | null
+  >(null);
+  const [desktopPairingUrl, setDesktopPairingUrl] = useState<string | null>(null);
+  const [isCreatingDesktopPairingUrl, setIsCreatingDesktopPairingUrl] = useState(false);
+  const desktopBridge = window.desktopBridge;
+  const { copyToClipboard: copyDesktopPairingUrl, isCopied: isDesktopPairingUrlCopied } =
+    useCopyToClipboard({
+      onCopy: () => {
+        toastManager.add({
+          type: "success",
+          title: "Pairing URL copied",
+          description: "Open it in the client you want to pair to this environment.",
+        });
+      },
+      onError: (error) => {
+        toastManager.add({
+          type: "error",
+          title: "Could not copy pairing URL",
+          description: error.message,
+        });
+      },
+    });
+  const handleCopyDesktopPairingUrl = useCallback(() => {
+    if (!desktopPairingUrl) return;
+    copyDesktopPairingUrl(desktopPairingUrl, undefined);
+  }, [copyDesktopPairingUrl, desktopPairingUrl]);
+
+  const createDesktopPairingUrl = useCallback(async (endpointUrl: string) => {
+    setIsCreatingDesktopPairingUrl(true);
+    setDesktopServerExposureError(null);
+    try {
+      const result = await createServerPairingCredential();
+      setDesktopPairingUrl(resolveDesktopPairingUrl(endpointUrl, result.credential));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create pairing URL.";
+      setDesktopServerExposureError(message);
+      toastManager.add({
+        type: "error",
+        title: "Could not create pairing URL",
+        description: message,
+      });
+    } finally {
+      setIsCreatingDesktopPairingUrl(false);
+    }
+  }, []);
+
+  const handleDesktopServerExposureChange = useCallback(
+    async (checked: boolean) => {
+      if (!desktopBridge) return;
+
+      setIsUpdatingDesktopServerExposure(true);
+      setDesktopServerExposureError(null);
+      try {
+        if (!checked) {
+          setDesktopPairingUrl(null);
+        }
+        const nextState = await desktopBridge.setServerExposureMode(
+          checked ? "network-accessible" : "local-only",
+        );
+        setDesktopServerExposureState(nextState);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to update network exposure.";
+        setPendingDesktopServerExposureMode(null);
+        setDesktopServerExposureError(message);
+        toastManager.add({
+          type: "error",
+          title: "Could not update network access",
+          description: message,
+        });
+        setIsUpdatingDesktopServerExposure(false);
+      }
+    },
+    [desktopBridge],
+  );
+
+  const handleConfirmDesktopServerExposureChange = useCallback(() => {
+    if (pendingDesktopServerExposureMode === null) return;
+    const checked = pendingDesktopServerExposureMode === "network-accessible";
+    void handleDesktopServerExposureChange(checked);
+  }, [handleDesktopServerExposureChange, pendingDesktopServerExposureMode]);
+
+  const handleCreateDesktopPairingUrl = useCallback(() => {
+    const endpointUrl = desktopServerExposureState?.endpointUrl;
+    if (!endpointUrl) return;
+    void createDesktopPairingUrl(endpointUrl);
+  }, [createDesktopPairingUrl, desktopServerExposureState?.endpointUrl]);
+
+  useEffect(() => {
+    if (!desktopBridge) return;
+
+    let cancelled = false;
+    void desktopBridge
+      .getServerExposureState()
+      .then((state) => {
+        if (cancelled) return;
+        setDesktopServerExposureState(state);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        const message =
+          error instanceof Error ? error.message : "Failed to load network exposure state.";
+        setDesktopServerExposureError(message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [desktopBridge]);
+
   return (
     <SettingsPageContainer>
       <SettingsSection title="General">
@@ -1444,6 +1579,141 @@ export function GeneralSettingsPanel() {
           }
         />
       </SettingsSection>
+
+      {desktopBridge ? (
+        <SettingsSection title="Access">
+          <SettingsRow
+            title="Network access"
+            description="Allow other clients to reach this environment instead of limiting it to this machine."
+            status={
+              <>
+                <span className="block">
+                  {desktopServerExposureState?.mode === "network-accessible" &&
+                  desktopServerExposureState.endpointUrl
+                    ? "This environment is reachable over the network."
+                    : desktopServerExposureState
+                      ? "This environment is currently limited to this machine."
+                      : "Loading network access state..."}
+                </span>
+                {desktopServerExposureState?.endpointUrl ? (
+                  <span className="mt-1 block break-all font-mono text-[11px] text-foreground">
+                    {desktopServerExposureState.endpointUrl}
+                  </span>
+                ) : null}
+                {desktopServerExposureError ? (
+                  <span className="mt-1 block text-destructive">{desktopServerExposureError}</span>
+                ) : null}
+              </>
+            }
+            control={
+              <AlertDialog
+                open={pendingDesktopServerExposureMode !== null}
+                onOpenChange={(open) => {
+                  if (isUpdatingDesktopServerExposure) {
+                    return;
+                  }
+                  if (!open) {
+                    setPendingDesktopServerExposureMode(null);
+                  }
+                }}
+              >
+                <Switch
+                  checked={desktopServerExposureState?.mode === "network-accessible"}
+                  disabled={!desktopServerExposureState || isUpdatingDesktopServerExposure}
+                  onCheckedChange={(checked) => {
+                    setPendingDesktopServerExposureMode(
+                      checked ? "network-accessible" : "local-only",
+                    );
+                  }}
+                  aria-label="Enable network access"
+                />
+                <AlertDialogPopup>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      {pendingDesktopServerExposureMode === "network-accessible"
+                        ? "Enable network access?"
+                        : "Disable network access?"}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {pendingDesktopServerExposureMode === "network-accessible"
+                        ? "T3 Code will restart to expose this environment over the network."
+                        : "T3 Code will restart and limit this environment back to this machine."}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogClose
+                      disabled={isUpdatingDesktopServerExposure}
+                      render={
+                        <Button variant="outline" disabled={isUpdatingDesktopServerExposure} />
+                      }
+                    >
+                      Cancel
+                    </AlertDialogClose>
+                    <Button
+                      onClick={handleConfirmDesktopServerExposureChange}
+                      disabled={
+                        pendingDesktopServerExposureMode === null || isUpdatingDesktopServerExposure
+                      }
+                    >
+                      {isUpdatingDesktopServerExposure ? (
+                        <>
+                          <Spinner className="size-3.5" />
+                          Restarting…
+                        </>
+                      ) : pendingDesktopServerExposureMode === "network-accessible" ? (
+                        "Restart and enable"
+                      ) : (
+                        "Restart and disable"
+                      )}
+                    </Button>
+                  </AlertDialogFooter>
+                </AlertDialogPopup>
+              </AlertDialog>
+            }
+          />
+          <SettingsRow
+            title="Pair another client"
+            description="Create a one-time pairing link for another browser or device."
+            status={
+              desktopPairingUrl ? (
+                <span className="block break-all font-mono text-[11px] text-foreground">
+                  {desktopPairingUrl}
+                </span>
+              ) : desktopServerExposureState?.mode === "local-only" ? (
+                <span className="block">Enable network access before creating a pairing link.</span>
+              ) : null
+            }
+            control={
+              <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={
+                    desktopServerExposureState?.mode !== "network-accessible" ||
+                    !desktopServerExposureState.endpointUrl ||
+                    isCreatingDesktopPairingUrl
+                  }
+                  onClick={handleCreateDesktopPairingUrl}
+                >
+                  {isCreatingDesktopPairingUrl
+                    ? "Creating..."
+                    : desktopPairingUrl
+                      ? "Refresh link"
+                      : "Create link"}
+                </Button>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={!desktopPairingUrl}
+                  onClick={handleCopyDesktopPairingUrl}
+                >
+                  {isDesktopPairingUrlCopied ? "Copied" : "Copy URL"}
+                </Button>
+              </div>
+            }
+          />
+        </SettingsSection>
+      ) : null}
 
       <SettingsSection title="About">
         {isElectron ? (
