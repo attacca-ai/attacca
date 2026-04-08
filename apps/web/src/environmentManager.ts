@@ -160,6 +160,7 @@ export function createSnapshotBootstrapController(input: {
   ) => Promise<void>;
 }) {
   let inFlight: Promise<void> | null = null;
+  let inFlightEnvironmentId: EnvironmentId | null = null;
 
   return {
     ensureSnapshotRecovery(
@@ -174,13 +175,18 @@ export function createSnapshotBootstrapController(input: {
         return Promise.resolve();
       }
 
-      if (inFlight !== null) {
+      if (inFlight !== null && inFlightEnvironmentId === environmentId) {
         return inFlight;
       }
 
-      inFlight = input.runSnapshotRecovery(reason, environmentId).finally(() => {
-        inFlight = null;
+      const nextInFlight = input.runSnapshotRecovery(reason, environmentId).finally(() => {
+        if (inFlight === nextInFlight) {
+          inFlight = null;
+          inFlightEnvironmentId = null;
+        }
       });
+      inFlight = nextInFlight;
+      inFlightEnvironmentId = environmentId;
 
       return inFlight;
     },
