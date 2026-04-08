@@ -49,9 +49,11 @@ import {
   addSavedEnvironment,
   reconnectSavedEnvironment,
   removeSavedEnvironment,
-} from "../../savedEnvironmentConnections";
-import { useSavedEnvironmentRegistryStore } from "../../savedEnvironmentRegistryStore";
-import { useSavedEnvironmentRuntimeStore } from "../../savedEnvironmentRuntimeStore";
+} from "../../environmentManager";
+import {
+  useSavedEnvironmentRegistryStore,
+  useSavedEnvironmentRuntimeStore,
+} from "../../savedEnvironmentsStore";
 
 const accessTimestampFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -401,7 +403,7 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
           <div className="flex min-h-5 items-center gap-1.5">
             <span className="relative flex size-2 shrink-0" aria-hidden>
               {isLive && (
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success/60 duration-[2000ms]" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success/60 duration-2000" />
               )}
               <span
                 className={cn(
@@ -679,7 +681,7 @@ function SavedBackendListRow({
           <div className="flex min-h-5 items-center gap-1.5">
             <span className="relative flex size-2 shrink-0" aria-hidden>
               {connectionState === "connecting" && (
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning/60 duration-[2000ms]" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning/60 duration-2000" />
               )}
               <span className={cn("relative inline-flex size-2 rounded-full", stateDotClassName)} />
             </span>
@@ -1051,7 +1053,7 @@ export function ConnectionsSettings() {
   return (
     <SettingsPageContainer>
       {canManageLocalBackend ? (
-        <SettingsSection title="Local backend access">
+        <SettingsSection title="Manage local backend">
           {desktopBridge ? (
             <SettingsRow
               title="Network access"
@@ -1142,7 +1144,7 @@ export function ConnectionsSettings() {
       )}
 
       <SettingsSection
-        title="Saved backends"
+        title="Remote environments"
         headerAction={
           <Dialog
             open={addBackendDialogOpen}
@@ -1157,17 +1159,14 @@ export function ConnectionsSettings() {
               render={
                 <Button size="xs" variant="outline">
                   <PlusIcon className="size-3" />
-                  Add backend
+                  Add environment
                 </Button>
               }
             />
             <DialogPopup>
               <DialogHeader>
-                <DialogTitle>Add Backend</DialogTitle>
-                <DialogDescription>
-                  Pair another environment to this client. The connection is only saved after the
-                  remote auth and websocket connection succeed.
-                </DialogDescription>
+                <DialogTitle>Add Environment</DialogTitle>
+                <DialogDescription>Pair another environment to this client.</DialogDescription>
                 <div className="flex gap-1 rounded-lg border border-border/60 bg-muted/50 p-1">
                   <button
                     type="button"
@@ -1298,7 +1297,8 @@ export function ConnectionsSettings() {
         {savedEnvironmentIds.length === 0 ? (
           <div className={ITEM_ROW_CLASSNAME}>
             <p className="text-xs text-muted-foreground">
-              No saved backends yet. Click &ldquo;Add backend&rdquo; to pair another environment.
+              No remote environments yet. Click &ldquo;Add environment&rdquo; to pair another
+              environment.
             </p>
           </div>
         ) : null}
