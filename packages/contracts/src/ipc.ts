@@ -113,30 +113,17 @@ export interface DesktopEnvironmentBootstrap {
 
 export type DesktopServerExposureMode = "local-only" | "network-accessible";
 
-export interface DesktopServerExposureHostOption {
-  host: string;
-  label: string;
-  interfaceName?: string;
-}
-
 export interface DesktopServerExposureState {
   mode: DesktopServerExposureMode;
   endpointUrl: string | null;
   advertisedHost: string | null;
-  availableHosts: readonly DesktopServerExposureHostOption[];
-  selectedHost: string | null;
-}
-
-export interface DesktopSetServerExposureInput {
-  mode: DesktopServerExposureMode;
-  host?: string | null;
 }
 
 export interface DesktopBridge {
   getWsUrl: () => string | null;
   getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
-  setServerExposure: (input: DesktopSetServerExposureInput) => Promise<DesktopServerExposureState>;
+  setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;

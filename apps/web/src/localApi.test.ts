@@ -142,15 +142,11 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
       mode: "local-only",
       endpointUrl: null,
       advertisedHost: null,
-      availableHosts: [],
-      selectedHost: null,
     }),
-    setServerExposure: async () => ({
+    setServerExposureMode: async () => ({
       mode: "local-only",
       endpointUrl: null,
       advertisedHost: null,
-      availableHosts: [],
-      selectedHost: null,
     }),
     pickFolder: async () => null,
     confirm: async () => true,

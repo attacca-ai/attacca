@@ -19,7 +19,6 @@ import type { MenuItemConstructorOptions } from "electron";
 import * as Effect from "effect/Effect";
 import type {
   DesktopTheme,
-  DesktopSetServerExposureInput,
   DesktopServerExposureMode,
   DesktopServerExposureState,
   DesktopUpdateActionResult,
@@ -39,10 +38,7 @@ import {
 } from "./desktopSettings";
 import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness";
 import { showDesktopConfirmDialog } from "./confirmDialog";
-import {
-  resolveDesktopServerExposure,
-  resolveDesktopServerExposureHostOptions,
-} from "./serverExposure";
+import { resolveDesktopServerExposure } from "./serverExposure";
 import { syncShellEnvironment } from "./syncShellEnvironment";
 import { getAutoUpdateDisabledReason, shouldBroadcastDownloadProgress } from "./updateState";
 import {
@@ -115,7 +111,6 @@ let backendHttpUrl = "";
 let backendWsUrl = "";
 let backendEndpointUrl: string | null = null;
 let backendAdvertisedHost: string | null = null;
-let backendSelectedHost: string | null = null;
 let backendReadinessAbortController: AbortController | null = null;
 let restartAttempt = 0;
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
@@ -205,8 +200,6 @@ function getDesktopServerExposureState(): DesktopServerExposureState {
     mode: desktopServerExposureMode,
     endpointUrl: backendEndpointUrl,
     advertisedHost: backendAdvertisedHost,
-    availableHosts: resolveDesktopServerExposureHostOptions(OS.networkInterfaces()),
-    selectedHost: backendSelectedHost,
   };
 }
 
@@ -215,44 +208,26 @@ function resolveAdvertisedHostOverride(): string | undefined {
   return override && override.length > 0 ? override : undefined;
 }
 
-function normalizeOptionalHost(value: string | null | undefined): string | undefined {
-  const normalized = value?.trim();
-  return normalized && normalized.length > 0 ? normalized : undefined;
-}
-
 async function applyDesktopServerExposureMode(
-  input: DesktopSetServerExposureInput,
+  mode: DesktopServerExposureMode,
   options?: { readonly persist?: boolean; readonly rejectIfUnavailable?: boolean },
 ): Promise<DesktopServerExposureState> {
-  const requestedMode = input.mode;
-  const preferredHost =
-    normalizeOptionalHost(input.host) ??
-    normalizeOptionalHost(desktopSettings.serverExposureHost) ??
-    resolveAdvertisedHostOverride();
+  const advertisedHostOverride = resolveAdvertisedHostOverride();
   const exposure = resolveDesktopServerExposure({
-    mode: requestedMode,
+    mode,
     port: backendPort,
     networkInterfaces: OS.networkInterfaces(),
-    ...(preferredHost ? { preferredHost } : {}),
+    ...(advertisedHostOverride ? { advertisedHostOverride } : {}),
   });
-
-  if (requestedMode === "network-accessible" && exposure.mode !== "network-accessible") {
-    if (options?.rejectIfUnavailable) {
-      throw new Error("No reachable network address is available for this desktop right now.");
-    }
-  }
 
   desktopServerExposureMode = exposure.mode;
   const previousSettings = desktopSettings;
-  backendSelectedHost = exposure.selectedHost;
   desktopSettings =
-    exposure.mode === previousSettings.serverExposureMode &&
-    exposure.selectedHost === previousSettings.serverExposureHost
+    exposure.mode === previousSettings.serverExposureMode
       ? previousSettings
       : {
           ...previousSettings,
           serverExposureMode: exposure.mode,
-          serverExposureHost: exposure.selectedHost,
         };
   backendBindHost = exposure.bindHost;
   backendHttpUrl = exposure.localHttpUrl;
@@ -260,7 +235,7 @@ async function applyDesktopServerExposureMode(
   backendEndpointUrl = exposure.endpointUrl;
   backendAdvertisedHost = exposure.advertisedHost;
 
-  if (options?.persist || exposure.mode !== requestedMode || desktopSettings !== previousSettings) {
+  if (options?.persist || exposure.mode !== mode) {
     writeDesktopSettings(DESKTOP_SETTINGS_PATH, desktopSettings);
   }
 
@@ -1369,39 +1344,21 @@ function registerIpcHandlers(): void {
   ipcMain.handle(GET_SERVER_EXPOSURE_STATE_CHANNEL, async () => getDesktopServerExposureState());
 
   ipcMain.removeHandler(SET_SERVER_EXPOSURE_MODE_CHANNEL);
-  ipcMain.handle(SET_SERVER_EXPOSURE_MODE_CHANNEL, async (_event, rawInput: unknown) => {
-    let input: DesktopSetServerExposureInput;
-    if (rawInput === "local-only" || rawInput === "network-accessible") {
-      input = { mode: rawInput };
-    } else if (
-      typeof rawInput === "object" &&
-      rawInput !== null &&
-      "mode" in rawInput &&
-      ((rawInput as { mode?: unknown }).mode === "local-only" ||
-        (rawInput as { mode?: unknown }).mode === "network-accessible")
-    ) {
-      const { mode, host } = rawInput as {
-        mode: DesktopServerExposureMode;
-        host?: unknown;
-      };
-      input = {
-        mode,
-        ...(typeof host === "string" || host === null ? { host } : {}),
-      };
-    } else {
+  ipcMain.handle(SET_SERVER_EXPOSURE_MODE_CHANNEL, async (_event, rawMode: unknown) => {
+    if (rawMode !== "local-only" && rawMode !== "network-accessible") {
       throw new Error("Invalid desktop server exposure input.");
     }
 
-    const nextHost = normalizeOptionalHost(input.host) ?? null;
-    if (input.mode === desktopServerExposureMode && nextHost === (backendSelectedHost ?? null)) {
+    const nextMode = rawMode as DesktopServerExposureMode;
+    if (nextMode === desktopServerExposureMode) {
       return getDesktopServerExposureState();
     }
 
-    const nextState = await applyDesktopServerExposureMode(input, {
+    const nextState = await applyDesktopServerExposureMode(nextMode, {
       persist: true,
       rejectIfUnavailable: true,
     });
-    relaunchDesktopApp(`serverExposureMode=${input.mode}${nextHost ? ` host=${nextHost}` : ""}`);
+    relaunchDesktopApp(`serverExposureMode=${nextMode}`);
     return nextState;
   });
 
@@ -1705,10 +1662,7 @@ async function bootstrap(): Promise<void> {
     );
   }
   const serverExposureState = await applyDesktopServerExposureMode(
-    {
-      mode: desktopSettings.serverExposureMode,
-      host: desktopSettings.serverExposureHost,
-    },
+    desktopSettings.serverExposureMode,
     {
       persist: desktopSettings.serverExposureMode !== DEFAULT_DESKTOP_SETTINGS.serverExposureMode,
     },

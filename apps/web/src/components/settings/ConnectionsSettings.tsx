@@ -5,7 +5,6 @@ import {
   type AuthClientSession,
   type AuthPairingLink,
   type DesktopServerExposureState,
-  type DesktopSetServerExposureInput,
   type EnvironmentId,
 } from "@t3tools/contracts";
 import { DateTime } from "effect";
@@ -741,19 +740,20 @@ export function ConnectionsSettings() {
   const [pendingDesktopServerExposureMode, setPendingDesktopServerExposureMode] = useState<
     DesktopServerExposureState["mode"] | null
   >(null);
-  const [pendingDesktopServerExposureHost, setPendingDesktopServerExposureHost] = useState("");
   const canManageLocalBackend = currentSessionRole === "owner";
   const isLocalBackendNetworkAccessible = desktopBridge
     ? desktopServerExposureState?.mode === "network-accessible"
     : currentAuthPolicy === "remote-reachable";
 
   const handleDesktopServerExposureChange = useCallback(
-    async (input: DesktopSetServerExposureInput) => {
+    async (checked: boolean) => {
       if (!desktopBridge) return;
       setIsUpdatingDesktopServerExposure(true);
       setDesktopServerExposureError(null);
       try {
-        const nextState = await desktopBridge.setServerExposure(input);
+        const nextState = await desktopBridge.setServerExposureMode(
+          checked ? "network-accessible" : "local-only",
+        );
         setDesktopServerExposureState(nextState);
         setPendingDesktopServerExposureMode(null);
         setIsUpdatingDesktopServerExposure(false);
@@ -775,23 +775,9 @@ export function ConnectionsSettings() {
 
   const handleConfirmDesktopServerExposureChange = useCallback(() => {
     if (pendingDesktopServerExposureMode === null) return;
-    if (pendingDesktopServerExposureMode === "network-accessible") {
-      const host = pendingDesktopServerExposureHost.trim();
-      if (host.length === 0) return;
-      void handleDesktopServerExposureChange({
-        mode: "network-accessible",
-        host,
-      });
-      return;
-    }
-    void handleDesktopServerExposureChange({
-      mode: "local-only",
-    });
-  }, [
-    handleDesktopServerExposureChange,
-    pendingDesktopServerExposureHost,
-    pendingDesktopServerExposureMode,
-  ]);
+    const checked = pendingDesktopServerExposureMode === "network-accessible";
+    void handleDesktopServerExposureChange(checked);
+  }, [handleDesktopServerExposureChange, pendingDesktopServerExposureMode]);
 
   const handleRevokeDesktopPairingLink = useCallback(async (id: string) => {
     setRevokingDesktopPairingLinkId(id);
@@ -1081,7 +1067,7 @@ export function ConnectionsSettings() {
                 }
                 control={
                   <AlertDialog
-                    open={pendingDesktopServerExposureMode === "local-only"}
+                    open={pendingDesktopServerExposureMode !== null}
                     onOpenChange={(open) => {
                       if (isUpdatingDesktopServerExposure) return;
                       if (!open) setPendingDesktopServerExposureMode(null);
@@ -1091,131 +1077,23 @@ export function ConnectionsSettings() {
                       checked={desktopServerExposureState?.mode === "network-accessible"}
                       disabled={!desktopServerExposureState || isUpdatingDesktopServerExposure}
                       onCheckedChange={(checked) => {
-                        if (checked) {
-                          setPendingDesktopServerExposureHost(
-                            desktopServerExposureState?.selectedHost?.trim() ||
-                              desktopServerExposureState?.availableHosts.find(
-                                (hostOption) => hostOption.host !== "0.0.0.0",
-                              )?.host ||
-                              desktopServerExposureState?.availableHosts[0]?.host ||
-                              "",
-                          );
-                          setPendingDesktopServerExposureMode("network-accessible");
-                          return;
-                        }
-                        setPendingDesktopServerExposureMode("local-only");
+                        setPendingDesktopServerExposureMode(
+                          checked ? "network-accessible" : "local-only",
+                        );
                       }}
                       aria-label="Enable network access"
                     />
-                    <Dialog
-                      open={pendingDesktopServerExposureMode === "network-accessible"}
-                      onOpenChange={(open) => {
-                        if (isUpdatingDesktopServerExposure) return;
-                        if (!open) {
-                          setPendingDesktopServerExposureMode(null);
-                        }
-                      }}
-                    >
-                      <DialogPopup>
-                        <DialogHeader>
-                          <DialogTitle>Enable network access?</DialogTitle>
-                          <DialogDescription>
-                            T3 Code will restart to expose this environment over the network. Choose
-                            which host to bind to, or use 0.0.0.0 to expose all interfaces.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <DialogPanel className="space-y-4">
-                          <div className="space-y-2">
-                            <p className="text-sm font-medium text-foreground">
-                              Choose network host
-                            </p>
-                            {desktopServerExposureState?.availableHosts.length ? (
-                              <div className="space-y-2">
-                                {desktopServerExposureState.availableHosts.map((hostOption) => {
-                                  const selected =
-                                    pendingDesktopServerExposureHost.trim() === hostOption.host;
-                                  return (
-                                    <Button
-                                      key={hostOption.host}
-                                      type="button"
-                                      variant={selected ? "secondary" : "outline"}
-                                      className="h-auto w-full justify-start px-3 py-2 text-left"
-                                      onClick={() =>
-                                        setPendingDesktopServerExposureHost(hostOption.host)
-                                      }
-                                    >
-                                      <span className="flex flex-col items-start">
-                                        <span>{hostOption.label}</span>
-                                        {hostOption.interfaceName ? (
-                                          <span className="text-xs text-muted-foreground">
-                                            Interface: {hostOption.interfaceName}
-                                          </span>
-                                        ) : null}
-                                      </span>
-                                    </Button>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <p className="text-sm text-muted-foreground">
-                                No network hosts were detected automatically. Enter a custom host
-                                below.
-                              </p>
-                            )}
-                          </div>
-                          <div className="space-y-2">
-                            <label
-                              className="text-sm font-medium text-foreground"
-                              htmlFor="desktop-network-host"
-                            >
-                              Custom host
-                            </label>
-                            <Input
-                              id="desktop-network-host"
-                              value={pendingDesktopServerExposureHost}
-                              onChange={(event) =>
-                                setPendingDesktopServerExposureHost(event.target.value)
-                              }
-                              placeholder="vpn.example.ts.net or 100.64.0.12"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Concrete hosts bind only that interface. Use `0.0.0.0` to expose all
-                              interfaces.
-                            </p>
-                          </div>
-                        </DialogPanel>
-                        <DialogFooter>
-                          <Button
-                            variant="outline"
-                            disabled={isUpdatingDesktopServerExposure}
-                            onClick={() => setPendingDesktopServerExposureMode(null)}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            onClick={handleConfirmDesktopServerExposureChange}
-                            disabled={
-                              isUpdatingDesktopServerExposure ||
-                              pendingDesktopServerExposureHost.trim().length === 0
-                            }
-                          >
-                            {isUpdatingDesktopServerExposure ? (
-                              <>
-                                <Spinner className="size-3.5" />
-                                Restarting…
-                              </>
-                            ) : (
-                              "Restart and enable"
-                            )}
-                          </Button>
-                        </DialogFooter>
-                      </DialogPopup>
-                    </Dialog>
                     <AlertDialogPopup>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Disable network access?</AlertDialogTitle>
+                        <AlertDialogTitle>
+                          {pendingDesktopServerExposureMode === "network-accessible"
+                            ? "Enable network access?"
+                            : "Disable network access?"}
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
-                          T3 Code will restart and limit this environment back to this machine.
+                          {pendingDesktopServerExposureMode === "network-accessible"
+                            ? "T3 Code will restart to expose this environment over the network."
+                            : "T3 Code will restart and limit this environment back to this machine."}
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -1230,7 +1108,7 @@ export function ConnectionsSettings() {
                         <Button
                           onClick={handleConfirmDesktopServerExposureChange}
                           disabled={
-                            pendingDesktopServerExposureMode !== "local-only" ||
+                            pendingDesktopServerExposureMode === null ||
                             isUpdatingDesktopServerExposure
                           }
                         >
@@ -1239,6 +1117,8 @@ export function ConnectionsSettings() {
                               <Spinner className="size-3.5" />
                               Restarting…
                             </>
+                          ) : pendingDesktopServerExposureMode === "network-accessible" ? (
+                            "Restart and enable"
                           ) : (
                             "Restart and disable"
                           )}
