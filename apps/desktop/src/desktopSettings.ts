@@ -4,10 +4,21 @@ import type { DesktopServerExposureMode } from "@t3tools/contracts";
 
 export interface DesktopSettings {
   readonly serverExposureMode: DesktopServerExposureMode;
+  readonly serverExposureHost: string | null;
 }
 
 export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   serverExposureMode: "local-only",
+  serverExposureHost: null,
+};
+
+const normalizeOptionalHost = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
 };
 
 export function readDesktopSettings(settingsPath: string): DesktopSettings {
@@ -19,11 +30,16 @@ export function readDesktopSettings(settingsPath: string): DesktopSettings {
     const raw = FS.readFileSync(settingsPath, "utf8");
     const parsed = JSON.parse(raw) as {
       readonly serverExposureMode?: unknown;
+      readonly serverExposureHost?: unknown;
+      readonly serverExposureAdvertisedHost?: unknown;
     };
 
     return {
       serverExposureMode:
         parsed.serverExposureMode === "network-accessible" ? "network-accessible" : "local-only",
+      serverExposureHost: normalizeOptionalHost(
+        parsed.serverExposureHost ?? parsed.serverExposureAdvertisedHost,
+      ),
     };
   } catch {
     return DEFAULT_DESKTOP_SETTINGS;
