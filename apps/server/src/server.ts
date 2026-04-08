@@ -7,6 +7,7 @@ import {
   otlpTracesProxyRouteLayer,
   projectFaviconRouteLayer,
   staticAndDevRouteLayer,
+  browserApiCorsLayer,
 } from "./http";
 import { fixPath } from "./os-jank";
 import { websocketRpcRouteLayer } from "./ws";
@@ -53,7 +54,6 @@ import { ObservabilityLive } from "./observability/Layers/Observability";
 import { ServerEnvironmentLive } from "./environment/Layers/ServerEnvironment";
 import {
   authBearerBootstrapRouteLayer,
-  authBearerBootstrapOptionsRouteLayer,
   authBootstrapRouteLayer,
   authClientsRevokeOthersRouteLayer,
   authClientsRevokeRouteLayer,
@@ -62,9 +62,7 @@ import {
   authPairingLinksRouteLayer,
   authPairingCredentialRouteLayer,
   authSessionCorsRouteLayer,
-  authSessionOptionsRouteLayer,
   authWebSocketTokenRouteLayer,
-  authWebSocketTokenOptionsRouteLayer,
 } from "./auth/http";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore";
 import { ServerAuthLive } from "./auth/Layers/ServerAuth";
@@ -239,7 +237,6 @@ const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
 
 export const makeRoutesLayer = Layer.mergeAll(
   authBearerBootstrapRouteLayer,
-  authBearerBootstrapOptionsRouteLayer,
   authBootstrapRouteLayer,
   authClientsRevokeOthersRouteLayer,
   authClientsRevokeRouteLayer,
@@ -248,15 +245,13 @@ export const makeRoutesLayer = Layer.mergeAll(
   authPairingLinksRouteLayer,
   authPairingCredentialRouteLayer,
   authSessionCorsRouteLayer,
-  authSessionOptionsRouteLayer,
   authWebSocketTokenRouteLayer,
-  authWebSocketTokenOptionsRouteLayer,
   attachmentsRouteLayer,
   otlpTracesProxyRouteLayer,
   projectFaviconRouteLayer,
   staticAndDevRouteLayer,
   websocketRpcRouteLayer,
-);
+).pipe(Layer.provide(browserApiCorsLayer));
 
 export const makeServerLayer = Layer.unwrap(
   Effect.gen(function* () {

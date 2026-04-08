@@ -99,14 +99,32 @@ async function fetchRemoteJson<T>(input: {
   readonly bearerToken?: string;
   readonly body?: unknown;
 }): Promise<T> {
-  const response = await fetch(remoteEndpointUrl(input.httpBaseUrl, input.pathname), {
-    method: input.method ?? "GET",
-    headers: {
-      ...(input.body !== undefined ? { "content-type": "application/json" } : {}),
-      ...(input.bearerToken ? { authorization: `Bearer ${input.bearerToken}` } : {}),
-    },
-    ...(input.body !== undefined ? { body: JSON.stringify(input.body) } : {}),
-  });
+  const requestUrl = remoteEndpointUrl(input.httpBaseUrl, input.pathname);
+  let response: Response;
+  try {
+    response = await fetch(requestUrl, {
+      method: input.method ?? "GET",
+      headers: {
+        ...(input.body !== undefined ? { "content-type": "application/json" } : {}),
+        ...(input.bearerToken ? { authorization: `Bearer ${input.bearerToken}` } : {}),
+      },
+      ...(input.body !== undefined ? { body: JSON.stringify(input.body) } : {}),
+    });
+  } catch (error) {
+    const endpointPath = new URL(requestUrl).pathname;
+    if (
+      input.bearerToken &&
+      error instanceof TypeError &&
+      typeof window !== "undefined" &&
+      window.location.origin !== new URL(requestUrl).origin
+    ) {
+      throw new Error(
+        `Cross-origin remote auth failed before ${endpointPath} completed. Check the remote backend's CORS policy for Authorization headers.`,
+        { cause: error },
+      );
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     throw new RemoteEnvironmentAuthHttpError(

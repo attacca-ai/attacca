@@ -39,26 +39,6 @@ export const authSessionRouteLayer = HttpRouter.add(
   }),
 );
 
-const REMOTE_AUTH_ALLOW_METHODS = "GET, POST, OPTIONS";
-const REMOTE_AUTH_ALLOW_HEADERS = "authorization, content-type";
-
-function withRemoteAuthCors(response: HttpServerResponse.HttpServerResponse) {
-  return response.pipe(
-    HttpServerResponse.setHeader("access-control-allow-origin", "*"),
-    HttpServerResponse.setHeader("access-control-allow-headers", REMOTE_AUTH_ALLOW_HEADERS),
-    HttpServerResponse.setHeader("access-control-max-age", "600"),
-  );
-}
-
-const remoteAuthPreflightResponse = withRemoteAuthCors(
-  HttpServerResponse.empty({
-    status: 204,
-    headers: {
-      "access-control-allow-methods": REMOTE_AUTH_ALLOW_METHODS,
-    },
-  }),
-);
-
 const PairingCredentialRequestHeaders = Schema.Struct({
   "content-length": Schema.optionalKey(Schema.String),
   "content-type": Schema.optionalKey(Schema.String),
@@ -129,11 +109,9 @@ export const authBearerBootstrapRouteLayer = HttpRouter.add(
       payload.credential,
       deriveAuthClientMetadata({ request }),
     );
-    return withRemoteAuthCors(
-      HttpServerResponse.jsonUnsafe(result satisfies AuthBearerBootstrapResult, {
-        status: 200,
-      }),
-    );
+    return HttpServerResponse.jsonUnsafe(result satisfies AuthBearerBootstrapResult, {
+      status: 200,
+    });
   }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
 );
 
@@ -145,11 +123,9 @@ export const authWebSocketTokenRouteLayer = HttpRouter.add(
     const serverAuth = yield* ServerAuth;
     const session = yield* serverAuth.authenticateHttpRequest(request);
     const result = yield* serverAuth.issueWebSocketToken(session);
-    return withRemoteAuthCors(
-      HttpServerResponse.jsonUnsafe(result satisfies AuthWebSocketTokenResult, {
-        status: 200,
-      }),
-    );
+    return HttpServerResponse.jsonUnsafe(result satisfies AuthWebSocketTokenResult, {
+      status: 200,
+    });
   }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
 );
 
@@ -160,26 +136,8 @@ export const authSessionCorsRouteLayer = HttpRouter.add(
     const request = yield* HttpServerRequest.HttpServerRequest;
     const serverAuth = yield* ServerAuth;
     const session = yield* serverAuth.getSessionState(request);
-    return withRemoteAuthCors(HttpServerResponse.jsonUnsafe(session, { status: 200 }));
+    return HttpServerResponse.jsonUnsafe(session, { status: 200 });
   }),
-);
-
-export const authSessionOptionsRouteLayer = HttpRouter.add(
-  "OPTIONS",
-  "/api/auth/session",
-  Effect.succeed(remoteAuthPreflightResponse),
-);
-
-export const authBearerBootstrapOptionsRouteLayer = HttpRouter.add(
-  "OPTIONS",
-  "/api/auth/bootstrap/bearer",
-  Effect.succeed(remoteAuthPreflightResponse),
-);
-
-export const authWebSocketTokenOptionsRouteLayer = HttpRouter.add(
-  "OPTIONS",
-  "/api/auth/ws-token",
-  Effect.succeed(remoteAuthPreflightResponse),
 );
 
 export const authPairingCredentialRouteLayer = HttpRouter.add(
