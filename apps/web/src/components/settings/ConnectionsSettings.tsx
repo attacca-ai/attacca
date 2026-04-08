@@ -31,6 +31,7 @@ import {
 import { Input } from "../ui/input";
 import {
   Dialog,
+  DialogFooter,
   DialogDescription,
   DialogHeader,
   DialogPanel,
@@ -43,6 +44,7 @@ import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Button } from "../ui/button";
+import { Textarea } from "../ui/textarea";
 import {
   addSavedEnvironment,
   reconnectSavedEnvironment,
@@ -185,6 +187,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
     () => new Date(pairingLink.expiresAt).getTime(),
     [pairingLink.expiresAt],
   );
+  const [isRevealDialogOpen, setIsRevealDialogOpen] = useState(false);
 
   const currentOriginPairingUrl = useMemo(
     () => resolveCurrentOriginPairingUrl(pairingLink.credential),
@@ -197,6 +200,10 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
         ? null
         : currentOriginPairingUrl;
   const copyValue = shareablePairingUrl ?? pairingLink.credential;
+  const canCopyToClipboard =
+    typeof window !== "undefined" &&
+    window.isSecureContext &&
+    navigator.clipboard?.writeText != null;
 
   const { copyToClipboard, isCopied } = useCopyToClipboard({
     onCopy: () => {
@@ -209,10 +216,11 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
       });
     },
     onError: (error) => {
+      setIsRevealDialogOpen(true);
       toastManager.add({
         type: "error",
-        title: "Could not copy pairing URL",
-        description: error.message,
+        title: canCopyToClipboard ? "Could not copy pairing URL" : "Clipboard copy unavailable",
+        description: canCopyToClipboard ? error.message : "Showing the full value instead.",
       });
     },
   });
@@ -277,14 +285,69 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
           ) : null}
         </div>
         <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
-          <Button
-            size="xs"
-            variant="ghost"
-            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-            onClick={handleCopy}
-          >
-            {isCopied ? "Copied" : shareablePairingUrl ? "Copy" : "Copy token"}
-          </Button>
+          <Dialog open={isRevealDialogOpen} onOpenChange={setIsRevealDialogOpen}>
+            {canCopyToClipboard ? (
+              <Button
+                size="xs"
+                variant="ghost"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={handleCopy}
+              >
+                {isCopied ? "Copied" : shareablePairingUrl ? "Copy" : "Copy token"}
+              </Button>
+            ) : (
+              <DialogTrigger
+                render={
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  />
+                }
+              >
+                {shareablePairingUrl ? "Show link" : "Show token"}
+              </DialogTrigger>
+            )}
+            <DialogPopup className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>{shareablePairingUrl ? "Pairing link" : "Pairing token"}</DialogTitle>
+                <DialogDescription>
+                  {shareablePairingUrl
+                    ? "Clipboard copy is unavailable here. Open or manually copy this full pairing URL on the device you want to connect."
+                    : "Clipboard copy is unavailable here. Manually copy this token and pair from another client using this backend's reachable host."}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogPanel className="space-y-4">
+                <Textarea
+                  readOnly
+                  value={copyValue}
+                  rows={shareablePairingUrl ? 4 : 3}
+                  className="text-xs leading-relaxed"
+                  onFocus={(event) => event.currentTarget.select()}
+                  onClick={(event) => event.currentTarget.select()}
+                />
+                {shareablePairingUrl ? (
+                  <div className="flex justify-center rounded-xl border border-border/60 bg-muted/30 p-4">
+                    <QRCodeSVG
+                      value={shareablePairingUrl}
+                      size={132}
+                      level="M"
+                      marginSize={2}
+                      title="Pairing link — scan to open on another device"
+                    />
+                  </div>
+                ) : null}
+              </DialogPanel>
+              <DialogFooter variant="bare">
+                <Button variant="outline" onClick={() => setIsRevealDialogOpen(false)}>
+                  Done
+                </Button>
+                {canCopyToClipboard ? (
+                  <Button onClick={handleCopy}>{isCopied ? "Copied" : "Copy again"}</Button>
+                ) : null}
+              </DialogFooter>
+            </DialogPopup>
+          </Dialog>
           <Button
             size="xs"
             variant="ghost"
