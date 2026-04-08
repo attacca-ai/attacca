@@ -336,7 +336,7 @@ describe("GeneralSettingsPanel observability", () => {
       </AppAtomRegistryProvider>,
     );
 
-    await expect.element(page.getByText("Local backend access")).toBeInTheDocument();
+    await expect.element(page.getByText("Manage local backend")).toBeInTheDocument();
     await expect.element(page.getByLabelText("Enable network access")).toBeDisabled();
     await expect
       .element(
@@ -347,7 +347,7 @@ describe("GeneralSettingsPanel observability", () => {
       .toBeInTheDocument();
     await expect.element(page.getByText("Pairing & clients")).not.toBeInTheDocument();
     await expect.element(page.getByText("Chrome on Mac")).toBeInTheDocument();
-    await expect.element(page.getByText("Saved backends")).toBeInTheDocument();
+    await expect.element(page.getByText("Remote environments")).toBeInTheDocument();
   });
 
   it("shows diagnostics inside About with a single logs-folder action", async () => {

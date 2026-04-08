@@ -6,9 +6,11 @@ import { __resetWsRpcAtomClientForTests } from "./rpc/client";
 import { resetRequestLatencyStateForTests } from "./rpc/requestLatencyState";
 import { resetServerStateForTests } from "./rpc/serverState";
 import { resetWsConnectionStateForTests } from "./rpc/wsConnectionState";
-import { resetSavedEnvironmentConnectionsForTests } from "./savedEnvironmentConnections";
-import { resetSavedEnvironmentRegistryStoreForTests } from "./savedEnvironmentRegistryStore";
-import { resetSavedEnvironmentRuntimeStoreForTests } from "./savedEnvironmentRuntimeStore";
+import { resetSavedEnvironmentConnectionsForTests } from "./environmentManager";
+import {
+  resetSavedEnvironmentRegistryStoreForTests,
+  resetSavedEnvironmentRuntimeStoreForTests,
+} from "./savedEnvironmentsStore";
 import { getPrimaryWsRpcClientEntry, WsRpcClient, __resetWsRpcClientForTests } from "./wsRpcClient";
 import { showContextMenuFallback } from "./contextMenuFallback";
 
