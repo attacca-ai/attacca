@@ -28,17 +28,6 @@ export const respondToAuthError = (error: AuthError) =>
     );
   });
 
-export const authSessionRouteLayer = HttpRouter.add(
-  "GET",
-  "/api/auth/session",
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const serverAuth = yield* ServerAuth;
-    const session = yield* serverAuth.getSessionState(request);
-    return HttpServerResponse.jsonUnsafe(session, { status: 200 });
-  }),
-);
-
 const REMOTE_AUTH_ALLOW_METHODS = "GET, POST, OPTIONS";
 const REMOTE_AUTH_ALLOW_HEADERS = "authorization, content-type";
 
