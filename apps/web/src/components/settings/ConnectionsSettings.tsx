@@ -397,7 +397,6 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
 });
 
 type PairingControlsRowProps = {
-  endpointUrl: string | null | undefined;
   isLoading: boolean;
   error: string | null;
   clientSessions: ReadonlyArray<ServerClientSessionRecord>;
@@ -406,7 +405,6 @@ type PairingControlsRowProps = {
 };
 
 const PairingControlsRow = memo(function PairingControlsRow({
-  endpointUrl,
   isLoading,
   error,
   clientSessions,
@@ -468,7 +466,7 @@ const PairingControlsRow = memo(function PairingControlsRow({
             <Button
               size="xs"
               variant="default"
-              disabled={!endpointUrl || isCreatingPairingLink}
+              disabled={isCreatingPairingLink}
               onClick={() => void handleCreatePairingLink()}
             >
               {isCreatingPairingLink ? "Creating…" : "Create link"}
@@ -549,7 +547,6 @@ function PairingAndClientsSection({
   return (
     <>
       <PairingControlsRow
-        endpointUrl={endpointUrl}
         isLoading={isLoading}
         error={error}
         clientSessions={clientSessions}
