@@ -130,8 +130,8 @@ export function resolveDesktopServerExposure(input: {
   return {
     mode: input.mode,
     bindHost: selectedHost,
-    localHttpUrl,
-    localWsUrl,
+    localHttpUrl: `http://${selectedHost}:${input.port}`,
+    localWsUrl: `ws://${selectedHost}:${input.port}`,
     endpointUrl: `http://${selectedHost}:${input.port}`,
     advertisedHost: selectedHost,
     availableHosts,
