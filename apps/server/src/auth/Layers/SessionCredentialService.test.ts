@@ -1,6 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
+import { Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 
 import type { ServerConfigShape } from "../../config.ts";
@@ -79,6 +79,23 @@ it.layer(NodeServices.layer)("SessionCredentialServiceLive", (it) => {
       expect(verified.method).toBe("bearer-session-token");
       expect(verified.subject).toBe("test-clock");
       expect(verified.role).toBe("client");
+    }).pipe(Effect.provide(Layer.merge(makeSessionCredentialLayer(), TestClock.layer()))),
+  );
+
+  it.effect("rejects websocket tokens once the parent session has expired", () =>
+    Effect.gen(function* () {
+      const sessions = yield* SessionCredentialService;
+      const issued = yield* sessions.issue({
+        method: "bearer-session-token",
+        subject: "short-lived",
+        ttl: Duration.seconds(1),
+      });
+      const websocket = yield* sessions.issueWebSocketToken(issued.sessionId);
+
+      yield* TestClock.adjust(Duration.seconds(2));
+
+      const error = yield* Effect.flip(sessions.verifyWebSocketToken(websocket.token));
+      expect(error.message).toContain("expired");
     }).pipe(Effect.provide(Layer.merge(makeSessionCredentialLayer(), TestClock.layer()))),
   );
 

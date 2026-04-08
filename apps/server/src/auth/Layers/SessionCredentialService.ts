@@ -358,6 +358,11 @@ export const makeSessionCredentialService = Effect.gen(function* () {
           message: "Unknown websocket session.",
         });
       }
+      if (row.value.expiresAt.epochMilliseconds <= now) {
+        return yield* new SessionCredentialError({
+          message: "Websocket session expired.",
+        });
+      }
       if (row.value.revokedAt !== null) {
         return yield* new SessionCredentialError({
           message: "Websocket session revoked.",
