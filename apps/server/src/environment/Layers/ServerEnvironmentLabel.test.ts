@@ -114,6 +114,20 @@ describe("resolveServerEnvironmentLabel", () => {
     }),
   );
 
+  it.effect("falls back to the hostname when the friendly-label command is missing", () =>
+    Effect.gen(function* () {
+      mockedRunProcess.mockRejectedValueOnce(new Error("spawn scutil ENOENT"));
+
+      const result = yield* resolveServerEnvironmentLabel({
+        cwdBaseName: "t3code",
+        platform: "darwin",
+        hostname: "macbook-pro",
+      }).pipe(Effect.provide(NoopFileSystemLayer));
+
+      expect(result).toBe("macbook-pro");
+    }),
+  );
+
   it.effect("falls back to the cwd basename when the hostname is blank", () =>
     Effect.gen(function* () {
       mockedRunProcess.mockResolvedValueOnce({
