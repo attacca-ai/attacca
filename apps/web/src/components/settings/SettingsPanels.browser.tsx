@@ -345,9 +345,11 @@ describe("GeneralSettingsPanel observability", () => {
         ),
       )
       .toBeInTheDocument();
-    await expect.element(page.getByText("Pairing & clients")).not.toBeInTheDocument();
-    await expect.element(page.getByText("Chrome on Mac")).toBeInTheDocument();
-    await expect.element(page.getByText("Remote environments")).toBeInTheDocument();
+    await expect.element(page.getByText("Authorized clients")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Chrome on Mac")).not.toBeInTheDocument();
+    await expect
+      .element(page.getByRole("heading", { name: "Remote environments", exact: true }))
+      .toBeInTheDocument();
   });
 
   it("shows diagnostics inside About with a single logs-folder action", async () => {
@@ -469,26 +471,25 @@ describe("GeneralSettingsPanel observability", () => {
 
     await render(
       <AppAtomRegistryProvider>
-        <GeneralSettingsPanel />
+        <ConnectionsSettings />
       </AppAtomRegistryProvider>,
     );
 
-    await expect.element(page.getByText("Network access")).toBeInTheDocument();
-    await expect.element(page.getByText("Pair another client")).toBeInTheDocument();
+    await expect.element(page.getByText("Authorized clients")).toBeInTheDocument();
+    await expect.element(page.getByText("Revoke others")).toBeInTheDocument();
     await expect.element(page.getByText("This Mac")).toBeInTheDocument();
-    await page.getByText("Create link", { exact: true }).click();
+    await page.getByRole("button", { name: "Create link", exact: true }).click();
+    await expect.element(page.getByText("Create pairing link")).toBeInTheDocument();
+    await page.getByRole("button", { name: "Create link", exact: true }).click();
     authAccessHarness.emitPairingLinkUpserted(pairingLinks[0]!);
     authAccessHarness.emitClientUpserted(clientSessions[1]!);
     await expect
-      .element(page.getByText("http://192.168.1.44:3773/pair?token=pairing-token"))
+      .element(page.getByText("Client · Mobile · iOS · Safari · 192.168.1.88"))
       .toBeInTheDocument();
-    await expect.element(page.getByText("Julius iPhone")).toBeInTheDocument();
     await expect
-      .element(page.getByText("Offline · Client · Mobile · iOS · Safari · 192.168.1.88"))
+      .element(page.getByRole("button", { name: "Copy", exact: true }))
       .toBeInTheDocument();
-    await expect.element(page.getByText("Active pairing links")).toBeInTheDocument();
-    await expect.element(page.getByText("Paired clients")).toBeInTheDocument();
-    await expect.element(page.getByText("Revoke other clients")).toBeInTheDocument();
+    await expect.element(page.getByText("Revoke others")).toBeInTheDocument();
   });
 
   it("revokes all other paired clients from settings", async () => {
@@ -563,40 +564,42 @@ describe("GeneralSettingsPanel observability", () => {
 
     await render(
       <AppAtomRegistryProvider>
-        <GeneralSettingsPanel />
+        <ConnectionsSettings />
       </AppAtomRegistryProvider>,
     );
 
     await expect.element(page.getByText("Julius iPhone")).toBeInTheDocument();
-    await page.getByText("Revoke other clients", { exact: true }).click();
+    await page.getByRole("button", { name: "Revoke others", exact: true }).click();
     await expect.element(page.getByText("This Mac")).toBeInTheDocument();
     await expect.element(page.getByText("Julius iPhone")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalled();
   });
 
   it("shows a disabled network access toggle with guidance in desktop builds", async () => {
-    window.desktopBridge = createDesktopBridgeStub();
+    const desktopBridge = createDesktopBridgeStub();
+    window.desktopBridge = desktopBridge;
 
     setServerConfigSnapshot(createBaseServerConfig());
 
     await render(
       <AppAtomRegistryProvider>
-        <GeneralSettingsPanel />
+        <ConnectionsSettings />
       </AppAtomRegistryProvider>,
     );
 
     const networkAccessToggle = page.getByLabelText("Enable network access");
-    await expect.element(networkAccessToggle).toBeDisabled();
-    await page.getByLabelText("Enable network access").hover();
+    await expect.element(networkAccessToggle).not.toBeDisabled();
+    await networkAccessToggle.click();
+    await expect.element(page.getByText("Enable network access?")).toBeInTheDocument();
     await expect
       .element(page.getByText("T3 Code will restart to expose this environment over the network."))
-      .not.toBeInTheDocument();
+      .toBeInTheDocument();
+    await page.getByRole("button", { name: "Restart and enable", exact: true }).click();
+    await vi.waitFor(() => {
+      expect(desktopBridge.setServerExposureMode).toHaveBeenCalledWith("network-accessible");
+    });
     await expect
-      .element(
-        page.getByText(
-          "Network exposure changes restart the backend and can only be controlled from the desktop app shell.",
-        ),
-      )
+      .element(page.getByText("Reachable at http://192.168.1.44:3773"))
       .toBeInTheDocument();
   });
 
