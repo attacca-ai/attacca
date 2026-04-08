@@ -1666,6 +1666,15 @@ export function selectSidebarThreadsForProjectRef(
   });
 }
 
+export function selectSidebarThreadsForProjectRefs(
+  state: AppState,
+  refs: readonly ScopedProjectRef[],
+): SidebarThreadSummary[] {
+  if (refs.length === 0) return [];
+  if (refs.length === 1) return selectSidebarThreadsForProjectRef(state, refs[0]);
+  return refs.flatMap((ref) => selectSidebarThreadsForProjectRef(state, ref));
+}
+
 export function selectBootstrapCompleteForActiveEnvironment(state: AppState): boolean {
   return selectEnvironmentState(state, state.activeEnvironmentId).bootstrapComplete;
 }

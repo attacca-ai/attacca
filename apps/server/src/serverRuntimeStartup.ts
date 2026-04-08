@@ -1,5 +1,6 @@
 import {
   CommandId,
+  DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   type ModelSelection,
   ProjectId,
@@ -150,6 +151,11 @@ export const launchStartupHeartbeat = recordStartupHeartbeat.pipe(
   Effect.asVoid,
 );
 
+export const getAutoBootstrapDefaultModelSelection = (): ModelSelection => ({
+  provider: "codex",
+  model: DEFAULT_MODEL_BY_PROVIDER.codex,
+});
+
 const autoBootstrapWelcome = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig;
   const projectionReadModelQuery = yield* ProjectionSnapshotQuery;
@@ -171,10 +177,7 @@ const autoBootstrapWelcome = Effect.gen(function* () {
         const createdAt = new Date().toISOString();
         nextProjectId = ProjectId.makeUnsafe(crypto.randomUUID());
         const bootstrapProjectTitle = path.basename(serverConfig.cwd) || "project";
-        nextProjectDefaultModelSelection = {
-          provider: "codex",
-          model: "gpt-5-codex",
-        };
+        nextProjectDefaultModelSelection = getAutoBootstrapDefaultModelSelection();
         yield* orchestrationEngine.dispatch({
           type: "project.create",
           commandId: CommandId.makeUnsafe(crypto.randomUUID()),
@@ -186,10 +189,8 @@ const autoBootstrapWelcome = Effect.gen(function* () {
         });
       } else {
         nextProjectId = existingProject.value.id;
-        nextProjectDefaultModelSelection = existingProject.value.defaultModelSelection ?? {
-          provider: "codex",
-          model: "gpt-5-codex",
-        };
+        nextProjectDefaultModelSelection =
+          existingProject.value.defaultModelSelection ?? getAutoBootstrapDefaultModelSelection();
       }
 
       const existingThreadId =

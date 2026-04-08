@@ -1,4 +1,4 @@
-import { InfoIcon, PlusIcon, QrCodeIcon } from "lucide-react";
+import { PlusIcon, QrCodeIcon } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -39,7 +39,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { Spinner } from "../ui/spinner";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -289,24 +299,11 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
         <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
           <Dialog open={isRevealDialogOpen} onOpenChange={setIsRevealDialogOpen}>
             {canCopyToClipboard ? (
-              <Button
-                size="xs"
-                variant="ghost"
-                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                onClick={handleCopy}
-              >
+              <Button size="xs" variant="outline" onClick={handleCopy}>
                 {isCopied ? "Copied" : shareablePairingUrl ? "Copy" : "Copy token"}
               </Button>
             ) : (
-              <DialogTrigger
-                render={
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  />
-                }
-              >
+              <DialogTrigger render={<Button size="xs" variant="outline" />}>
                 {shareablePairingUrl ? "Show link" : "Show token"}
               </DialogTrigger>
             )}
@@ -345,15 +342,16 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
                   Done
                 </Button>
                 {canCopyToClipboard ? (
-                  <Button onClick={handleCopy}>{isCopied ? "Copied" : "Copy again"}</Button>
+                  <Button variant="outline" size="xs" onClick={handleCopy}>
+                    {isCopied ? "Copied" : "Copy again"}
+                  </Button>
                 ) : null}
               </DialogFooter>
             </DialogPopup>
           </Dialog>
           <Button
             size="xs"
-            variant="ghost"
-            className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+            variant="destructive-outline"
             disabled={revokingPairingLinkId === pairingLink.id}
             onClick={() => void onRevoke(pairingLink.id)}
           >
@@ -376,11 +374,6 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
   revokingClientSessionId,
   onRevokeSession,
 }: ConnectedClientListRowProps) {
-  const stateLabel = clientSession.current
-    ? "This client"
-    : clientSession.connected
-      ? "Connected"
-      : "Offline";
   const isLive = clientSession.current || clientSession.connected;
   const roleLabel = clientSession.role === "owner" ? "Owner" : "Client";
   const deviceInfoBits = [
@@ -413,69 +406,45 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
               />
             </span>
             <h3 className="text-sm font-medium text-foreground">{primaryLabel}</h3>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground/50 outline-none hover:bg-accent/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-                    aria-label="Show issued and expiry times"
-                  />
-                }
-              >
-                <InfoIcon className="size-3 shrink-0" />
-              </TooltipTrigger>
-              <TooltipPopup side="top" className="max-w-xs text-left text-xs">
-                <p className="text-muted-foreground">
-                  Issued {formatAccessTimestamp(clientSession.issuedAt)}
-                </p>
-                <p className="mt-1 text-muted-foreground">
-                  Expires {formatAccessTimestamp(clientSession.expiresAt)}
-                </p>
-              </TooltipPopup>
-            </Tooltip>
+            {clientSession.current ? (
+              <span className="text-[10px] text-muted-foreground/80 rounded-md border border-border/50 bg-muted/50 px-1 py-0.5">
+                This device
+              </span>
+            ) : null}
           </div>
           <p className="text-xs text-muted-foreground">
-            {[stateLabel, roleLabel, ...deviceInfoBits].join(" · ")}
+            {[roleLabel, ...deviceInfoBits].join(" · ")}
           </p>
         </div>
         <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
-          {clientSession.current ? (
-            <span className="rounded-md border border-border/50 bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-              This device
-            </span>
-          ) : (
+          {!clientSession.current ? (
             <Button
               size="xs"
-              variant="ghost"
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+              variant="destructive-outline"
               disabled={revokingClientSessionId === clientSession.sessionId}
               onClick={() => void onRevokeSession(clientSession.sessionId)}
             >
               {revokingClientSessionId === clientSession.sessionId ? "Revoking…" : "Revoke"}
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
   );
 });
 
-type PairingControlsRowProps = {
-  isLoading: boolean;
-  error: string | null;
+type AuthorizedClientsHeaderActionProps = {
   clientSessions: ReadonlyArray<ServerClientSessionRecord>;
   isRevokingOtherClients: boolean;
   onRevokeOtherClients: () => void;
 };
 
-const PairingControlsRow = memo(function PairingControlsRow({
-  isLoading,
-  error,
+const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHeaderAction({
   clientSessions,
   isRevokingOtherClients,
   onRevokeOtherClients,
-}: PairingControlsRowProps) {
+}: AuthorizedClientsHeaderActionProps) {
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [pairingLabel, setPairingLabel] = useState("");
   const [isCreatingPairingLink, setIsCreatingPairingLink] = useState(false);
 
@@ -484,6 +453,7 @@ const PairingControlsRow = memo(function PairingControlsRow({
     try {
       await createServerPairingCredential(pairingLabel);
       setPairingLabel("");
+      setDialogOpen(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create pairing URL.";
       toastManager.add({
@@ -497,49 +467,71 @@ const PairingControlsRow = memo(function PairingControlsRow({
   }, [pairingLabel]);
 
   return (
-    <>
-      <SettingsRow
-        title="Pairing & clients"
-        description={error ?? "Manage pairing links and authorized client sessions."}
-        status={
-          error ? (
-            <span className="block text-destructive">{error}</span>
-          ) : isLoading ? (
-            <span className="block text-muted-foreground/60">Syncing…</span>
-          ) : null
+    <div className="flex items-center gap-2">
+      <Button
+        size="xs"
+        variant="destructive-outline"
+        disabled={
+          isRevokingOtherClients || clientSessions.every((clientSession) => clientSession.current)
         }
-        control={
-          <div className="flex items-center gap-2">
-            <Input
-              value={pairingLabel}
-              onChange={(event) => setPairingLabel(event.target.value)}
-              placeholder="Client label (optional)"
-              disabled={isCreatingPairingLink}
-              className="h-7 w-44 text-xs"
-            />
-            <Button
-              size="xs"
-              variant="outline"
-              disabled={
-                isRevokingOtherClients ||
-                clientSessions.every((clientSession) => clientSession.current)
-              }
-              onClick={() => void onRevokeOtherClients()}
-            >
-              {isRevokingOtherClients ? "Revoking…" : "Revoke others"}
+        onClick={() => void onRevokeOtherClients()}
+      >
+        {isRevokingOtherClients ? "Revoking…" : "Revoke others"}
+      </Button>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) {
+            setPairingLabel("");
+          }
+        }}
+      >
+        <DialogTrigger
+          render={
+            <Button size="xs" variant="default">
+              <PlusIcon className="size-3" />
+              Create link
             </Button>
+          }
+        />
+        <DialogPopup className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Create pairing link</DialogTitle>
+            <DialogDescription>
+              Generate a one-time link that another device can use to pair with this backend as an
+              authorized client.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogPanel>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-foreground">
+                Client label (optional)
+              </span>
+              <Input
+                value={pairingLabel}
+                onChange={(event) => setPairingLabel(event.target.value)}
+                placeholder="e.g. Living room iPad"
+                disabled={isCreatingPairingLink}
+                autoFocus
+              />
+            </label>
+          </DialogPanel>
+          <DialogFooter variant="bare">
             <Button
-              size="xs"
-              variant="default"
+              variant="outline"
               disabled={isCreatingPairingLink}
-              onClick={() => void handleCreatePairingLink()}
+              onClick={() => setDialogOpen(false)}
             >
+              Cancel
+            </Button>
+            <Button disabled={isCreatingPairingLink} onClick={() => void handleCreatePairingLink()}>
               {isCreatingPairingLink ? "Creating…" : "Create link"}
             </Button>
-          </div>
-        }
-      />
-    </>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+    </div>
   );
 });
 
@@ -593,44 +585,6 @@ const PairingClientsList = memo(function PairingClientsList({
     </>
   );
 });
-
-type PairingAndClientsSectionProps = PairingControlsRowProps & PairingClientsListProps;
-
-function PairingAndClientsSection({
-  endpointUrl,
-  isLoading,
-  error,
-  pairingLinks,
-  clientSessions,
-  revokingPairingLinkId,
-  revokingClientSessionId,
-  isRevokingOtherClients,
-  onRevokePairingLink,
-  onRevokeClientSession,
-  onRevokeOtherClients,
-}: PairingAndClientsSectionProps) {
-  return (
-    <>
-      <PairingControlsRow
-        isLoading={isLoading}
-        error={error}
-        clientSessions={clientSessions}
-        isRevokingOtherClients={isRevokingOtherClients}
-        onRevokeOtherClients={onRevokeOtherClients}
-      />
-      <PairingClientsList
-        endpointUrl={endpointUrl}
-        isLoading={isLoading}
-        pairingLinks={pairingLinks}
-        clientSessions={clientSessions}
-        revokingPairingLinkId={revokingPairingLinkId}
-        revokingClientSessionId={revokingClientSessionId}
-        onRevokePairingLink={onRevokePairingLink}
-        onRevokeClientSession={onRevokeClientSession}
-      />
-    </>
-  );
-}
 
 type SavedBackendListRowProps = {
   environmentId: EnvironmentId;
@@ -719,8 +673,7 @@ function SavedBackendListRow({
           </Button>
           <Button
             size="xs"
-            variant="ghost"
-            className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+            variant="destructive-outline"
             disabled={removingEnvironmentId === environmentId}
             onClick={() => void onRemove(environmentId)}
           >
@@ -783,10 +736,46 @@ export function ConnectionsSettings() {
     useState<EnvironmentId | null>(null);
   const [removingSavedEnvironmentId, setRemovingSavedEnvironmentId] =
     useState<EnvironmentId | null>(null);
+  const [isUpdatingDesktopServerExposure, setIsUpdatingDesktopServerExposure] = useState(false);
+  const [pendingDesktopServerExposureMode, setPendingDesktopServerExposureMode] = useState<
+    DesktopServerExposureState["mode"] | null
+  >(null);
   const canManageLocalBackend = currentSessionRole === "owner";
   const isLocalBackendNetworkAccessible = desktopBridge
     ? desktopServerExposureState?.mode === "network-accessible"
     : currentAuthPolicy === "remote-reachable";
+
+  const handleDesktopServerExposureChange = useCallback(
+    async (checked: boolean) => {
+      if (!desktopBridge) return;
+      setIsUpdatingDesktopServerExposure(true);
+      setDesktopServerExposureError(null);
+      try {
+        const nextState = await desktopBridge.setServerExposureMode(
+          checked ? "network-accessible" : "local-only",
+        );
+        setDesktopServerExposureState(nextState);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to update network exposure.";
+        setPendingDesktopServerExposureMode(null);
+        setDesktopServerExposureError(message);
+        toastManager.add({
+          type: "error",
+          title: "Could not update network access",
+          description: message,
+        });
+        setIsUpdatingDesktopServerExposure(false);
+      }
+    },
+    [desktopBridge],
+  );
+
+  const handleConfirmDesktopServerExposureChange = useCallback(() => {
+    if (pendingDesktopServerExposureMode === null) return;
+    const checked = pendingDesktopServerExposureMode === "network-accessible";
+    void handleDesktopServerExposureChange(checked);
+  }, [handleDesktopServerExposureChange, pendingDesktopServerExposureMode]);
 
   const handleRevokeDesktopPairingLink = useCallback(async (id: string) => {
     setRevokingDesktopPairingLinkId(id);
@@ -1053,87 +1042,146 @@ export function ConnectionsSettings() {
   return (
     <SettingsPageContainer>
       {canManageLocalBackend ? (
-        <SettingsSection title="Manage local backend">
-          {desktopBridge ? (
-            <SettingsRow
-              title="Network access"
-              description={
-                desktopServerExposureState?.endpointUrl
-                  ? `Reachable at ${desktopServerExposureState.endpointUrl}`
-                  : desktopServerExposureState
-                    ? "Limited to this machine."
-                    : "Loading…"
-              }
-              status={
-                desktopServerExposureError ? (
-                  <span className="block text-destructive">{desktopServerExposureError}</span>
-                ) : null
-              }
-              control={
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <span className="inline-flex">
-                        <Switch
-                          checked={desktopServerExposureState?.mode === "network-accessible"}
-                          disabled
-                          aria-label="Enable network access"
-                        />
-                      </span>
-                    }
-                  />
-                  <TooltipPopup side="top">
-                    Network exposure changes restart the backend and can only be controlled from the
-                    desktop app shell.
-                  </TooltipPopup>
-                </Tooltip>
-              }
-            />
-          ) : (
-            <SettingsRow
-              title="Network access"
-              description={
-                currentAuthPolicy === "remote-reachable"
-                  ? "This backend is already configured for remote access. Network exposure changes must be made where the server is launched."
-                  : "This backend is only reachable on this machine. Restart it with a non-loopback host to enable remote pairing."
-              }
-              control={
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <span className="inline-flex">
-                        <Switch
-                          checked={isLocalBackendNetworkAccessible}
-                          disabled
-                          aria-label="Enable network access"
-                        />
-                      </span>
-                    }
-                  />
-                  <TooltipPopup side="top">
-                    Network exposure changes restart the backend and must be controlled where the
-                    server process is launched.
-                  </TooltipPopup>
-                </Tooltip>
-              }
-            />
-          )}
+        <>
+          <SettingsSection title="Manage local backend">
+            {desktopBridge ? (
+              <SettingsRow
+                title="Network access"
+                description={
+                  desktopServerExposureState?.endpointUrl
+                    ? `Reachable at ${desktopServerExposureState.endpointUrl}`
+                    : desktopServerExposureState
+                      ? "Limited to this machine."
+                      : "Loading…"
+                }
+                status={
+                  desktopServerExposureError ? (
+                    <span className="block text-destructive">{desktopServerExposureError}</span>
+                  ) : null
+                }
+                control={
+                  <AlertDialog
+                    open={pendingDesktopServerExposureMode !== null}
+                    onOpenChange={(open) => {
+                      if (isUpdatingDesktopServerExposure) return;
+                      if (!open) setPendingDesktopServerExposureMode(null);
+                    }}
+                  >
+                    <Switch
+                      checked={desktopServerExposureState?.mode === "network-accessible"}
+                      disabled={!desktopServerExposureState || isUpdatingDesktopServerExposure}
+                      onCheckedChange={(checked) => {
+                        setPendingDesktopServerExposureMode(
+                          checked ? "network-accessible" : "local-only",
+                        );
+                      }}
+                      aria-label="Enable network access"
+                    />
+                    <AlertDialogPopup>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          {pendingDesktopServerExposureMode === "network-accessible"
+                            ? "Enable network access?"
+                            : "Disable network access?"}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {pendingDesktopServerExposureMode === "network-accessible"
+                            ? "T3 Code will restart to expose this environment over the network."
+                            : "T3 Code will restart and limit this environment back to this machine."}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogClose
+                          disabled={isUpdatingDesktopServerExposure}
+                          render={
+                            <Button variant="outline" disabled={isUpdatingDesktopServerExposure} />
+                          }
+                        >
+                          Cancel
+                        </AlertDialogClose>
+                        <Button
+                          onClick={handleConfirmDesktopServerExposureChange}
+                          disabled={
+                            pendingDesktopServerExposureMode === null ||
+                            isUpdatingDesktopServerExposure
+                          }
+                        >
+                          {isUpdatingDesktopServerExposure ? (
+                            <>
+                              <Spinner className="size-3.5" />
+                              Restarting…
+                            </>
+                          ) : pendingDesktopServerExposureMode === "network-accessible" ? (
+                            "Restart and enable"
+                          ) : (
+                            "Restart and disable"
+                          )}
+                        </Button>
+                      </AlertDialogFooter>
+                    </AlertDialogPopup>
+                  </AlertDialog>
+                }
+              />
+            ) : (
+              <SettingsRow
+                title="Network access"
+                description={
+                  currentAuthPolicy === "remote-reachable"
+                    ? "This backend is already configured for remote access. Network exposure changes must be made where the server is launched."
+                    : "This backend is only reachable on this machine. Restart it with a non-loopback host to enable remote pairing."
+                }
+                control={
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <span className="inline-flex">
+                          <Switch
+                            checked={isLocalBackendNetworkAccessible}
+                            disabled
+                            aria-label="Enable network access"
+                          />
+                        </span>
+                      }
+                    />
+                    <TooltipPopup side="top">
+                      Network exposure changes restart the backend and must be controlled where the
+                      server process is launched.
+                    </TooltipPopup>
+                  </Tooltip>
+                }
+              />
+            )}
+          </SettingsSection>
+
           {isLocalBackendNetworkAccessible ? (
-            <PairingAndClientsSection
-              endpointUrl={desktopServerExposureState?.endpointUrl}
-              isLoading={isLoadingDesktopAccessManagement}
-              error={desktopAccessManagementError}
-              pairingLinks={visibleDesktopPairingLinks}
-              clientSessions={desktopClientSessions}
-              revokingPairingLinkId={revokingDesktopPairingLinkId}
-              revokingClientSessionId={revokingDesktopClientSessionId}
-              isRevokingOtherClients={isRevokingOtherDesktopClients}
-              onRevokePairingLink={handleRevokeDesktopPairingLink}
-              onRevokeClientSession={handleRevokeDesktopClientSession}
-              onRevokeOtherClients={handleRevokeOtherDesktopClients}
-            />
+            <SettingsSection
+              title="Authorized clients"
+              headerAction={
+                <AuthorizedClientsHeaderAction
+                  clientSessions={desktopClientSessions}
+                  isRevokingOtherClients={isRevokingOtherDesktopClients}
+                  onRevokeOtherClients={handleRevokeOtherDesktopClients}
+                />
+              }
+            >
+              {desktopAccessManagementError ? (
+                <div className={ITEM_ROW_CLASSNAME}>
+                  <p className="text-xs text-destructive">{desktopAccessManagementError}</p>
+                </div>
+              ) : null}
+              <PairingClientsList
+                endpointUrl={desktopServerExposureState?.endpointUrl}
+                isLoading={isLoadingDesktopAccessManagement}
+                pairingLinks={visibleDesktopPairingLinks}
+                clientSessions={desktopClientSessions}
+                revokingPairingLinkId={revokingDesktopPairingLinkId}
+                revokingClientSessionId={revokingDesktopClientSessionId}
+                onRevokePairingLink={handleRevokeDesktopPairingLink}
+                onRevokeClientSession={handleRevokeDesktopClientSession}
+              />
+            </SettingsSection>
           ) : null}
-        </SettingsSection>
+        </>
       ) : (
         <SettingsSection title="Local backend access">
           <SettingsRow
