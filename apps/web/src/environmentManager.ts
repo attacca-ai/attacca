@@ -98,7 +98,7 @@ interface OrchestrationRegistryHandlers {
 interface RegistryAdapter {
   readonly listEntries: () => ReadonlyArray<WsRpcClientEntry>;
   readonly subscribe: (listener: () => void) => () => void;
-  readonly bindEnvironment: (clientKey: string, environmentId: EnvironmentId) => void;
+  readonly bindEnvironment: (entryKey: string, environmentId: EnvironmentId) => void;
 }
 
 /**
@@ -109,7 +109,7 @@ interface RegistryAdapter {
  */
 interface OrchestrationRegistrySyncController {
   readonly bindClientEnvironment: (
-    clientKey: string,
+    entryKey: string,
     environmentId: EnvironmentId,
     options?: { readonly ensureSnapshot?: boolean },
   ) => void;
@@ -282,7 +282,7 @@ function createClientContext(
           "[orchestration-recovery]",
           "Stopping replay recovery after no-progress retries.",
           {
-            clientKey: entry.key,
+            entryKey: entry.key,
             environmentId: boundEnvironmentId,
             state: recovery.getState(),
           },
@@ -300,7 +300,7 @@ function createClientContext(
       const state = recovery.getState();
       console.info("[orchestration-recovery]", "Snapshot recovery requested.", {
         reason,
-        clientKey: entry.key,
+        entryKey: entry.key,
         environmentId,
         skipped: !started,
         ...(started
@@ -466,10 +466,10 @@ export function createOrchestrationRegistrySyncController(
   syncRegistry();
 
   return {
-    bindClientEnvironment: (clientKey, environmentId, options) => {
-      const context = contexts.get(clientKey);
+    bindClientEnvironment: (entryKey, environmentId, options) => {
+      const context = contexts.get(entryKey);
       if (!context) {
-        registry.bindEnvironment(clientKey, environmentId);
+        registry.bindEnvironment(entryKey, environmentId);
         return;
       }
       context.bindEnvironmentId(environmentId, options);

@@ -234,18 +234,18 @@ export function getWsRpcClient(): WsRpcClient {
 }
 
 export function bindWsRpcClientEntryEnvironment(
-  clientKey: string,
+  entryKey: string,
   environmentId: EnvironmentId,
 ): void {
-  const entry = wsRpcClientEntriesByKey.get(clientKey);
+  const entry = wsRpcClientEntriesByKey.get(entryKey);
   if (!entry) {
-    throw new Error(`No websocket client registered for key ${clientKey}.`);
+    throw new Error(`No websocket client registered for key ${entryKey}.`);
   }
 
   const previousBoundEnvironmentId = entry.environmentId;
   const previousKeyForEnvironment = wsRpcClientKeyByEnvironmentId.get(environmentId);
 
-  if (previousBoundEnvironmentId === environmentId && previousKeyForEnvironment === clientKey) {
+  if (previousBoundEnvironmentId === environmentId && previousKeyForEnvironment === entryKey) {
     return;
   }
 
@@ -253,7 +253,7 @@ export function bindWsRpcClientEntryEnvironment(
     wsRpcClientKeyByEnvironmentId.delete(previousBoundEnvironmentId);
   }
 
-  if (previousKeyForEnvironment && previousKeyForEnvironment !== clientKey) {
+  if (previousKeyForEnvironment && previousKeyForEnvironment !== entryKey) {
     const previousEntry = wsRpcClientEntriesByKey.get(previousKeyForEnvironment);
     if (previousEntry) {
       previousEntry.environmentId = null;
@@ -261,7 +261,7 @@ export function bindWsRpcClientEntryEnvironment(
   }
 
   entry.environmentId = environmentId;
-  wsRpcClientKeyByEnvironmentId.set(environmentId, clientKey);
+  wsRpcClientKeyByEnvironmentId.set(environmentId, entryKey);
   emitWsRpcClientRegistryChange();
 }
 
@@ -272,9 +272,9 @@ export function bindPrimaryWsRpcClientEnvironment(environmentId: EnvironmentId):
 export function readWsRpcClientEntryForEnvironment(
   environmentId: EnvironmentId,
 ): WsRpcClientEntry | null {
-  const clientKey = wsRpcClientKeyByEnvironmentId.get(environmentId);
-  if (clientKey) {
-    const entry = wsRpcClientEntriesByKey.get(clientKey);
+  const entryKey = wsRpcClientKeyByEnvironmentId.get(environmentId);
+  if (entryKey) {
+    const entry = wsRpcClientEntriesByKey.get(entryKey);
     return entry ? toReadonlyEntry(entry) : null;
   }
 
