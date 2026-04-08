@@ -209,6 +209,46 @@ describe("createSnapshotBootstrapController", () => {
     resolveSecondRecovery?.();
     await second;
   });
+
+  it("skips recovery for an already-bootstrapped environment even when another environment is in flight", async () => {
+    const firstEnvironmentId = EnvironmentId.makeUnsafe("env-1");
+    const secondEnvironmentId = EnvironmentId.makeUnsafe("env-2");
+    let boundEnvironmentId: EnvironmentId | null = secondEnvironmentId;
+    let bootstrapped = false;
+    let resolveRecovery: (() => void) | undefined;
+    const runSnapshotRecovery = vi.fn(
+      (_reason, environmentId: EnvironmentId) =>
+        new Promise<void>((resolve) => {
+          if (environmentId === firstEnvironmentId) {
+            resolveRecovery = resolve;
+            return;
+          }
+
+          resolve();
+        }),
+    );
+
+    const controller = createSnapshotBootstrapController({
+      isBootstrapped: () => bootstrapped,
+      getBoundEnvironmentId: () => boundEnvironmentId,
+      runSnapshotRecovery,
+    });
+
+    const firstRecovery = controller.ensureSnapshotRecovery("bootstrap", firstEnvironmentId);
+
+    boundEnvironmentId = secondEnvironmentId;
+    bootstrapped = true;
+
+    await expect(
+      controller.ensureSnapshotRecovery("bootstrap", secondEnvironmentId),
+    ).resolves.toBeUndefined();
+
+    expect(runSnapshotRecovery).toHaveBeenCalledTimes(1);
+    expect(runSnapshotRecovery).toHaveBeenCalledWith("bootstrap", firstEnvironmentId);
+
+    resolveRecovery?.();
+    await firstRecovery;
+  });
 });
 
 describe("createOrchestrationRegistrySyncController", () => {

@@ -216,6 +216,7 @@ function makeClientSession(input: {
 
 const createDesktopBridgeStub = (overrides?: {
   readonly serverExposureState?: Awaited<ReturnType<DesktopBridge["getServerExposureState"]>>;
+  readonly setServerExposure?: DesktopBridge["setServerExposure"];
 }): DesktopBridge => {
   const idleUpdateState: DesktopUpdateState = {
     enabled: false,
@@ -245,13 +246,27 @@ const createDesktopBridgeStub = (overrides?: {
         mode: "local-only",
         endpointUrl: null,
         advertisedHost: null,
+        availableHosts: [],
+        selectedHost: null,
       },
     ),
-    setServerExposureMode: vi.fn().mockImplementation(async (mode) => ({
-      mode,
-      endpointUrl: mode === "network-accessible" ? "http://192.168.1.44:3773" : null,
-      advertisedHost: mode === "network-accessible" ? "192.168.1.44" : null,
-    })),
+    setServerExposure:
+      overrides?.setServerExposure ??
+      vi.fn().mockImplementation(async (input) => ({
+        mode: input.mode,
+        endpointUrl:
+          input.mode === "network-accessible"
+            ? `http://${input.host === "0.0.0.0" ? "192.168.1.44" : (input.host ?? "192.168.1.44")}:3773`
+            : null,
+        advertisedHost:
+          input.mode === "network-accessible"
+            ? input.host === "0.0.0.0"
+              ? "192.168.1.44"
+              : (input.host ?? "192.168.1.44")
+            : null,
+        availableHosts: [],
+        selectedHost: input.host ?? null,
+      })),
     pickFolder: vi.fn().mockResolvedValue(null),
     confirm: vi.fn().mockResolvedValue(false),
     setTheme: vi.fn().mockResolvedValue(undefined),
@@ -382,6 +397,11 @@ describe("GeneralSettingsPanel observability", () => {
         mode: "network-accessible",
         endpointUrl: "http://192.168.1.44:3773",
         advertisedHost: "192.168.1.44",
+        availableHosts: [
+          { host: "0.0.0.0", label: "Expose all interfaces (0.0.0.0)" },
+          { host: "192.168.1.44", label: "192.168.1.44 (en0)", interfaceName: "en0" },
+        ],
+        selectedHost: "192.168.1.44",
       },
     });
     let pairingLinks: Array<AuthAccessSnapshot["pairingLinks"][number]> = [];
@@ -498,6 +518,11 @@ describe("GeneralSettingsPanel observability", () => {
         mode: "network-accessible",
         endpointUrl: "http://192.168.1.44:3773",
         advertisedHost: "192.168.1.44",
+        availableHosts: [
+          { host: "0.0.0.0", label: "Expose all interfaces (0.0.0.0)" },
+          { host: "192.168.1.44", label: "192.168.1.44 (en0)", interfaceName: "en0" },
+        ],
+        selectedHost: "192.168.1.44",
       },
     });
     let clientSessions: Array<AuthAccessSnapshot["clientSessions"][number]> = [
@@ -601,6 +626,52 @@ describe("GeneralSettingsPanel observability", () => {
     await expect
       .element(page.getByText("Reachable at http://192.168.1.44:3773"))
       .toBeInTheDocument();
+  });
+
+  it("lets desktop users choose the bind host before enabling network access", async () => {
+    const setServerExposure = vi.fn<DesktopBridge["setServerExposure"]>().mockResolvedValue({
+      mode: "network-accessible",
+      endpointUrl: "http://100.64.0.12:3773",
+      advertisedHost: "100.64.0.12",
+      availableHosts: [
+        { host: "0.0.0.0", label: "Expose all interfaces (0.0.0.0)" },
+        { host: "192.168.1.44", label: "192.168.1.44 (en0)", interfaceName: "en0" },
+        { host: "100.64.0.12", label: "100.64.0.12 (tailscale0)", interfaceName: "tailscale0" },
+      ],
+      selectedHost: "100.64.0.12",
+    });
+    window.desktopBridge = createDesktopBridgeStub({
+      serverExposureState: {
+        mode: "local-only",
+        endpointUrl: null,
+        advertisedHost: null,
+        availableHosts: [
+          { host: "0.0.0.0", label: "Expose all interfaces (0.0.0.0)" },
+          { host: "192.168.1.44", label: "192.168.1.44 (en0)", interfaceName: "en0" },
+          { host: "100.64.0.12", label: "100.64.0.12 (tailscale0)", interfaceName: "tailscale0" },
+        ],
+        selectedHost: "192.168.1.44",
+      },
+      setServerExposure,
+    });
+
+    setServerConfigSnapshot(createBaseServerConfig());
+
+    await render(
+      <AppAtomRegistryProvider>
+        <GeneralSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await page.getByLabelText("Enable network access").click();
+    await expect.element(page.getByText("Choose network host")).toBeInTheDocument();
+    await page.getByRole("button", { name: "100.64.0.12 (tailscale0)" }).click();
+    await page.getByRole("button", { name: "Restart and enable" }).click();
+
+    expect(setServerExposure).toHaveBeenCalledWith({
+      mode: "network-accessible",
+      host: "100.64.0.12",
+    });
   });
 
   it("opens the logs folder in the preferred editor", async () => {

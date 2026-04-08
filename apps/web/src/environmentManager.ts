@@ -167,11 +167,7 @@ export function createSnapshotBootstrapController(input: {
       reason: Extract<OrchestrationRecoveryReason, "bootstrap" | "replay-failed">,
       environmentId: EnvironmentId,
     ): Promise<void> {
-      if (
-        inFlight === null &&
-        input.isBootstrapped() &&
-        input.getBoundEnvironmentId() === environmentId
-      ) {
+      if (input.isBootstrapped() && input.getBoundEnvironmentId() === environmentId) {
         return Promise.resolve();
       }
 
