@@ -2,6 +2,7 @@ import {
   ArchiveIcon,
   ArrowUpDownIcon,
   ChevronRightIcon,
+  CloudIcon,
   FolderIcon,
   GitPullRequestIcon,
   PlusIcon,
@@ -34,6 +35,7 @@ import {
   type DesktopUpdateState,
   type EnvironmentId,
   ProjectId,
+  type ScopedProjectRef,
   type ScopedThreadRef,
   type ThreadEnvMode,
   ThreadId,
@@ -55,8 +57,10 @@ import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { isLinuxPlatform, isMacPlatform, newCommandId, newProjectId } from "../lib/utils";
 import {
+  selectProjectByRef,
   selectProjectsAcrossEnvironments,
   selectSidebarThreadsForProjectRef,
+  selectSidebarThreadsForProjectRefs,
   selectSidebarThreadsAcrossEnvironments,
   selectThreadByRef,
   useStore,
@@ -135,6 +139,12 @@ import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { readEnvironmentApi } from "../environmentApi";
 import { useSettings, useUpdateSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "../rpc/serverState";
+import { usePrimaryEnvironmentId } from "../hooks/usePrimaryEnvironmentId";
+import { deriveLogicalProjectKey } from "../logicalProject";
+import {
+  useSavedEnvironmentRegistryStore,
+  useSavedEnvironmentRuntimeStore,
+} from "../savedEnvironmentsStore";
 import type { Project, SidebarThreadSummary } from "../types";
 const THREAD_PREVIEW_LIMIT = 6;
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
@@ -200,8 +210,14 @@ function buildThreadJumpLabelMap(input: {
   return mapping.size > 0 ? mapping : EMPTY_THREAD_JUMP_LABELS;
 }
 
+type EnvironmentPresence = "local-only" | "remote-only" | "mixed";
+
 type SidebarProjectSnapshot = Project & {
   projectKey: string;
+  environmentPresence: EnvironmentPresence;
+  memberProjectRefs: readonly ScopedProjectRef[];
+  /** Labels for remote environments this project lives in. */
+  remoteEnvironmentLabels: readonly string[];
 };
 interface TerminalStatusIndicator {
   label: "Terminal process running";
@@ -381,7 +397,30 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     (state) =>
       selectThreadTerminalState(state.terminalStateByThreadKey, threadRef).runningTerminalIds,
   );
-  const gitCwd = thread.worktreePath ?? props.projectCwd;
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const isRemoteThread =
+    primaryEnvironmentId !== null && thread.environmentId !== primaryEnvironmentId;
+  const remoteEnvLabel = useSavedEnvironmentRuntimeStore(
+    (s) => s.byId[thread.environmentId]?.descriptor?.label ?? null,
+  );
+  const remoteEnvSavedLabel = useSavedEnvironmentRegistryStore(
+    (s) => s.byId[thread.environmentId]?.label ?? null,
+  );
+  const threadEnvironmentLabel = isRemoteThread
+    ? (remoteEnvLabel ?? remoteEnvSavedLabel ?? "Remote")
+    : null;
+  // For grouped projects, the thread may belong to a different environment
+  // than the representative project.  Look up the thread's own project cwd
+  // so git status (and thus PR detection) queries the correct path.
+  const threadProjectCwd = useStore(
+    useMemo(
+      () => (state: import("../store").AppState) =>
+        selectProjectByRef(state, scopeProjectRef(thread.environmentId, thread.projectId))?.cwd ??
+        null,
+      [thread.environmentId, thread.projectId],
+    ),
+  );
+  const gitCwd = thread.worktreePath ?? threadProjectCwd ?? props.projectCwd;
   const gitStatus = useGitStatus({
     environmentId: thread.environmentId,
     cwd: thread.branch != null ? gitCwd : null,
@@ -673,24 +712,41 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               )
             ) : null}
             <span className={threadMetaClassName}>
-              {jumpLabel ? (
-                <span
-                  className="inline-flex h-5 items-center rounded-full border border-border/80 bg-background/90 px-1.5 font-mono text-[10px] font-medium tracking-tight text-foreground shadow-sm"
-                  title={jumpLabel}
-                >
-                  {jumpLabel}
-                </span>
-              ) : (
-                <span
-                  className={`text-[10px] ${
-                    isHighlighted
-                      ? "text-foreground/72 dark:text-foreground/82"
-                      : "text-muted-foreground/40"
-                  }`}
-                >
-                  {formatRelativeTimeLabel(thread.updatedAt ?? thread.createdAt)}
-                </span>
-              )}
+              <span className="inline-flex items-center gap-1">
+                {isRemoteThread && (
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <span
+                          aria-label={threadEnvironmentLabel ?? "Remote"}
+                          className="inline-flex items-center justify-center"
+                        />
+                      }
+                    >
+                      <CloudIcon className="size-3 text-muted-foreground/40" />
+                    </TooltipTrigger>
+                    <TooltipPopup side="top">{threadEnvironmentLabel}</TooltipPopup>
+                  </Tooltip>
+                )}
+                {jumpLabel ? (
+                  <span
+                    className="inline-flex h-5 items-center rounded-full border border-border/80 bg-background/90 px-1.5 font-mono text-[10px] font-medium tracking-tight text-foreground shadow-sm"
+                    title={jumpLabel}
+                  >
+                    {jumpLabel}
+                  </span>
+                ) : (
+                  <span
+                    className={`text-[10px] ${
+                      isHighlighted
+                        ? "text-foreground/72 dark:text-foreground/82"
+                        : "text-muted-foreground/40"
+                    }`}
+                  >
+                    {formatRelativeTimeLabel(thread.updatedAt ?? thread.createdAt)}
+                  </span>
+                )}
+              </span>
             </span>
           </div>
         </div>
@@ -998,7 +1054,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const sidebarThreads = useStore(
     useShallow(
       useMemo(
-        () => (state) =>
+        () => (state: import("../store").AppState) =>
           selectSidebarThreadsForProjectRef(
             state,
             scopeProjectRef(project.environmentId, project.id),
@@ -1007,25 +1063,46 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       ),
     ),
   );
+  // For grouped projects that span multiple environments, also fetch
+  // threads from the other member project refs.
+  const otherMemberRefs = useMemo(
+    () =>
+      project.memberProjectRefs.filter(
+        (ref) => ref.environmentId !== project.environmentId || ref.projectId !== project.id,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [project.projectKey, project.environmentId, project.id],
+  );
+  const otherMemberThreads = useStore(
+    useShallow(
+      useMemo(
+        () =>
+          otherMemberRefs.length === 0
+            ? () => [] as SidebarThreadSummary[]
+            : (state: import("../store").AppState) =>
+                selectSidebarThreadsForProjectRefs(state, otherMemberRefs),
+        [otherMemberRefs],
+      ),
+    ),
+  );
+  const allSidebarThreads = useMemo(
+    () =>
+      otherMemberThreads.length === 0 ? sidebarThreads : [...sidebarThreads, ...otherMemberThreads],
+    [sidebarThreads, otherMemberThreads],
+  );
   const sidebarThreadByKey = useMemo(
     () =>
       new Map(
-        sidebarThreads.map(
+        allSidebarThreads.map(
           (thread) =>
             [scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)), thread] as const,
         ),
       ),
-    [sidebarThreads],
+    [allSidebarThreads],
   );
-  const projectThreads = useMemo(
-    () =>
-      sidebarThreads.filter(
-        (thread) =>
-          scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)) ===
-          project.projectKey,
-      ),
-    [project.projectKey, sidebarThreads],
-  );
+  // All threads from the representative + other member environments are
+  // already fetched into allSidebarThreads, so we can use them directly.
+  const projectThreads = allSidebarThreads;
   const projectExpanded = useUiStateStore(
     (state) => state.projectExpandedById[project.projectKey] ?? true,
   );
@@ -1644,23 +1721,44 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             {project.name}
           </span>
         </SidebarMenuButton>
+        {/* Environment badge – visible by default, crossfades with the
+            "new thread" button on hover using the same pointer-events +
+            opacity pattern as the thread row archive/timestamp swap. */}
+        {project.environmentPresence === "remote-only" && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  aria-label={
+                    project.environmentPresence === "remote-only"
+                      ? "Remote project"
+                      : "Available in multiple environments"
+                  }
+                  className="pointer-events-none absolute top-1 right-1.5 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/50 transition-opacity duration-150 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0"
+                />
+              }
+            >
+              <CloudIcon className="size-3" />
+            </TooltipTrigger>
+            <TooltipPopup side="top">
+              Remote environment: {project.remoteEnvironmentLabels.join(", ")}
+            </TooltipPopup>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger
             render={
-              <SidebarMenuAction
-                render={
-                  <button
-                    type="button"
-                    aria-label={`Create new thread in ${project.name}`}
-                    data-testid="new-thread-button"
-                  />
-                }
-                showOnHover
-                className="top-1 right-1.5 size-5 rounded-md p-0 text-muted-foreground/70 hover:bg-secondary hover:text-foreground"
-                onClick={handleCreateThreadClick}
-              >
-                <SquarePenIcon className="size-3.5" />
-              </SidebarMenuAction>
+              <div className="pointer-events-none absolute top-1 right-1.5 opacity-0 transition-opacity duration-150 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100">
+                <button
+                  type="button"
+                  aria-label={`Create new thread in ${project.name}`}
+                  data-testid="new-thread-button"
+                  className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/70 hover:bg-secondary hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                  onClick={handleCreateThreadClick}
+                >
+                  <SquarePenIcon className="size-3.5" />
+                </button>
+              </div>
             }
           />
           <TooltipPopup side="top">
@@ -2238,7 +2336,9 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (loc) => loc.pathname });
   const isOnSettings = pathname.startsWith("/settings");
-  const appSettings = useSettings();
+  const sidebarThreadSortOrder = useSettings((s) => s.sidebarThreadSortOrder);
+  const sidebarProjectSortOrder = useSettings((s) => s.sidebarProjectSortOrder);
+  const defaultThreadEnvMode = useSettings((s) => s.defaultThreadEnvMode);
   const { updateSettings } = useUpdateSettings();
   const { handleNewThread } = useHandleNewThread();
   const { archiveThread, deleteThread } = useThreadActions();
@@ -2269,6 +2369,9 @@ export default function Sidebar() {
   const platform = navigator.platform;
   const shouldBrowseForProjectImmediately = isElectron && !isLinuxDesktop;
   const shouldShowProjectPathEntry = addingProject && !shouldBrowseForProjectImmediately;
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const savedEnvironmentRegistry = useSavedEnvironmentRegistryStore((s) => s.byId);
+  const savedEnvironmentRuntimeById = useSavedEnvironmentRuntimeStore((s) => s.byId);
   const orderedProjects = useMemo(() => {
     return orderItemsByPreferredIds({
       items: projects,
@@ -2276,14 +2379,89 @@ export default function Sidebar() {
       getId: (project) => scopedProjectKey(scopeProjectRef(project.environmentId, project.id)),
     });
   }, [projectOrder, projects]);
-  const sidebarProjects = useMemo<SidebarProjectSnapshot[]>(
-    () =>
-      orderedProjects.map((project) => ({
-        ...project,
-        projectKey: scopedProjectKey(scopeProjectRef(project.environmentId, project.id)),
-      })),
-    [orderedProjects],
-  );
+
+  // Build a mapping from physical project key → logical project key for
+  // cross-environment grouping.  Projects that share a repositoryIdentity
+  // canonicalKey are treated as one logical project in the sidebar.
+  const physicalToLogicalKey = useMemo(() => {
+    const mapping = new Map<string, string>();
+    for (const project of orderedProjects) {
+      const physicalKey = scopedProjectKey(scopeProjectRef(project.environmentId, project.id));
+      mapping.set(physicalKey, deriveLogicalProjectKey(project));
+    }
+    return mapping;
+  }, [orderedProjects]);
+
+  const sidebarProjects = useMemo<SidebarProjectSnapshot[]>(() => {
+    // Group projects by logical key while preserving insertion order from
+    // orderedProjects.
+    const groupedMembers = new Map<string, Project[]>();
+    for (const project of orderedProjects) {
+      const logicalKey = deriveLogicalProjectKey(project);
+      const existing = groupedMembers.get(logicalKey);
+      if (existing) {
+        existing.push(project);
+      } else {
+        groupedMembers.set(logicalKey, [project]);
+      }
+    }
+
+    const result: SidebarProjectSnapshot[] = [];
+    const seen = new Set<string>();
+    for (const project of orderedProjects) {
+      const logicalKey = deriveLogicalProjectKey(project);
+      if (seen.has(logicalKey)) continue;
+      seen.add(logicalKey);
+
+      const members = groupedMembers.get(logicalKey)!;
+      // Prefer the primary environment's project as the representative.
+      const representative: Project | undefined =
+        (primaryEnvironmentId
+          ? members.find((p) => p.environmentId === primaryEnvironmentId)
+          : undefined) ?? members[0];
+      if (!representative) continue;
+      const hasLocal =
+        primaryEnvironmentId !== null &&
+        members.some((p) => p.environmentId === primaryEnvironmentId);
+      const hasRemote =
+        primaryEnvironmentId !== null
+          ? members.some((p) => p.environmentId !== primaryEnvironmentId)
+          : false;
+
+      const refs = members.map((p) => scopeProjectRef(p.environmentId, p.id));
+      const remoteLabels = members
+        .filter((p) => primaryEnvironmentId !== null && p.environmentId !== primaryEnvironmentId)
+        .map((p) => {
+          const rt = savedEnvironmentRuntimeById[p.environmentId];
+          const saved = savedEnvironmentRegistry[p.environmentId];
+          return rt?.descriptor?.label ?? saved?.label ?? p.environmentId;
+        });
+      const snapshot: SidebarProjectSnapshot = {
+        id: representative.id,
+        environmentId: representative.environmentId,
+        name: representative.name,
+        cwd: representative.cwd,
+        repositoryIdentity: representative.repositoryIdentity ?? null,
+        defaultModelSelection: representative.defaultModelSelection,
+        createdAt: representative.createdAt,
+        updatedAt: representative.updatedAt,
+        scripts: representative.scripts,
+        projectKey: logicalKey,
+        environmentPresence:
+          hasLocal && hasRemote ? "mixed" : hasRemote ? "remote-only" : "local-only",
+        memberProjectRefs: refs,
+        remoteEnvironmentLabels: remoteLabels,
+      };
+      result.push(snapshot);
+    }
+    return result;
+  }, [
+    orderedProjects,
+    primaryEnvironmentId,
+    savedEnvironmentRegistry,
+    savedEnvironmentRuntimeById,
+  ]);
+
   const sidebarProjectByKey = useMemo(
     () => new Map(sidebarProjects.map((project) => [project.projectKey, project] as const)),
     [sidebarProjects],
@@ -2298,28 +2476,36 @@ export default function Sidebar() {
       ),
     [sidebarThreads],
   );
+  // Resolve the active route's project key to a logical key so it matches the
+  // sidebar's grouped project entries.
   const activeRouteProjectKey = useMemo(() => {
     if (!routeThreadKey) {
       return null;
     }
     const activeThread = sidebarThreadByKey.get(routeThreadKey);
-    return activeThread
-      ? scopedProjectKey(scopeProjectRef(activeThread.environmentId, activeThread.projectId))
-      : null;
-  }, [routeThreadKey, sidebarThreadByKey]);
+    if (!activeThread) return null;
+    const physicalKey = scopedProjectKey(
+      scopeProjectRef(activeThread.environmentId, activeThread.projectId),
+    );
+    return physicalToLogicalKey.get(physicalKey) ?? physicalKey;
+  }, [routeThreadKey, sidebarThreadByKey, physicalToLogicalKey]);
+
+  // Group threads by logical project key so all threads from grouped projects
+  // are displayed together.
   const threadsByProjectKey = useMemo(() => {
     const next = new Map<string, SidebarThreadSummary[]>();
     for (const thread of sidebarThreads) {
-      const projectKey = scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
-      const existing = next.get(projectKey);
+      const physicalKey = scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
+      const logicalKey = physicalToLogicalKey.get(physicalKey) ?? physicalKey;
+      const existing = next.get(logicalKey);
       if (existing) {
         existing.push(thread);
       } else {
-        next.set(projectKey, [thread]);
+        next.set(logicalKey, [thread]);
       }
     }
     return next;
-  }, [sidebarThreads]);
+  }, [sidebarThreads, physicalToLogicalKey]);
   const getCurrentSidebarShortcutContext = useCallback(
     () => ({
       terminalFocus: isTerminalFocused(),
@@ -2347,12 +2533,13 @@ export default function Sidebar() {
     shortcutLabelForCommand(keybindings, "chat.new", newThreadShortcutLabelOptions);
   const focusMostRecentThreadForProject = useCallback(
     (projectRef: { environmentId: EnvironmentId; projectId: ProjectId }) => {
-      const projectKey = scopedProjectKey(
+      const physicalKey = scopedProjectKey(
         scopeProjectRef(projectRef.environmentId, projectRef.projectId),
       );
+      const logicalKey = physicalToLogicalKey.get(physicalKey) ?? physicalKey;
       const latestThread = sortThreadsForSidebar(
-        (threadsByProjectKey.get(projectKey) ?? []).filter((thread) => thread.archivedAt === null),
-        appSettings.sidebarThreadSortOrder,
+        (threadsByProjectKey.get(logicalKey) ?? []).filter((thread) => thread.archivedAt === null),
+        sidebarThreadSortOrder,
       )[0];
       if (!latestThread) return;
 
@@ -2361,7 +2548,7 @@ export default function Sidebar() {
         params: buildThreadRouteParams(scopeThreadRef(latestThread.environmentId, latestThread.id)),
       });
     },
-    [appSettings.sidebarThreadSortOrder, navigate, threadsByProjectKey],
+    [sidebarThreadSortOrder, navigate, threadsByProjectKey, physicalToLogicalKey],
   );
 
   const addProjectFromPath = useCallback(
@@ -2407,7 +2594,7 @@ export default function Sidebar() {
         });
         if (activeEnvironmentId !== null) {
           await handleNewThread(scopeProjectRef(activeEnvironmentId, projectId), {
-            envMode: appSettings.defaultThreadEnvMode,
+            envMode: defaultThreadEnvMode,
           }).catch(() => undefined);
         }
       } catch (error) {
@@ -2434,7 +2621,7 @@ export default function Sidebar() {
       isAddingProject,
       projects,
       shouldBrowseForProjectImmediately,
-      appSettings.defaultThreadEnvMode,
+      defaultThreadEnvMode,
     ],
   );
 
@@ -2501,7 +2688,7 @@ export default function Sidebar() {
 
   const handleProjectDragEnd = useCallback(
     (event: DragEndEvent) => {
-      if (appSettings.sidebarProjectSortOrder !== "manual") {
+      if (sidebarProjectSortOrder !== "manual") {
         dragInProgressRef.current = false;
         return;
       }
@@ -2513,18 +2700,18 @@ export default function Sidebar() {
       if (!activeProject || !overProject) return;
       reorderProjects(activeProject.projectKey, overProject.projectKey);
     },
-    [appSettings.sidebarProjectSortOrder, reorderProjects, sidebarProjects],
+    [sidebarProjectSortOrder, reorderProjects, sidebarProjects],
   );
 
   const handleProjectDragStart = useCallback(
     (_event: DragStartEvent) => {
-      if (appSettings.sidebarProjectSortOrder !== "manual") {
+      if (sidebarProjectSortOrder !== "manual") {
         return;
       }
       dragInProgressRef.current = true;
       suppressProjectClickAfterDragRef.current = true;
     },
-    [appSettings.sidebarProjectSortOrder],
+    [sidebarProjectSortOrder],
   );
 
   const handleProjectDragCancel = useCallback((_event: DragCancelEvent) => {
@@ -2558,22 +2745,29 @@ export default function Sidebar() {
       ...project,
       id: project.projectKey,
     }));
-    const sortableThreads = visibleThreads.map((thread) => ({
-      ...thread,
-      projectId: scopedProjectKey(
-        scopeProjectRef(thread.environmentId, thread.projectId),
-      ) as ProjectId,
-    }));
+    const sortableThreads = visibleThreads.map((thread) => {
+      const physicalKey = scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId));
+      return {
+        ...thread,
+        projectId: (physicalToLogicalKey.get(physicalKey) ?? physicalKey) as ProjectId,
+      };
+    });
     return sortProjectsForSidebar(
       sortableProjects,
       sortableThreads,
-      appSettings.sidebarProjectSortOrder,
+      sidebarProjectSortOrder,
     ).flatMap((project) => {
       const resolvedProject = sidebarProjectByKey.get(project.id);
       return resolvedProject ? [resolvedProject] : [];
     });
-  }, [appSettings.sidebarProjectSortOrder, sidebarProjectByKey, sidebarProjects, visibleThreads]);
-  const isManualProjectSorting = appSettings.sidebarProjectSortOrder === "manual";
+  }, [
+    sidebarProjectSortOrder,
+    physicalToLogicalKey,
+    sidebarProjectByKey,
+    sidebarProjects,
+    visibleThreads,
+  ]);
+  const isManualProjectSorting = sidebarProjectSortOrder === "manual";
   const visibleSidebarThreadKeys = useMemo(
     () =>
       sortedProjects.flatMap((project) => {
@@ -2581,7 +2775,7 @@ export default function Sidebar() {
           (threadsByProjectKey.get(project.projectKey) ?? []).filter(
             (thread) => thread.archivedAt === null,
           ),
-          appSettings.sidebarThreadSortOrder,
+          sidebarThreadSortOrder,
         );
         const projectExpanded = projectExpandedById[project.projectKey] ?? true;
         const activeThreadKey = routeThreadKey ?? undefined;
@@ -2609,7 +2803,7 @@ export default function Sidebar() {
         );
       }),
     [
-      appSettings.sidebarThreadSortOrder,
+      sidebarThreadSortOrder,
       expandedThreadListsByProject,
       projectExpandedById,
       routeThreadKey,
@@ -2910,8 +3104,8 @@ export default function Sidebar() {
             desktopUpdateButtonAction={desktopUpdateButtonAction}
             desktopUpdateButtonDisabled={desktopUpdateButtonDisabled}
             handleDesktopUpdateButtonClick={handleDesktopUpdateButtonClick}
-            projectSortOrder={appSettings.sidebarProjectSortOrder}
-            threadSortOrder={appSettings.sidebarThreadSortOrder}
+            projectSortOrder={sidebarProjectSortOrder}
+            threadSortOrder={sidebarThreadSortOrder}
             updateSettings={updateSettings}
             shouldShowProjectPathEntry={shouldShowProjectPathEntry}
             handleStartAddProject={handleStartAddProject}

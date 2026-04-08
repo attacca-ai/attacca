@@ -75,7 +75,11 @@ import {
   togglePendingUserInputOptionSelection,
   type PendingUserInputDraftAnswer,
 } from "../pendingUserInput";
-import { selectThreadsAcrossEnvironments, useStore } from "../store";
+import {
+  selectProjectsAcrossEnvironments,
+  selectThreadsAcrossEnvironments,
+  useStore,
+} from "../store";
 import { createProjectSelectorByRef, createThreadSelectorByRef } from "../storeSelectors";
 import { useUiStateStore } from "../uiStateStore";
 import {
@@ -97,7 +101,7 @@ import {
 import { basenameOfPath } from "../vscode-icons";
 import { useTheme } from "../hooks/useTheme";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
-import BranchToolbar from "./BranchToolbar";
+import { BranchToolbar } from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
@@ -135,6 +139,11 @@ import { useSettings } from "../hooks/useSettings";
 import { resolveAppModelSelection } from "../modelSelection";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { deriveLogicalProjectKey } from "../logicalProject";
+import { usePrimaryEnvironmentId } from "../hooks/usePrimaryEnvironmentId";
+import {
+  useSavedEnvironmentRegistryStore,
+  useSavedEnvironmentRuntimeStore,
+} from "../savedEnvironmentsStore";
 import { buildDraftThreadRouteParams } from "../threadRoutes";
 import {
   type ComposerImageAttachment,
@@ -998,6 +1007,54 @@ export default function ChatView(props: ChatViewProps) {
     useMemo(() => createProjectSelectorByRef(activeProjectRef), [activeProjectRef]),
   );
 
+  // Compute the list of environments this logical project spans, used to
+  // drive the environment picker in BranchToolbar.
+  const allProjects = useStore(useShallow(selectProjectsAcrossEnvironments));
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const savedEnvironmentRegistry = useSavedEnvironmentRegistryStore((s) => s.byId);
+  const savedEnvironmentRuntimeById = useSavedEnvironmentRuntimeStore((s) => s.byId);
+  const logicalProjectEnvironments = useMemo(() => {
+    if (!activeProject) return [];
+    const logicalKey = deriveLogicalProjectKey(activeProject);
+    const memberProjects = allProjects.filter((p) => deriveLogicalProjectKey(p) === logicalKey);
+    const seen = new Set<string>();
+    const envs: Array<{
+      environmentId: EnvironmentId;
+      projectId: ProjectId;
+      label: string;
+      isPrimary: boolean;
+    }> = [];
+    for (const p of memberProjects) {
+      if (seen.has(p.environmentId)) continue;
+      seen.add(p.environmentId);
+      const isPrimary = p.environmentId === primaryEnvironmentId;
+      const savedRecord = savedEnvironmentRegistry[p.environmentId];
+      const runtimeState = savedEnvironmentRuntimeById[p.environmentId];
+      const label = isPrimary
+        ? "Local"
+        : (runtimeState?.descriptor?.label ?? savedRecord?.label ?? p.environmentId);
+      envs.push({
+        environmentId: p.environmentId,
+        projectId: p.id,
+        label,
+        isPrimary,
+      });
+    }
+    // Sort: primary first, then alphabetical
+    envs.sort((a, b) => {
+      if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+      return a.label.localeCompare(b.label);
+    });
+    return envs;
+  }, [
+    activeProject,
+    allProjects,
+    primaryEnvironmentId,
+    savedEnvironmentRegistry,
+    savedEnvironmentRuntimeById,
+  ]);
+  const hasMultipleEnvironments = logicalProjectEnvironments.length > 1;
+
   const openPullRequestDialog = useCallback(
     (reference?: string) => {
       if (!canCheckoutPullRequestIntoThread) {
@@ -1127,7 +1184,17 @@ export default function ChatView(props: ChatViewProps) {
   const lockedProvider: ProviderKind | null = hasThreadStarted
     ? (sessionProvider ?? threadProvider ?? selectedProviderByThreadId ?? null)
     : null;
-  const serverConfig = useServerConfig();
+  const primaryServerConfig = useServerConfig();
+  const activeEnvRuntimeState = useSavedEnvironmentRuntimeStore(
+    (s) => s.byId[activeThread?.environmentId ?? ""],
+  );
+  // Use the server config for the thread's environment.  For the primary
+  // environment fall back to the global atom; for remote environments use
+  // the runtime state stored by the environment manager.
+  const serverConfig =
+    primaryEnvironmentId && activeThread?.environmentId === primaryEnvironmentId
+      ? primaryServerConfig
+      : (activeEnvRuntimeState?.serverConfig ?? primaryServerConfig);
   const providerStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
   const unlockedSelectedProvider = resolveSelectableProvider(
     providerStatuses,
@@ -1730,6 +1797,47 @@ export default function ChatView(props: ChatViewProps) {
     (activeThread.messages.length > 0 ||
       (activeThread.session !== null && activeThread.session.status !== "closed")),
   );
+
+  // Handle environment change for draft threads.  When the user picks a
+  // different environment we update the draft context to point at the physical
+  // project in that environment while keeping the same logical project.
+  const onEnvironmentChange = useCallback(
+    (nextEnvironmentId: EnvironmentId) => {
+      if (envLocked || !draftId) return;
+      const target = logicalProjectEnvironments.find(
+        (env) => env.environmentId === nextEnvironmentId,
+      );
+      if (!target) return;
+      setDraftThreadContext(draftId, {
+        projectRef: scopeProjectRef(target.environmentId, target.projectId),
+      });
+    },
+    [draftId, envLocked, logicalProjectEnvironments, setDraftThreadContext],
+  );
+
+  // Auto-correct the draft model selection when the environment changes and
+  // the previously-selected provider/model is no longer available.  This keeps
+  // the stored draft state consistent with the resolved picker values and
+  // prevents stale model references when the user sends a message.
+  const prevEnvironmentIdRef = useRef(activeThread?.environmentId);
+  useEffect(() => {
+    const currentEnvId = activeThread?.environmentId;
+    if (!currentEnvId || envLocked || prevEnvironmentIdRef.current === currentEnvId) {
+      prevEnvironmentIdRef.current = currentEnvId;
+      return;
+    }
+    prevEnvironmentIdRef.current = currentEnvId;
+
+    // The resolved provider/model already account for the new environment's
+    // provider list.  Persist that resolved selection into the draft.
+    if (activeThread) {
+      setComposerDraftModelSelection(scopeThreadRef(activeThread.environmentId, activeThread.id), {
+        provider: selectedProvider,
+        model: selectedModel,
+      });
+    }
+  }, [activeThread, envLocked, selectedModel, selectedProvider, setComposerDraftModelSelection]);
+
   const activeTerminalGroup =
     terminalState.terminalGroups.find(
       (group) => group.id === terminalState.activeTerminalGroupId,
@@ -4635,6 +4743,12 @@ export default function ChatView(props: ChatViewProps) {
               onComposerFocusRequest={scheduleComposerFocus}
               {...(canCheckoutPullRequestIntoThread
                 ? { onCheckoutPullRequestRequest: openPullRequestDialog }
+                : {})}
+              {...(hasMultipleEnvironments
+                ? {
+                    availableEnvironments: logicalProjectEnvironments,
+                    onEnvironmentChange,
+                  }
                 : {})}
             />
           )}
