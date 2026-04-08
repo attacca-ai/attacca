@@ -621,7 +621,10 @@ describe("GeneralSettingsPanel observability", () => {
       .toBeInTheDocument();
     await page.getByRole("button", { name: "Restart and enable", exact: true }).click();
     await vi.waitFor(() => {
-      expect(desktopBridge.setServerExposureMode).toHaveBeenCalledWith("network-accessible");
+      expect(desktopBridge.setServerExposure).toHaveBeenCalledWith({
+        mode: "network-accessible",
+        host: "0.0.0.0",
+      });
     });
     await expect
       .element(page.getByText("Reachable at http://192.168.1.44:3773"))
