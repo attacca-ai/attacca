@@ -93,8 +93,11 @@ const rpcClientMock = {
   },
 };
 
-vi.mock("./wsRpcClient", () => {
+vi.mock("./wsRpcClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./wsRpcClient")>();
+
   return {
+    ...actual,
     getWsRpcClient: () => rpcClientMock,
     getPrimaryWsRpcClientEntry: () => ({
       key: "primary",
