@@ -200,7 +200,7 @@ describe("createOrchestrationRegistrySyncController", () => {
           listeners.add(listener);
           return () => listeners.delete(listener);
         },
-        bindEnvironment: (_clientKey, nextEnvironmentId) => {
+        bindEnvironment: (_entryKey, nextEnvironmentId) => {
           entries = [
             {
               ...baseEntry,
