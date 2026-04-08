@@ -51,7 +51,7 @@ const runFriendlyLabelCommand = Effect.fn("runFriendlyLabelCommand")(function* (
   command: string,
   args: readonly string[],
 ) {
-  const result = yield* Effect.promise(() =>
+  const result = yield* Effect.tryPromise(() =>
     runProcess(command, args, {
       allowNonZeroExit: true,
     }),
