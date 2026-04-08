@@ -1667,18 +1667,16 @@ async function bootstrap(): Promise<void> {
       `bootstrap restoring persisted server exposure mode mode=${desktopSettings.serverExposureMode}`,
     );
   }
-  const serverExposureState = await applyDesktopServerExposureMode(
-    desktopSettings.serverExposureMode,
-    {
-      persist: desktopSettings.serverExposureMode !== DEFAULT_DESKTOP_SETTINGS.serverExposureMode,
-    },
-  );
+  const requestedExposureMode = desktopSettings.serverExposureMode;
+  const serverExposureState = await applyDesktopServerExposureMode(requestedExposureMode, {
+    persist: requestedExposureMode !== DEFAULT_DESKTOP_SETTINGS.serverExposureMode,
+  });
   writeDesktopLogHeader(`bootstrap resolved backend endpoint baseUrl=${backendHttpUrl}`);
   if (serverExposureState.endpointUrl) {
     writeDesktopLogHeader(
       `bootstrap enabled network access endpointUrl=${serverExposureState.endpointUrl}`,
     );
-  } else if (desktopSettings.serverExposureMode === "network-accessible") {
+  } else if (requestedExposureMode === "network-accessible") {
     writeDesktopLogHeader(
       "bootstrap fell back to local-only because no advertised network host was available",
     );
