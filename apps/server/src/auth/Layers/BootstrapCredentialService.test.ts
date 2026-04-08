@@ -36,13 +36,15 @@ it.layer(NodeServices.layer)("BootstrapCredentialServiceLive", (it) => {
   it.effect("issues one-time bootstrap tokens that can only be consumed once", () =>
     Effect.gen(function* () {
       const bootstrapCredentials = yield* BootstrapCredentialService;
-      const issued = yield* bootstrapCredentials.issueOneTimeToken();
+      const issued = yield* bootstrapCredentials.issueOneTimeToken({ label: "Julius iPhone" });
       const first = yield* bootstrapCredentials.consume(issued.credential);
       const second = yield* Effect.flip(bootstrapCredentials.consume(issued.credential));
 
       expect(first.method).toBe("one-time-token");
       expect(first.role).toBe("client");
       expect(first.subject).toBe("one-time-token");
+      expect(first.label).toBe("Julius iPhone");
+      expect(issued.label).toBe("Julius iPhone");
       expect(second._tag).toBe("BootstrapCredentialError");
       expect(second.message).toContain("Unknown bootstrap credential");
     }).pipe(Effect.provide(makeBootstrapCredentialLayer())),

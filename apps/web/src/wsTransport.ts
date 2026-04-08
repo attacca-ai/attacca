@@ -15,6 +15,7 @@ import { ClientTracingLive } from "./observability/clientTracing";
 import {
   createWsRpcProtocolLayer,
   makeWsRpcProtocolClient,
+  type WsProtocolLifecycleHandlers,
   type WsRpcProtocolClient,
 } from "./rpc/protocol";
 
@@ -36,6 +37,8 @@ interface TransportSession {
   readonly runtime: ManagedRuntime.ManagedRuntime<RpcClient.Protocol, never>;
 }
 
+export type WsTransportUrlInput = string | (() => Promise<string>);
+
 function formatErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
@@ -44,13 +47,15 @@ function formatErrorMessage(error: unknown): string {
 }
 
 export class WsTransport {
-  private readonly url: string | undefined;
+  private readonly url: WsTransportUrlInput | undefined;
+  private readonly lifecycleHandlers: WsProtocolLifecycleHandlers | undefined;
   private disposed = false;
   private reconnectChain: Promise<void> = Promise.resolve();
   private session: TransportSession;
 
-  constructor(url?: string) {
+  constructor(url?: WsTransportUrlInput, lifecycleHandlers?: WsProtocolLifecycleHandlers) {
     this.url = url;
+    this.lifecycleHandlers = lifecycleHandlers;
     this.session = this.createSession();
   }
 
@@ -189,7 +194,7 @@ export class WsTransport {
 
   private createSession(): TransportSession {
     const runtime = ManagedRuntime.make(
-      Layer.mergeAll(createWsRpcProtocolLayer(this.url), ClientTracingLive),
+      Layer.mergeAll(createWsRpcProtocolLayer(this.url, this.lifecycleHandlers), ClientTracingLive),
     );
     const clientScope = runtime.runSync(Scope.make());
     return {

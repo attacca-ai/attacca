@@ -46,9 +46,10 @@ import {
   resolveAppModelSelectionState,
 } from "../../modelSelection";
 import { ensureLocalApi, readLocalApi } from "../../localApi";
+import { useShallow } from "zustand/react/shallow";
 import {
   selectProjectsAcrossEnvironments,
-  selectThreadsAcrossEnvironments,
+  selectThreadShellsAcrossEnvironments,
   useStore,
 } from "../../store";
 import { formatRelativeTime, formatRelativeTimeLabel } from "../../timestampFormat";
@@ -1384,8 +1385,8 @@ export function GeneralSettingsPanel() {
 }
 
 export function ArchivedThreadsPanel() {
-  const projects = useStore(selectProjectsAcrossEnvironments);
-  const threads = useStore(selectThreadsAcrossEnvironments);
+  const projects = useStore(useShallow(selectProjectsAcrossEnvironments));
+  const threads = useStore(useShallow(selectThreadShellsAcrossEnvironments));
   const { unarchiveThread, confirmAndDeleteThread } = useThreadActions();
   const archivedGroups = useMemo(() => {
     return projects

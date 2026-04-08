@@ -88,16 +88,25 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
       const now = yield* DateTime.now;
       const rows = yield* pairingLinks.listActive({ now });
 
-      return rows.map(
-        (row) =>
-          ({
-            id: row.id,
-            credential: row.credential,
-            role: row.role,
-            subject: row.subject,
-            createdAt: row.createdAt,
-            expiresAt: row.expiresAt,
-          }) satisfies AuthPairingLink,
+      return rows.map((row) =>
+        row.label
+          ? ({
+              id: row.id,
+              credential: row.credential,
+              role: row.role,
+              subject: row.subject,
+              label: row.label,
+              createdAt: row.createdAt,
+              expiresAt: row.expiresAt,
+            } satisfies AuthPairingLink)
+          : ({
+              id: row.id,
+              credential: row.credential,
+              role: row.role,
+              subject: row.subject,
+              createdAt: row.createdAt,
+              expiresAt: row.expiresAt,
+            } satisfies AuthPairingLink),
       );
     }).pipe(Effect.mapError(toBootstrapCredentialError("Failed to load active pairing links.")));
 
@@ -124,6 +133,7 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
       const issued: IssuedBootstrapCredential = {
         id,
         credential,
+        ...(input?.label ? { label: input.label } : {}),
         expiresAt,
       };
       yield* pairingLinks.create({
@@ -132,6 +142,7 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
         method: "one-time-token",
         role: input?.role ?? "client",
         subject: input?.subject ?? "one-time-token",
+        label: input?.label ?? null,
         createdAt: now,
         expiresAt: expiresAt,
       });
@@ -140,6 +151,7 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
         credential,
         role: input?.role ?? "client",
         subject: input?.subject ?? "one-time-token",
+        ...(input?.label ? { label: input.label } : {}),
         createdAt: now,
         expiresAt,
       });
@@ -194,6 +206,7 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
                 method: grant.method,
                 role: grant.role,
                 subject: grant.subject,
+                ...(grant.label ? { label: grant.label } : {}),
                 expiresAt: grant.expiresAt,
               } satisfies BootstrapGrant,
             },
@@ -218,6 +231,7 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
           method: consumed.value.method,
           role: consumed.value.role,
           subject: consumed.value.subject,
+          ...(consumed.value.label ? { label: consumed.value.label } : {}),
           expiresAt: consumed.value.expiresAt,
         } satisfies BootstrapGrant;
       }

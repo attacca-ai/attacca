@@ -1,6 +1,8 @@
 import type {
   AuthBootstrapInput,
   AuthBootstrapResult,
+  AuthClientMetadata,
+  AuthCreatePairingCredentialInput,
   AuthSessionId,
   AuthPairingCredentialResult,
   AuthRevokeClientSessionInput,
@@ -14,6 +16,7 @@ export interface ServerPairingLinkRecord {
   readonly credential: string;
   readonly role: "owner" | "client";
   readonly subject: string;
+  readonly label?: string;
   readonly createdAt: string;
   readonly expiresAt: string;
 }
@@ -23,6 +26,7 @@ export interface ServerClientSessionRecord {
   readonly subject: string;
   readonly role: "owner" | "client";
   readonly method: "browser-session-cookie" | "bearer-session-token";
+  readonly client: AuthClientMetadata;
   readonly issuedAt: string;
   readonly expiresAt: string;
   readonly connected: boolean;
@@ -102,6 +106,10 @@ async function fetchSessionState(): Promise<AuthSessionState> {
     }
     return (await response.json()) as AuthSessionState;
   });
+}
+
+export async function fetchServerAuthSessionState(): Promise<AuthSessionState> {
+  return fetchSessionState();
 }
 
 async function readErrorMessage(response: Response, fallbackMessage: string): Promise<string> {
@@ -225,9 +233,17 @@ export async function submitServerAuthCredential(credential: string): Promise<vo
   stripPairingTokenFromUrl();
 }
 
-export async function createServerPairingCredential(): Promise<AuthPairingCredentialResult> {
+export async function createServerPairingCredential(
+  label?: string,
+): Promise<AuthPairingCredentialResult> {
+  const trimmedLabel = label?.trim();
+  const payload: AuthCreatePairingCredentialInput = trimmedLabel ? { label: trimmedLabel } : {};
   const response = await fetch(resolveServerHttpUrl({ pathname: "/api/auth/pairing-token" }), {
+    body: JSON.stringify(payload),
     credentials: "include",
+    headers: {
+      "content-type": "application/json",
+    },
     method: "POST",
   });
 

@@ -9,6 +9,7 @@ export const AuthPairingLinkRecord = Schema.Struct({
   method: Schema.Literals(["desktop-bootstrap", "one-time-token"]),
   role: Schema.Literals(["owner", "client"]),
   subject: Schema.String,
+  label: Schema.NullOr(Schema.String),
   createdAt: Schema.DateTimeUtcFromString,
   expiresAt: Schema.DateTimeUtcFromString,
   consumedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
@@ -22,6 +23,7 @@ export const CreateAuthPairingLinkInput = Schema.Struct({
   method: Schema.Literals(["desktop-bootstrap", "one-time-token"]),
   role: Schema.Literals(["owner", "client"]),
   subject: Schema.String,
+  label: Schema.NullOr(Schema.String),
   createdAt: Schema.DateTimeUtcFromString,
   expiresAt: Schema.DateTimeUtcFromString,
 });

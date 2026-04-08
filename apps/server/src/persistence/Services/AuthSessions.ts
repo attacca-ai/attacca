@@ -1,14 +1,25 @@
-import { AuthSessionId } from "@t3tools/contracts";
+import { AuthClientMetadataDeviceType, AuthSessionId } from "@t3tools/contracts";
 import { Option, Schema, ServiceMap } from "effect";
 import type { Effect } from "effect";
 
 import type { AuthSessionRepositoryError } from "../Errors.ts";
+
+export const AuthSessionClientMetadataRecord = Schema.Struct({
+  label: Schema.NullOr(Schema.String),
+  ipAddress: Schema.NullOr(Schema.String),
+  userAgent: Schema.NullOr(Schema.String),
+  deviceType: AuthClientMetadataDeviceType,
+  os: Schema.NullOr(Schema.String),
+  browser: Schema.NullOr(Schema.String),
+});
+export type AuthSessionClientMetadataRecord = typeof AuthSessionClientMetadataRecord.Type;
 
 export const AuthSessionRecord = Schema.Struct({
   sessionId: AuthSessionId,
   subject: Schema.String,
   role: Schema.Literals(["owner", "client"]),
   method: Schema.Literals(["browser-session-cookie", "bearer-session-token"]),
+  client: AuthSessionClientMetadataRecord,
   issuedAt: Schema.DateTimeUtcFromString,
   expiresAt: Schema.DateTimeUtcFromString,
   revokedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
@@ -20,6 +31,7 @@ export const CreateAuthSessionInput = Schema.Struct({
   subject: Schema.String,
   role: Schema.Literals(["owner", "client"]),
   method: Schema.Literals(["browser-session-cookie", "bearer-session-token"]),
+  client: AuthSessionClientMetadataRecord,
   issuedAt: Schema.DateTimeUtcFromString,
   expiresAt: Schema.DateTimeUtcFromString,
 });

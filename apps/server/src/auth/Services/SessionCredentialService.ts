@@ -1,4 +1,9 @@
-import type { AuthClientSession, AuthSessionId, ServerAuthSessionMethod } from "@t3tools/contracts";
+import type {
+  AuthClientMetadata,
+  AuthClientSession,
+  AuthSessionId,
+  ServerAuthSessionMethod,
+} from "@t3tools/contracts";
 import { Data, DateTime, Duration, ServiceMap } from "effect";
 import type { Effect, Stream } from "effect";
 
@@ -8,6 +13,7 @@ export interface IssuedSession {
   readonly sessionId: AuthSessionId;
   readonly token: string;
   readonly method: ServerAuthSessionMethod;
+  readonly client: AuthClientMetadata;
   readonly expiresAt: DateTime.DateTime;
   readonly role: SessionRole;
 }
@@ -16,6 +22,7 @@ export interface VerifiedSession {
   readonly sessionId: AuthSessionId;
   readonly token: string;
   readonly method: ServerAuthSessionMethod;
+  readonly client: AuthClientMetadata;
   readonly expiresAt?: DateTime.DateTime;
   readonly subject: string;
   readonly role: SessionRole;
@@ -43,8 +50,24 @@ export interface SessionCredentialServiceShape {
     readonly subject?: string;
     readonly method?: ServerAuthSessionMethod;
     readonly role?: SessionRole;
+    readonly client?: AuthClientMetadata;
   }) => Effect.Effect<IssuedSession, SessionCredentialError>;
   readonly verify: (token: string) => Effect.Effect<VerifiedSession, SessionCredentialError>;
+  readonly issueWebSocketToken: (
+    sessionId: AuthSessionId,
+    input?: {
+      readonly ttl?: Duration.Duration;
+    },
+  ) => Effect.Effect<
+    {
+      readonly token: string;
+      readonly expiresAt: DateTime.DateTime;
+    },
+    SessionCredentialError
+  >;
+  readonly verifyWebSocketToken: (
+    token: string,
+  ) => Effect.Effect<VerifiedSession, SessionCredentialError>;
   readonly listActive: () => Effect.Effect<
     ReadonlyArray<AuthClientSession>,
     SessionCredentialError

@@ -418,6 +418,7 @@ describe("resolveInitialServerAuthGateState", () => {
       jsonResponse({
         id: "pairing-link-1",
         credential: "pairing-token",
+        label: "Julius iPhone",
         expiresAt: "2026-04-05T00:00:00.000Z",
       }),
     );
@@ -425,13 +426,18 @@ describe("resolveInitialServerAuthGateState", () => {
 
     const { createServerPairingCredential } = await import("./authBootstrap");
 
-    await expect(createServerPairingCredential()).resolves.toEqual({
+    await expect(createServerPairingCredential("Julius iPhone")).resolves.toEqual({
       id: "pairing-link-1",
       credential: "pairing-token",
+      label: "Julius iPhone",
       expiresAt: "2026-04-05T00:00:00.000Z",
     });
     expect(fetchMock).toHaveBeenCalledWith("http://localhost/api/auth/pairing-token", {
+      body: JSON.stringify({ label: "Julius iPhone" }),
       credentials: "include",
+      headers: {
+        "content-type": "application/json",
+      },
       method: "POST",
     });
   });
