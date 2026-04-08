@@ -164,6 +164,51 @@ describe("createSnapshotBootstrapController", () => {
     expect(runSnapshotRecovery).toHaveBeenCalledTimes(1);
     expect(runSnapshotRecovery).toHaveBeenCalledWith("bootstrap", secondEnvironmentId);
   });
+
+  it("starts a new recovery when the bound environment changes mid-flight", async () => {
+    const firstEnvironmentId = EnvironmentId.makeUnsafe("env-1");
+    const secondEnvironmentId = EnvironmentId.makeUnsafe("env-2");
+    let boundEnvironmentId: EnvironmentId | null = firstEnvironmentId;
+    let bootstrapped = false;
+    let resolveFirstRecovery: (() => void) | undefined;
+    let resolveSecondRecovery: (() => void) | undefined;
+    const runSnapshotRecovery = vi.fn(
+      async (_reason: "bootstrap" | "replay-failed", environmentId: EnvironmentId) =>
+        new Promise<void>((resolve) => {
+          if (environmentId === firstEnvironmentId) {
+            resolveFirstRecovery = resolve;
+            return;
+          }
+          resolveSecondRecovery = resolve;
+        }),
+    );
+
+    const controller = createSnapshotBootstrapController({
+      isBootstrapped: () => bootstrapped,
+      getBoundEnvironmentId: () => boundEnvironmentId,
+      runSnapshotRecovery,
+    });
+
+    const first = controller.ensureSnapshotRecovery("bootstrap", firstEnvironmentId);
+
+    boundEnvironmentId = secondEnvironmentId;
+
+    const second = controller.ensureSnapshotRecovery("bootstrap", secondEnvironmentId);
+
+    expect(runSnapshotRecovery).toHaveBeenCalledTimes(2);
+    expect(second).not.toBe(first);
+
+    resolveFirstRecovery?.();
+    await first;
+
+    const dedupedSecond = controller.ensureSnapshotRecovery("bootstrap", secondEnvironmentId);
+    expect(dedupedSecond).toBe(second);
+    expect(runSnapshotRecovery).toHaveBeenCalledTimes(2);
+
+    bootstrapped = true;
+    resolveSecondRecovery?.();
+    await second;
+  });
 });
 
 describe("createOrchestrationRegistrySyncController", () => {
