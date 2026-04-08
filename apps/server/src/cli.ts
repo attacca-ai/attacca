@@ -10,6 +10,7 @@ import {
   LogLevel,
   Option,
   Path,
+  References,
   Schema,
   SchemaIssue,
   SchemaTransformation,
@@ -437,16 +438,21 @@ const DurationFromString = Schema.String.pipe(
 const runWithAuthControlPlane = <A, E>(
   flags: CliAuthLocationFlags,
   run: (authControlPlane: AuthControlPlaneShape) => Effect.Effect<A, E>,
+  options?: {
+    readonly quietLogs?: boolean;
+  },
 ) =>
   Effect.gen(function* () {
     const logLevel = yield* GlobalFlag.LogLevel;
     const config = yield* resolveCliAuthConfig(flags, logLevel);
+    const minimumLogLevel = options?.quietLogs ? "Error" : config.logLevel;
     return yield* Effect.gen(function* () {
       const authControlPlane = yield* AuthControlPlane;
       return yield* run(authControlPlane);
     }).pipe(
       Effect.provide(AuthControlPlaneRuntimeLive),
       Effect.provideService(ServerConfig, config),
+      Effect.provideService(References.MinimumLogLevel, minimumLogLevel),
     );
   });
 
@@ -518,20 +524,25 @@ const pairingCreateCommand = Command.make("create", {
 }).pipe(
   Command.withDescription("Issue a new client pairing token."),
   Command.withHandler((flags) =>
-    runWithAuthControlPlane(flags, (authControlPlane) =>
-      Effect.gen(function* () {
-        const issued = yield* authControlPlane.createPairingLink({
-          role: "client",
-          subject: "one-time-token",
-          ...(Option.isSome(flags.ttl) ? { ttl: flags.ttl.value } : {}),
-          ...(Option.isSome(flags.label) ? { label: flags.label.value } : {}),
-        });
-        const output = formatIssuedPairingCredential(issued, {
-          json: flags.json,
-          ...(Option.isSome(flags.baseUrl) ? { baseUrl: flags.baseUrl.value } : {}),
-        });
-        yield* Console.log(output);
-      }),
+    runWithAuthControlPlane(
+      flags,
+      (authControlPlane) =>
+        Effect.gen(function* () {
+          const issued = yield* authControlPlane.createPairingLink({
+            role: "client",
+            subject: "one-time-token",
+            ...(Option.isSome(flags.ttl) ? { ttl: flags.ttl.value } : {}),
+            ...(Option.isSome(flags.label) ? { label: flags.label.value } : {}),
+          });
+          const output = formatIssuedPairingCredential(issued, {
+            json: flags.json,
+            ...(Option.isSome(flags.baseUrl) ? { baseUrl: flags.baseUrl.value } : {}),
+          });
+          yield* Console.log(output);
+        }),
+      {
+        quietLogs: flags.json,
+      },
     ),
   ),
 );
@@ -542,11 +553,16 @@ const pairingListCommand = Command.make("list", {
 }).pipe(
   Command.withDescription("List active client pairing tokens without revealing their secrets."),
   Command.withHandler((flags) =>
-    runWithAuthControlPlane(flags, (authControlPlane) =>
-      Effect.gen(function* () {
-        const pairingLinks = yield* authControlPlane.listPairingLinks({ role: "client" });
-        yield* Console.log(formatPairingCredentialList(pairingLinks, { json: flags.json }));
-      }),
+    runWithAuthControlPlane(
+      flags,
+      (authControlPlane) =>
+        Effect.gen(function* () {
+          const pairingLinks = yield* authControlPlane.listPairingLinks({ role: "client" });
+          yield* Console.log(formatPairingCredentialList(pairingLinks, { json: flags.json }));
+        }),
+      {
+        quietLogs: flags.json,
+      },
     ),
   ),
 );
@@ -586,21 +602,26 @@ const sessionIssueCommand = Command.make("issue", {
 }).pipe(
   Command.withDescription("Issue a bearer session token for headless or remote clients."),
   Command.withHandler((flags) =>
-    runWithAuthControlPlane(flags, (authControlPlane) =>
-      Effect.gen(function* () {
-        const issued = yield* authControlPlane.issueSession({
-          role: flags.role,
-          ...(Option.isSome(flags.ttl) ? { ttl: flags.ttl.value } : {}),
-          ...(Option.isSome(flags.label) ? { label: flags.label.value } : {}),
-          ...(Option.isSome(flags.subject) ? { subject: flags.subject.value } : {}),
-        });
-        yield* Console.log(
-          formatIssuedSession(issued, {
-            json: flags.json,
-            tokenOnly: flags.tokenOnly,
-          }),
-        );
-      }),
+    runWithAuthControlPlane(
+      flags,
+      (authControlPlane) =>
+        Effect.gen(function* () {
+          const issued = yield* authControlPlane.issueSession({
+            role: flags.role,
+            ...(Option.isSome(flags.ttl) ? { ttl: flags.ttl.value } : {}),
+            ...(Option.isSome(flags.label) ? { label: flags.label.value } : {}),
+            ...(Option.isSome(flags.subject) ? { subject: flags.subject.value } : {}),
+          });
+          yield* Console.log(
+            formatIssuedSession(issued, {
+              json: flags.json,
+              tokenOnly: flags.tokenOnly,
+            }),
+          );
+        }),
+      {
+        quietLogs: flags.json || flags.tokenOnly,
+      },
     ),
   ),
 );
@@ -611,11 +632,16 @@ const sessionListCommand = Command.make("list", {
 }).pipe(
   Command.withDescription("List active sessions without revealing bearer tokens."),
   Command.withHandler((flags) =>
-    runWithAuthControlPlane(flags, (authControlPlane) =>
-      Effect.gen(function* () {
-        const sessions = yield* authControlPlane.listSessions();
-        yield* Console.log(formatSessionList(sessions, { json: flags.json }));
-      }),
+    runWithAuthControlPlane(
+      flags,
+      (authControlPlane) =>
+        Effect.gen(function* () {
+          const sessions = yield* authControlPlane.listSessions();
+          yield* Console.log(formatSessionList(sessions, { json: flags.json }));
+        }),
+      {
+        quietLogs: flags.json,
+      },
     ),
   ),
 );

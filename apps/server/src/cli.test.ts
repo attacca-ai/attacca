@@ -8,45 +8,34 @@ import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as CliError from "effect/unstable/cli/CliError";
+import * as TestConsole from "effect/testing/TestConsole";
 import { Command } from "effect/unstable/cli";
-import { vi } from "vitest";
 
 import { cli } from "./cli.ts";
 
 const CliRuntimeLayer = Layer.mergeAll(NodeServices.layer, NetService.layer);
 
-const runCli = (args: ReadonlyArray<string>) =>
-  Command.runWith(cli, { version: "0.0.0" })(args).pipe(Effect.provide(CliRuntimeLayer));
+const runCli = (args: ReadonlyArray<string>) => Command.runWith(cli, { version: "0.0.0" })(args);
+const runCliWithRuntime = (args: ReadonlyArray<string>) =>
+  runCli(args).pipe(Effect.provide(CliRuntimeLayer));
 
 const captureStdout = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
-    let output = "";
-    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
-      output += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
-      return true;
-    });
-
-    try {
-      const result = yield* effect;
-      return { result, output };
-    } finally {
-      stdoutSpy.mockRestore();
-    }
-  });
+    const result = yield* effect;
+    const output =
+      (yield* TestConsole.logLines).findLast((line): line is string => typeof line === "string") ??
+      "";
+    return { result, output };
+  }).pipe(Effect.provide(Layer.mergeAll(CliRuntimeLayer, TestConsole.layer)));
 
 it.layer(NodeServices.layer)("cli log-level parsing", (it) => {
   it.effect("accepts the built-in lowercase log-level flag values", () =>
-    Command.runWith(cli, { version: "0.0.0" })(["--log-level", "debug", "--version"]).pipe(
-      Effect.provide(CliRuntimeLayer),
-    ),
+    runCliWithRuntime(["--log-level", "debug", "--version"]),
   );
 
   it.effect("rejects invalid log-level casing before launching the server", () =>
     Effect.gen(function* () {
-      const error = yield* Command.runWith(cli, { version: "0.0.0" })([
-        "--log-level",
-        "Debug",
-      ]).pipe(Effect.provide(CliRuntimeLayer), Effect.flip);
+      const error = yield* runCliWithRuntime(["--log-level", "Debug"]).pipe(Effect.flip);
 
       if (!CliError.isCliError(error)) {
         assert.fail(`Expected CliError, got ${String(error)}`);
@@ -120,7 +109,9 @@ it.layer(NodeServices.layer)("cli log-level parsing", (it) => {
 
   it.effect("rejects invalid ttl values before running auth commands", () =>
     Effect.gen(function* () {
-      const error = yield* runCli(["auth", "pairing", "create", "--ttl", "soon"]).pipe(Effect.flip);
+      const error = yield* runCliWithRuntime(["auth", "pairing", "create", "--ttl", "soon"]).pipe(
+        Effect.flip,
+      );
 
       if (!CliError.isCliError(error)) {
         assert.fail(`Expected CliError, got ${String(error)}`);
