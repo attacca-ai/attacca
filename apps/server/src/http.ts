@@ -219,7 +219,7 @@ export const staticAndDevRouteLayer = HttpRouter.add(
     }
 
     const config = yield* ServerConfig;
-    if (config.devUrl && isLoopbackHostname(url.value.hostname)) {
+    if (config.devUrl) {
       return HttpServerResponse.redirect(resolveDevRedirectUrl(config.devUrl, url.value), {
         status: 302,
       });
