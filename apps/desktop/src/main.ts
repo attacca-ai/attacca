@@ -220,6 +220,14 @@ async function applyDesktopServerExposureMode(
     ...(advertisedHostOverride ? { advertisedHostOverride } : {}),
   });
 
+  if (
+    options?.rejectIfUnavailable &&
+    mode === "network-accessible" &&
+    exposure.endpointUrl === null
+  ) {
+    throw new Error("Network-accessible mode is unavailable: no usable LAN address was detected.");
+  }
+
   desktopServerExposureMode = exposure.mode;
   const previousSettings = desktopSettings;
   desktopSettings =
