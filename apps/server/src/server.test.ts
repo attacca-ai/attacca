@@ -636,6 +636,13 @@ const extractSessionTokenFromSetCookie = (cookieHeader: string): string => {
   return token;
 };
 
+const splitHeaderTokens = (value: string | null) =>
+  (value ?? "")
+    .split(",")
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0)
+    .toSorted();
+
 const getWsServerUrl = (
   pathname = "",
   options?: { authenticated?: boolean; credential?: string },
@@ -862,6 +869,63 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(typeof wsTokenBody.token, "string");
       assert.isTrue(wsTokenBody.token.length > 0);
       assert.equal(typeof wsTokenBody.expiresAt, "string");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect(
+    "responds to remote auth websocket-token preflight requests with authorization CORS headers",
+    () =>
+      Effect.gen(function* () {
+        yield* buildAppUnderTest();
+
+        const wsTokenUrl = yield* getHttpServerUrl("/api/auth/ws-token");
+        const response = yield* Effect.promise(() =>
+          fetch(wsTokenUrl, {
+            method: "OPTIONS",
+            headers: {
+              origin: "http://192.168.86.35:3773",
+              "access-control-request-method": "POST",
+              "access-control-request-headers": "authorization",
+            },
+          }),
+        );
+
+        assert.equal(response.status, 204);
+        assert.equal(response.headers.get("access-control-allow-origin"), "*");
+        assert.deepEqual(splitHeaderTokens(response.headers.get("access-control-allow-methods")), [
+          "GET",
+          "OPTIONS",
+          "POST",
+        ]);
+        assert.deepEqual(splitHeaderTokens(response.headers.get("access-control-allow-headers")), [
+          "authorization",
+          "b3",
+          "content-type",
+          "traceparent",
+        ]);
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("includes CORS headers on remote websocket-token auth failures", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest();
+
+      const wsTokenUrl = yield* getHttpServerUrl("/api/auth/ws-token");
+      const response = yield* Effect.promise(() =>
+        fetch(wsTokenUrl, {
+          method: "POST",
+          headers: {
+            origin: "http://192.168.86.35:3773",
+          },
+        }),
+      );
+      const body = (yield* Effect.promise(() => response.json())) as {
+        readonly error?: string;
+      };
+
+      assert.equal(response.status, 401);
+      assert.equal(response.headers.get("access-control-allow-origin"), "*");
+      assert.equal(body.error, "Authentication required.");
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
@@ -1519,8 +1583,17 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       assert.equal(response.status, 204);
       assert.equal(response.headers.get("access-control-allow-origin"), "*");
-      assert.equal(response.headers.get("access-control-allow-methods"), "POST, OPTIONS");
-      assert.equal(response.headers.get("access-control-allow-headers"), "content-type");
+      assert.deepEqual(splitHeaderTokens(response.headers.get("access-control-allow-methods")), [
+        "GET",
+        "OPTIONS",
+        "POST",
+      ]);
+      assert.deepEqual(splitHeaderTokens(response.headers.get("access-control-allow-headers")), [
+        "authorization",
+        "b3",
+        "content-type",
+        "traceparent",
+      ]);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
