@@ -1070,8 +1070,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       project.memberProjectRefs.filter(
         (ref) => ref.environmentId !== project.environmentId || ref.projectId !== project.id,
       ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [project.projectKey, project.environmentId, project.id],
+    [project.memberProjectRefs, project.environmentId, project.id],
   );
   const otherMemberThreads = useStore(
     useShallow(
