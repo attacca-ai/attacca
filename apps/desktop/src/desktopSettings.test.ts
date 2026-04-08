@@ -34,30 +34,10 @@ describe("desktopSettings", () => {
 
     writeDesktopSettings(settingsPath, {
       serverExposureMode: "network-accessible",
-      serverExposureHost: "100.64.0.12",
     });
 
     expect(readDesktopSettings(settingsPath)).toEqual({
       serverExposureMode: "network-accessible",
-      serverExposureHost: "100.64.0.12",
-    });
-  });
-
-  it("accepts the legacy advertised-host key while migrating settings", () => {
-    const settingsPath = makeSettingsPath();
-
-    fs.writeFileSync(
-      settingsPath,
-      JSON.stringify({
-        serverExposureMode: "network-accessible",
-        serverExposureAdvertisedHost: "100.64.0.12",
-      }),
-      "utf8",
-    );
-
-    expect(readDesktopSettings(settingsPath)).toEqual({
-      serverExposureMode: "network-accessible",
-      serverExposureHost: "100.64.0.12",
     });
   });
 

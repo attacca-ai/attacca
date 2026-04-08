@@ -9,9 +9,8 @@ import {
 import { DateTime, Effect, Layer, Option } from "effect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 
-import { BootstrapCredentialServiceLive } from "./BootstrapCredentialService.ts";
+import { AuthControlPlane, AuthControlPlaneLive, AuthCoreLive } from "../../authControlPlane.ts";
 import { ServerAuthPolicyLive } from "./ServerAuthPolicy.ts";
-import { SessionCredentialServiceLive } from "./SessionCredentialService.ts";
 import { BootstrapCredentialService } from "../Services/BootstrapCredentialService.ts";
 import { BootstrapCredentialError } from "../Services/BootstrapCredentialService.ts";
 import { ServerAuthPolicy } from "../Services/ServerAuthPolicy.ts";
@@ -30,8 +29,6 @@ type BootstrapExchangeResult = {
 
 const AUTHORIZATION_PREFIX = "Bearer ";
 const WEBSOCKET_TOKEN_QUERY_PARAM = "wsToken";
-const isListablePairingLink = (pairingLink: { readonly subject: string }) =>
-  pairingLink.subject !== "owner-bootstrap";
 
 export function toBootstrapExchangeAuthError(cause: BootstrapCredentialError): AuthError {
   if (cause.status === 500) {
@@ -61,6 +58,7 @@ function parseBearerToken(request: HttpServerRequest.HttpServerRequest): string 
 export const makeServerAuth = Effect.gen(function* () {
   const policy = yield* ServerAuthPolicy;
   const bootstrapCredentials = yield* BootstrapCredentialService;
+  const authControlPlane = yield* AuthControlPlane;
   const sessions = yield* SessionCredentialService;
   const descriptor = yield* policy.getDescriptor();
 
@@ -197,8 +195,8 @@ export const makeServerAuth = Effect.gen(function* () {
       );
 
   const issuePairingCredential: ServerAuthShape["issuePairingCredential"] = (input) =>
-    bootstrapCredentials
-      .issueOneTimeToken({
+    authControlPlane
+      .createPairingLink({
         role: input?.role ?? "client",
         subject: input?.role === "owner" ? "owner-bootstrap" : "one-time-token",
         ...(input?.label ? { label: input.label } : {}),
@@ -217,25 +215,29 @@ export const makeServerAuth = Effect.gen(function* () {
               id: issued.id,
               credential: issued.credential,
               ...(issued.label ? { label: issued.label } : {}),
-              expiresAt: DateTime.toUtc(issued.expiresAt),
+              expiresAt: issued.expiresAt,
             }) satisfies AuthPairingCredentialResult,
         ),
       );
 
   const listPairingLinks: ServerAuthShape["listPairingLinks"] = () =>
-    bootstrapCredentials.listActive().pipe(
-      Effect.map((pairingLinks) => pairingLinks.filter(isListablePairingLink)),
-      Effect.mapError(
-        (cause) =>
-          new AuthError({
-            message: "Failed to load pairing links.",
-            cause,
-          }),
-      ),
-    );
+    authControlPlane
+      .listPairingLinks({
+        role: "client",
+        excludeSubjects: ["owner-bootstrap"],
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new AuthError({
+              message: "Failed to load pairing links.",
+              cause,
+            }),
+        ),
+      );
 
   const revokePairingLink: ServerAuthShape["revokePairingLink"] = (id) =>
-    bootstrapCredentials.revoke(id).pipe(
+    authControlPlane.revokePairingLink(id).pipe(
       Effect.mapError(
         (cause) =>
           new AuthError({
@@ -246,7 +248,7 @@ export const makeServerAuth = Effect.gen(function* () {
     );
 
   const listClientSessions: ServerAuthShape["listClientSessions"] = (currentSessionId) =>
-    sessions.listActive().pipe(
+    authControlPlane.listSessions().pipe(
       Effect.mapError(
         (cause) =>
           new AuthError({
@@ -275,7 +277,7 @@ export const makeServerAuth = Effect.gen(function* () {
           status: 403,
         });
       }
-      return yield* sessions.revoke(targetSessionId).pipe(
+      return yield* authControlPlane.revokeSession(targetSessionId).pipe(
         Effect.mapError(
           (cause) =>
             new AuthError({
@@ -289,7 +291,7 @@ export const makeServerAuth = Effect.gen(function* () {
   const revokeOtherClientSessions: ServerAuthShape["revokeOtherClientSessions"] = (
     currentSessionId,
   ) =>
-    sessions.revokeAllExcept(currentSessionId).pipe(
+    authControlPlane.revokeOtherSessionsExcept(currentSessionId).pipe(
       Effect.mapError(
         (cause) =>
           new AuthError({
@@ -375,7 +377,7 @@ export const makeServerAuth = Effect.gen(function* () {
 });
 
 export const ServerAuthLive = Layer.effect(ServerAuth, makeServerAuth).pipe(
+  Layer.provideMerge(AuthControlPlaneLive),
+  Layer.provideMerge(AuthCoreLive),
   Layer.provideMerge(ServerAuthPolicyLive),
-  Layer.provideMerge(BootstrapCredentialServiceLive),
-  Layer.provideMerge(SessionCredentialServiceLive),
 );
