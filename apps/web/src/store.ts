@@ -1631,6 +1631,16 @@ export function selectThreadsAcrossEnvironments(state: AppState): Thread[] {
   );
 }
 
+/** Like `selectThreadsAcrossEnvironments` but returns stable `ThreadShell` references from the store (no derived data). */
+export function selectThreadShellsAcrossEnvironments(state: AppState): ThreadShell[] {
+  return getEnvironmentEntries(state).flatMap(([, environmentState]) =>
+    environmentState.threadIds.flatMap((threadId) => {
+      const shell = environmentState.threadShellById[threadId];
+      return shell ? [shell] : [];
+    }),
+  );
+}
+
 export function selectSidebarThreadsAcrossEnvironments(state: AppState): SidebarThreadSummary[] {
   return getEnvironmentEntries(state).flatMap(([environmentId, environmentState]) =>
     environmentState.threadIds.flatMap((threadId) => {

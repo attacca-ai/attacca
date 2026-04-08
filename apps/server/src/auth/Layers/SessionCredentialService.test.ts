@@ -40,12 +40,21 @@ it.layer(NodeServices.layer)("SessionCredentialServiceLive", (it) => {
       const issued = yield* sessions.issue({
         subject: "desktop-bootstrap",
         role: "owner",
+        client: {
+          label: "Desktop app",
+          deviceType: "desktop",
+          os: "macOS",
+          browser: "Electron",
+          ipAddress: "127.0.0.1",
+        },
       });
       const verified = yield* sessions.verify(issued.token);
 
       expect(verified.method).toBe("browser-session-cookie");
       expect(verified.subject).toBe("desktop-bootstrap");
       expect(verified.role).toBe("owner");
+      expect(verified.client.label).toBe("Desktop app");
+      expect(verified.client.browser).toBe("Electron");
       expect(verified.expiresAt?.toString()).toBe(issued.expiresAt.toString());
     }).pipe(Effect.provide(makeSessionCredentialLayer())),
   );
@@ -79,10 +88,23 @@ it.layer(NodeServices.layer)("SessionCredentialServiceLive", (it) => {
       const owner = yield* sessions.issue({
         subject: "desktop-bootstrap",
         role: "owner",
+        client: {
+          label: "Desktop app",
+          deviceType: "desktop",
+          os: "macOS",
+          browser: "Electron",
+        },
       });
       const client = yield* sessions.issue({
         subject: "one-time-token",
         role: "client",
+        client: {
+          label: "Julius iPhone",
+          deviceType: "mobile",
+          os: "iOS",
+          browser: "Safari",
+          ipAddress: "192.168.1.88",
+        },
       });
 
       yield* sessions.markConnected(client.sessionId);
@@ -95,6 +117,12 @@ it.layer(NodeServices.layer)("SessionCredentialServiceLive", (it) => {
       expect(beforeRevoke.find((entry) => entry.sessionId === client.sessionId)?.connected).toBe(
         true,
       );
+      expect(beforeRevoke.find((entry) => entry.sessionId === client.sessionId)?.client.label).toBe(
+        "Julius iPhone",
+      );
+      expect(
+        beforeRevoke.find((entry) => entry.sessionId === owner.sessionId)?.client.deviceType,
+      ).toBe("desktop");
       expect(revokedCount).toBe(1);
       expect(afterRevoke).toHaveLength(1);
       expect(afterRevoke[0]?.sessionId).toBe(owner.sessionId);

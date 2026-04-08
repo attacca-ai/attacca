@@ -19,6 +19,7 @@ import { render } from "vitest-browser-react";
 import { __resetLocalApiForTests } from "../../localApi";
 import { AppAtomRegistryProvider } from "../../rpc/atomRegistry";
 import { resetServerStateForTests, setServerConfigSnapshot } from "../../rpc/serverState";
+import { ConnectionsSettings } from "./ConnectionsSettings";
 import { GeneralSettingsPanel } from "./SettingsPanels";
 
 const authAccessHarness = vi.hoisted(() => {
@@ -172,6 +173,7 @@ function makePairingLink(input: {
   readonly credential: string;
   readonly role: "owner" | "client";
   readonly subject: string;
+  readonly label?: string;
   readonly createdAt: string;
   readonly expiresAt: string;
 }): AuthAccessSnapshot["pairingLinks"][number] {
@@ -187,6 +189,14 @@ function makeClientSession(input: {
   readonly subject: string;
   readonly role: "owner" | "client";
   readonly method: "browser-session-cookie";
+  readonly client?: {
+    readonly label?: string;
+    readonly ipAddress?: string;
+    readonly userAgent?: string;
+    readonly deviceType?: "desktop" | "mobile" | "tablet" | "bot" | "unknown";
+    readonly os?: string;
+    readonly browser?: string;
+  };
   readonly issuedAt: string;
   readonly expiresAt: string;
   readonly connected: boolean;
@@ -194,6 +204,10 @@ function makeClientSession(input: {
 }): AuthAccessSnapshot["clientSessions"][number] {
   return {
     ...input,
+    client: {
+      deviceType: "unknown",
+      ...input.client,
+    },
     sessionId: AuthSessionId.makeUnsafe(input.sessionId),
     issuedAt: makeUtc(input.issuedAt),
     expiresAt: makeUtc(input.expiresAt),
@@ -270,6 +284,72 @@ describe("GeneralSettingsPanel observability", () => {
     authAccessHarness.reset();
   });
 
+  it("hides owner pairing tools in browser-served loopback builds without remote exposure", async () => {
+    Reflect.deleteProperty(window, "desktopBridge");
+    authAccessHarness.setSnapshot({
+      pairingLinks: [],
+      clientSessions: [
+        makeClientSession({
+          sessionId: "session-owner",
+          subject: "browser-owner",
+          role: "owner",
+          method: "browser-session-cookie",
+          client: {
+            label: "Chrome on Mac",
+            deviceType: "desktop",
+            os: "macOS",
+            browser: "Chrome",
+            ipAddress: "127.0.0.1",
+          },
+          issuedAt: "2026-04-07T00:00:00.000Z",
+          expiresAt: "2026-05-07T00:00:00.000Z",
+          connected: true,
+          current: true,
+        }),
+      ],
+    });
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/session")) {
+        return new Response(
+          JSON.stringify({
+            authenticated: true,
+            auth: createBaseServerConfig().auth,
+            role: "owner",
+            sessionMethod: "browser-session-cookie",
+            expiresAt: "2026-05-07T00:00:00.000Z",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+
+      throw new Error(`Unhandled fetch GET ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await render(
+      <AppAtomRegistryProvider>
+        <ConnectionsSettings />
+      </AppAtomRegistryProvider>,
+    );
+
+    await expect.element(page.getByText("Local backend access")).toBeInTheDocument();
+    await expect.element(page.getByLabelText("Enable network access")).toBeDisabled();
+    await expect
+      .element(
+        page.getByText(
+          "This backend is only reachable on this machine. Restart it with a non-loopback host to enable remote pairing.",
+        ),
+      )
+      .toBeInTheDocument();
+    await expect.element(page.getByText("Pairing & clients")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Chrome on Mac")).toBeInTheDocument();
+    await expect.element(page.getByText("Saved backends")).toBeInTheDocument();
+  });
+
   it("shows diagnostics inside About with a single logs-folder action", async () => {
     setServerConfigSnapshot(createBaseServerConfig());
 
@@ -309,6 +389,13 @@ describe("GeneralSettingsPanel observability", () => {
         subject: "desktop-bootstrap",
         role: "owner",
         method: "browser-session-cookie",
+        client: {
+          label: "This Mac",
+          deviceType: "desktop",
+          os: "macOS",
+          browser: "Electron",
+          ipAddress: "127.0.0.1",
+        },
         issuedAt: "2026-04-07T00:00:00.000Z",
         expiresAt: "2026-05-07T00:00:00.000Z",
         connected: true,
@@ -331,6 +418,7 @@ describe("GeneralSettingsPanel observability", () => {
               credential: "pairing-token",
               role: "client",
               subject: "one-time-token",
+              label: "Julius iPhone",
               createdAt: "2026-04-07T00:00:00.000Z",
               expiresAt: "2026-04-10T00:05:00.000Z",
             }),
@@ -342,6 +430,13 @@ describe("GeneralSettingsPanel observability", () => {
               subject: "one-time-token",
               role: "client",
               method: "browser-session-cookie",
+              client: {
+                label: "Julius iPhone",
+                deviceType: "mobile",
+                os: "iOS",
+                browser: "Safari",
+                ipAddress: "192.168.1.88",
+              },
               issuedAt: "2026-04-07T00:01:00.000Z",
               expiresAt: "2026-05-07T00:01:00.000Z",
               connected: false,
@@ -356,6 +451,7 @@ describe("GeneralSettingsPanel observability", () => {
             JSON.stringify({
               id: "pairing-link-1",
               credential: "pairing-token",
+              label: "Julius iPhone",
               expiresAt: "2026-04-10T00:05:00.000Z",
             }),
             {
@@ -379,12 +475,16 @@ describe("GeneralSettingsPanel observability", () => {
 
     await expect.element(page.getByText("Network access")).toBeInTheDocument();
     await expect.element(page.getByText("Pair another client")).toBeInTheDocument();
-    await expect.element(page.getByText("This client")).toBeInTheDocument();
+    await expect.element(page.getByText("This Mac")).toBeInTheDocument();
     await page.getByText("Create link", { exact: true }).click();
     authAccessHarness.emitPairingLinkUpserted(pairingLinks[0]!);
     authAccessHarness.emitClientUpserted(clientSessions[1]!);
     await expect
       .element(page.getByText("http://192.168.1.44:3773/pair?token=pairing-token"))
+      .toBeInTheDocument();
+    await expect.element(page.getByText("Julius iPhone")).toBeInTheDocument();
+    await expect
+      .element(page.getByText("Offline · Client · Mobile · iOS · Safari · 192.168.1.88"))
       .toBeInTheDocument();
     await expect.element(page.getByText("Active pairing links")).toBeInTheDocument();
     await expect.element(page.getByText("Paired clients")).toBeInTheDocument();
@@ -405,6 +505,12 @@ describe("GeneralSettingsPanel observability", () => {
         subject: "desktop-bootstrap",
         role: "owner",
         method: "browser-session-cookie",
+        client: {
+          label: "This Mac",
+          deviceType: "desktop",
+          os: "macOS",
+          browser: "Electron",
+        },
         issuedAt: "2026-04-05T00:00:00.000Z",
         expiresAt: "2026-05-05T00:00:00.000Z",
         connected: true,
@@ -415,6 +521,13 @@ describe("GeneralSettingsPanel observability", () => {
         subject: "one-time-token",
         role: "client",
         method: "browser-session-cookie",
+        client: {
+          label: "Julius iPhone",
+          deviceType: "mobile",
+          os: "iOS",
+          browser: "Safari",
+          ipAddress: "192.168.1.88",
+        },
         issuedAt: "2026-04-05T00:01:00.000Z",
         expiresAt: "2026-05-05T00:01:00.000Z",
         connected: false,
@@ -454,29 +567,15 @@ describe("GeneralSettingsPanel observability", () => {
       </AppAtomRegistryProvider>,
     );
 
-    await expect.element(page.getByText("Client session")).toBeInTheDocument();
+    await expect.element(page.getByText("Julius iPhone")).toBeInTheDocument();
     await page.getByText("Revoke other clients", { exact: true }).click();
-    await expect.element(page.getByText("This client")).toBeInTheDocument();
-    await expect.element(page.getByText("Client session")).not.toBeInTheDocument();
+    await expect.element(page.getByText("This Mac")).toBeInTheDocument();
+    await expect.element(page.getByText("Julius iPhone")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalled();
   });
 
-  it("confirms before restarting to change network access", async () => {
-    let resolveSetServerExposureMode:
-      | ((value: Awaited<ReturnType<DesktopBridge["setServerExposureMode"]>>) => void)
-      | null = null;
-    const setServerExposureMode = vi
-      .fn<DesktopBridge["setServerExposureMode"]>()
-      .mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            resolveSetServerExposureMode = resolve;
-          }),
-      );
-    window.desktopBridge = {
-      ...createDesktopBridgeStub(),
-      setServerExposureMode,
-    };
+  it("shows a disabled network access toggle with guidance in desktop builds", async () => {
+    window.desktopBridge = createDesktopBridgeStub();
 
     setServerConfigSnapshot(createBaseServerConfig());
 
@@ -486,26 +585,19 @@ describe("GeneralSettingsPanel observability", () => {
       </AppAtomRegistryProvider>,
     );
 
-    await page.getByLabelText("Enable network access").click();
-
-    expect(setServerExposureMode).not.toHaveBeenCalled();
-    await expect.element(page.getByText("Enable network access?")).toBeInTheDocument();
+    const networkAccessToggle = page.getByLabelText("Enable network access");
+    await expect.element(networkAccessToggle).toBeDisabled();
+    await page.getByLabelText("Enable network access").hover();
     await expect
       .element(page.getByText("T3 Code will restart to expose this environment over the network."))
+      .not.toBeInTheDocument();
+    await expect
+      .element(
+        page.getByText(
+          "Network exposure changes restart the backend and can only be controlled from the desktop app shell.",
+        ),
+      )
       .toBeInTheDocument();
-
-    await page.getByText("Restart and enable").click();
-
-    expect(setServerExposureMode).toHaveBeenCalledWith("network-accessible");
-    await expect.element(page.getByText("Restarting…")).toBeInTheDocument();
-    await expect.element(page.getByText("Enable network access?")).toBeInTheDocument();
-
-    expect(resolveSetServerExposureMode).toBeTypeOf("function");
-    resolveSetServerExposureMode!({
-      mode: "network-accessible",
-      endpointUrl: null,
-      advertisedHost: null,
-    });
   });
 
   it("opens the logs folder in the preferred editor", async () => {

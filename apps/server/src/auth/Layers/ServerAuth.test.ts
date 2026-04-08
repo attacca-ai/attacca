@@ -39,6 +39,13 @@ const makeCookieRequest = (
     headers: {},
   }) as unknown as Parameters<ServerAuthShape["authenticateHttpRequest"]>[0];
 
+const requestMetadata = {
+  deviceType: "desktop" as const,
+  os: "macOS",
+  browser: "Chrome",
+  ipAddress: "192.168.1.23",
+};
+
 it.layer(NodeServices.layer)("ServerAuthLive", (it) => {
   it.effect("maps invalid bootstrap credential failures to 401", () =>
     Effect.sync(() => {
@@ -74,7 +81,10 @@ it.layer(NodeServices.layer)("ServerAuthLive", (it) => {
       const serverAuth = yield* ServerAuth;
 
       const pairingCredential = yield* serverAuth.issuePairingCredential();
-      const exchanged = yield* serverAuth.exchangeBootstrapCredential(pairingCredential.credential);
+      const exchanged = yield* serverAuth.exchangeBootstrapCredential(
+        pairingCredential.credential,
+        requestMetadata,
+      );
       const verified = yield* serverAuth.authenticateHttpRequest(
         makeCookieRequest(exchanged.sessionToken),
       );
@@ -91,9 +101,13 @@ it.layer(NodeServices.layer)("ServerAuthLive", (it) => {
 
       const pairingUrl = yield* serverAuth.issueStartupPairingUrl("http://127.0.0.1:3773");
       const token = new URL(pairingUrl).searchParams.get("token");
+      const listedPairingLinks = yield* serverAuth.listPairingLinks();
       expect(token).toBeTruthy();
+      expect(
+        listedPairingLinks.some((pairingLink) => pairingLink.subject === "owner-bootstrap"),
+      ).toBe(false);
 
-      const exchanged = yield* serverAuth.exchangeBootstrapCredential(token ?? "");
+      const exchanged = yield* serverAuth.exchangeBootstrapCredential(token ?? "", requestMetadata);
       const verified = yield* serverAuth.authenticateHttpRequest(
         makeCookieRequest(exchanged.sessionToken),
       );
@@ -107,15 +121,26 @@ it.layer(NodeServices.layer)("ServerAuthLive", (it) => {
     Effect.gen(function* () {
       const serverAuth = yield* ServerAuth;
 
-      const ownerExchange =
-        yield* serverAuth.exchangeBootstrapCredential("desktop-bootstrap-token");
+      const ownerExchange = yield* serverAuth.exchangeBootstrapCredential(
+        "desktop-bootstrap-token",
+        requestMetadata,
+      );
       const ownerSession = yield* serverAuth.authenticateHttpRequest(
         makeCookieRequest(ownerExchange.sessionToken),
       );
-      const pairingCredential = yield* serverAuth.issuePairingCredential();
+      const pairingCredential = yield* serverAuth.issuePairingCredential({
+        label: "Julius iPhone",
+      });
       const listedPairingLinks = yield* serverAuth.listPairingLinks();
       const clientExchange = yield* serverAuth.exchangeBootstrapCredential(
         pairingCredential.credential,
+        {
+          ...requestMetadata,
+          deviceType: "mobile",
+          os: "iOS",
+          browser: "Safari",
+          ipAddress: "192.168.1.88",
+        },
       );
       const clientSession = yield* serverAuth.authenticateHttpRequest(
         makeCookieRequest(clientExchange.sessionToken),
@@ -125,6 +150,9 @@ it.layer(NodeServices.layer)("ServerAuthLive", (it) => {
       const clientsAfterRevoke = yield* serverAuth.listClientSessions(ownerSession.sessionId);
 
       expect(listedPairingLinks.map((entry) => entry.id)).toContain(pairingCredential.id);
+      expect(listedPairingLinks.find((entry) => entry.id === pairingCredential.id)?.label).toBe(
+        "Julius iPhone",
+      );
       expect(clientsBeforeRevoke).toHaveLength(2);
       expect(
         clientsBeforeRevoke.find((entry) => entry.sessionId === ownerSession.sessionId)?.current,
@@ -132,6 +160,14 @@ it.layer(NodeServices.layer)("ServerAuthLive", (it) => {
       expect(
         clientsBeforeRevoke.find((entry) => entry.sessionId === clientSession.sessionId)?.current,
       ).toBe(false);
+      expect(
+        clientsBeforeRevoke.find((entry) => entry.sessionId === clientSession.sessionId)?.client
+          .label,
+      ).toBe("Julius iPhone");
+      expect(
+        clientsBeforeRevoke.find((entry) => entry.sessionId === clientSession.sessionId)?.client
+          .deviceType,
+      ).toBe("mobile");
       expect(revokedCount).toBe(1);
       expect(clientsAfterRevoke).toHaveLength(1);
       expect(clientsAfterRevoke[0]?.sessionId).toBe(ownerSession.sessionId);

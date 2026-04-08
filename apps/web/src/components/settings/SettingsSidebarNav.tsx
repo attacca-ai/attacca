@@ -45,8 +45,8 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                     isActive={isActive}
                     className={
                       isActive
-                        ? "gap-2 px-2 py-2 text-left text-xs text-foreground"
-                        : "gap-2 px-2 py-2 text-left text-xs text-muted-foreground hover:text-foreground/80"
+                        ? "gap-2.5 px-2.5 py-2 text-left text-[13px] font-medium text-foreground"
+                        : "gap-2.5 px-2.5 py-2 text-left text-[13px] text-muted-foreground/70 hover:text-foreground/80"
                     }
                     onClick={() => void navigate({ to: item.to, replace: true })}
                   >
@@ -54,7 +54,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                       className={
                         isActive
                           ? "size-4 shrink-0 text-foreground"
-                          : "size-4 shrink-0 text-muted-foreground"
+                          : "size-4 shrink-0 text-muted-foreground/60"
                       }
                     />
                     <span className="truncate">{item.label}</span>

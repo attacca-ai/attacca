@@ -70,6 +70,8 @@ import {
 } from "~/wsRpcClient";
 import { resolveInitialServerAuthGateState } from "../authBootstrap";
 import { configureClientTracing } from "../observability/clientTracing";
+import { syncSavedEnvironmentConnectionsFromStore } from "../savedEnvironmentConnections";
+import { useSavedEnvironmentRegistryStore } from "../savedEnvironmentRegistryStore";
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -100,6 +102,7 @@ function RootRouteView() {
       <AnchoredToastProvider>
         <AuthenticatedTracingBootstrap />
         <ServerStateBootstrap />
+        <SavedEnvironmentsBootstrap />
         <EventRouter />
         <WebSocketConnectionCoordinator />
         <SlowRpcAckToastCoordinator />
@@ -243,6 +246,16 @@ function AuthenticatedTracingBootstrap() {
   useEffect(() => {
     void configureClientTracing();
   }, []);
+
+  return null;
+}
+
+function SavedEnvironmentsBootstrap() {
+  const savedEnvironmentById = useSavedEnvironmentRegistryStore((state) => state.byId);
+
+  useEffect(() => {
+    void syncSavedEnvironmentConnectionsFromStore();
+  }, [savedEnvironmentById]);
 
   return null;
 }

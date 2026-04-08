@@ -171,6 +171,28 @@ describe("WsTransport", () => {
     await transport.dispose();
   });
 
+  it("preserves an explicit insecure websocket protocol for remote backends", async () => {
+    const transport = new WsTransport("http://192.168.1.44:3773");
+
+    await waitFor(() => {
+      expect(sockets).toHaveLength(1);
+    });
+
+    expect(getSocket().url).toBe("ws://192.168.1.44:3773/ws");
+    await transport.dispose();
+  });
+
+  it("supports async websocket url providers", async () => {
+    const transport = new WsTransport(async () => "wss://remote.example.com/?wsToken=dynamic");
+
+    await waitFor(() => {
+      expect(sockets).toHaveLength(1);
+    });
+
+    expect(getSocket().url).toBe("wss://remote.example.com/ws?wsToken=dynamic");
+    await transport.dispose();
+  });
+
   it("tracks initial connection failures for the app error state", async () => {
     const transport = new WsTransport("ws://localhost:3020");
 

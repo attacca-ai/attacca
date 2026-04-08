@@ -1,4 +1,4 @@
-import { AuthSessionId, type AuthClientSession } from "@t3tools/contracts";
+import { AuthSessionId, type AuthClientMetadata, type AuthClientSession } from "@t3tools/contracts";
 import { Clock, DateTime, Duration, Effect, Layer, PubSub, Ref, Schema, Stream } from "effect";
 import { Option } from "effect";
 
@@ -23,6 +23,7 @@ import {
 const SIGNING_SECRET_NAME = "server-signing-key";
 const SESSION_COOKIE_NAME = "t3_session";
 const DEFAULT_SESSION_TTL = Duration.days(30);
+const DEFAULT_WEBSOCKET_TOKEN_TTL = Duration.minutes(5);
 
 const SessionClaims = Schema.Struct({
   v: Schema.Literal(1),
@@ -35,6 +36,39 @@ const SessionClaims = Schema.Struct({
   exp: Schema.Number,
 });
 type SessionClaims = typeof SessionClaims.Type;
+
+const WebSocketClaims = Schema.Struct({
+  v: Schema.Literal(1),
+  kind: Schema.Literal("websocket"),
+  sid: AuthSessionId,
+  iat: Schema.Number,
+  exp: Schema.Number,
+});
+type WebSocketClaims = typeof WebSocketClaims.Type;
+
+function createDefaultClientMetadata(): AuthClientMetadata {
+  return {
+    deviceType: "unknown",
+  };
+}
+
+function toClientMetadata(record: {
+  readonly label: string | null;
+  readonly ipAddress: string | null;
+  readonly userAgent: string | null;
+  readonly deviceType: AuthClientMetadata["deviceType"];
+  readonly os: string | null;
+  readonly browser: string | null;
+}): AuthClientMetadata {
+  return {
+    ...(record.label ? { label: record.label } : {}),
+    ...(record.ipAddress ? { ipAddress: record.ipAddress } : {}),
+    ...(record.userAgent ? { userAgent: record.userAgent } : {}),
+    deviceType: record.deviceType,
+    ...(record.os ? { os: record.os } : {}),
+    ...(record.browser ? { browser: record.browser } : {}),
+  };
+}
 
 function toAuthClientSession(input: Omit<AuthClientSession, "current">): AuthClientSession {
   return {
@@ -82,6 +116,7 @@ export const makeSessionCredentialService = Effect.gen(function* () {
           subject: row.value.subject,
           role: row.value.role,
           method: row.value.method,
+          client: toClientMetadata(row.value.client),
           issuedAt: row.value.issuedAt,
           expiresAt: row.value.expiresAt,
           connected: connectedSessions.has(row.value.sessionId),
@@ -153,11 +188,20 @@ export const makeSessionCredentialService = Effect.gen(function* () {
       };
       const encodedPayload = base64UrlEncode(JSON.stringify(claims));
       const signature = signPayload(encodedPayload, signingSecret);
+      const client = input?.client ?? createDefaultClientMetadata();
       yield* authSessions.create({
         sessionId,
         subject: claims.sub,
         role: claims.role,
         method: claims.method,
+        client: {
+          label: client.label ?? null,
+          ipAddress: client.ipAddress ?? null,
+          userAgent: client.userAgent ?? null,
+          deviceType: client.deviceType,
+          os: client.os ?? null,
+          browser: client.browser ?? null,
+        },
         issuedAt,
         expiresAt,
       });
@@ -167,6 +211,7 @@ export const makeSessionCredentialService = Effect.gen(function* () {
           subject: claims.sub,
           role: claims.role,
           method: claims.method,
+          client,
           issuedAt,
           expiresAt,
           connected: false,
@@ -177,6 +222,7 @@ export const makeSessionCredentialService = Effect.gen(function* () {
         sessionId,
         token: `${encodedPayload}.${signature}`,
         method: claims.method,
+        client,
         expiresAt: expiresAt,
         role: claims.role,
       } satisfies IssuedSession;
@@ -231,6 +277,7 @@ export const makeSessionCredentialService = Effect.gen(function* () {
         sessionId: claims.sid,
         token,
         method: claims.method,
+        client: toClientMetadata(row.value.client),
         expiresAt: DateTime.makeUnsafe(claims.exp),
         subject: claims.sub,
         role: claims.role,
@@ -241,6 +288,97 @@ export const makeSessionCredentialService = Effect.gen(function* () {
           ? cause
           : new SessionCredentialError({
               message: "Failed to verify session credential.",
+              cause,
+            }),
+      ),
+    );
+
+  const issueWebSocketToken: SessionCredentialServiceShape["issueWebSocketToken"] = (
+    sessionId,
+    input,
+  ) =>
+    Effect.gen(function* () {
+      const issuedAt = yield* DateTime.now;
+      const expiresAt = DateTime.add(issuedAt, {
+        milliseconds: Duration.toMillis(input?.ttl ?? DEFAULT_WEBSOCKET_TOKEN_TTL),
+      });
+      const claims: WebSocketClaims = {
+        v: 1,
+        kind: "websocket",
+        sid: sessionId,
+        iat: issuedAt.epochMilliseconds,
+        exp: expiresAt.epochMilliseconds,
+      };
+      const encodedPayload = base64UrlEncode(JSON.stringify(claims));
+      const signature = signPayload(encodedPayload, signingSecret);
+      return {
+        token: `${encodedPayload}.${signature}`,
+        expiresAt,
+      };
+    }).pipe(Effect.mapError(toSessionCredentialError("Failed to issue websocket token.")));
+
+  const verifyWebSocketToken: SessionCredentialServiceShape["verifyWebSocketToken"] = (token) =>
+    Effect.gen(function* () {
+      const [encodedPayload, signature] = token.split(".");
+      if (!encodedPayload || !signature) {
+        return yield* new SessionCredentialError({
+          message: "Malformed websocket token.",
+        });
+      }
+
+      const expectedSignature = signPayload(encodedPayload, signingSecret);
+      if (!timingSafeEqualBase64Url(signature, expectedSignature)) {
+        return yield* new SessionCredentialError({
+          message: "Invalid websocket token signature.",
+        });
+      }
+
+      const claims = yield* Effect.try({
+        try: () =>
+          Schema.decodeUnknownSync(WebSocketClaims)(
+            JSON.parse(base64UrlDecodeUtf8(encodedPayload)),
+          ),
+        catch: (cause) =>
+          new SessionCredentialError({
+            message: "Invalid websocket token payload.",
+            cause,
+          }),
+      });
+
+      const now = yield* Clock.currentTimeMillis;
+      if (claims.exp <= now) {
+        return yield* new SessionCredentialError({
+          message: "Websocket token expired.",
+        });
+      }
+
+      const row = yield* authSessions.getById({ sessionId: claims.sid });
+      if (Option.isNone(row)) {
+        return yield* new SessionCredentialError({
+          message: "Unknown websocket session.",
+        });
+      }
+      if (row.value.revokedAt !== null) {
+        return yield* new SessionCredentialError({
+          message: "Websocket session revoked.",
+        });
+      }
+
+      return {
+        sessionId: row.value.sessionId,
+        token,
+        method: row.value.method,
+        client: toClientMetadata(row.value.client),
+        expiresAt: row.value.expiresAt,
+        subject: row.value.subject,
+        role: row.value.role,
+      } satisfies VerifiedSession;
+    }).pipe(
+      Effect.mapError((cause) =>
+        cause instanceof SessionCredentialError
+          ? cause
+          : new SessionCredentialError({
+              message: "Failed to verify websocket token.",
               cause,
             }),
       ),
@@ -258,6 +396,7 @@ export const makeSessionCredentialService = Effect.gen(function* () {
           subject: row.subject,
           role: row.role,
           method: row.method,
+          client: toClientMetadata(row.client),
           issuedAt: row.issuedAt,
           expiresAt: row.expiresAt,
           connected: connectedSessions.has(row.sessionId),
@@ -314,6 +453,8 @@ export const makeSessionCredentialService = Effect.gen(function* () {
     cookieName: SESSION_COOKIE_NAME,
     issue,
     verify,
+    issueWebSocketToken,
+    verifyWebSocketToken,
     listActive,
     get streamChanges() {
       return Stream.fromPubSub(changesPubSub);

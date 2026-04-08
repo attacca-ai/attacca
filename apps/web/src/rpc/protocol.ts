@@ -20,42 +20,110 @@ import {
 
 export const makeWsRpcProtocolClient = RpcClient.make(WsRpcGroup);
 
+export interface WsProtocolLifecycleHandlers {
+  readonly onAttempt?: (socketUrl: string) => void;
+  readonly onOpen?: () => void;
+  readonly onError?: (message: string) => void;
+  readonly onClose?: (details: { readonly code: number; readonly reason: string }) => void;
+}
+
+type WsRpcProtocolUrlInput = string | (() => Promise<string>);
+
 type RpcClientFactory = typeof makeWsRpcProtocolClient;
 export type WsRpcProtocolClient =
   RpcClientFactory extends Effect.Effect<infer Client, any, any> ? Client : never;
 
-export function createWsRpcProtocolLayer(url?: string) {
-  const resolvedUrl = resolveServerUrl({
-    url,
-    protocol: window.location.protocol === "https:" ? "wss" : "ws",
+function formatSocketErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function resolveWsProtocol(rawUrl?: string): "ws" | "wss" {
+  if (rawUrl) {
+    try {
+      const resolved = new URL(rawUrl, window.location.origin);
+      if (resolved.protocol === "https:" || resolved.protocol === "wss:") {
+        return "wss";
+      }
+      if (resolved.protocol === "http:" || resolved.protocol === "ws:") {
+        return "ws";
+      }
+    } catch {
+      // Fall through to page protocol inference.
+    }
+  }
+
+  return window.location.protocol === "https:" ? "wss" : "ws";
+}
+
+function resolveWsRpcSocketUrl(rawUrl?: string): string {
+  return resolveServerUrl({
+    url: rawUrl,
+    protocol: resolveWsProtocol(rawUrl),
     pathname: "/ws",
   });
+}
+
+function defaultLifecycleHandlers(): Required<WsProtocolLifecycleHandlers> {
+  return {
+    onAttempt: recordWsConnectionAttempt,
+    onOpen: recordWsConnectionOpened,
+    onError: (message) => {
+      clearAllTrackedRpcRequests();
+      recordWsConnectionErrored(message);
+    },
+    onClose: (details) => {
+      clearAllTrackedRpcRequests();
+      recordWsConnectionClosed(details);
+    },
+  };
+}
+
+export function createWsRpcProtocolLayer(
+  url?: WsRpcProtocolUrlInput,
+  handlers?: WsProtocolLifecycleHandlers,
+) {
+  const lifecycle = {
+    ...defaultLifecycleHandlers(),
+    ...handlers,
+  };
+  const resolvedUrl =
+    typeof url === "function"
+      ? Effect.promise(() => url()).pipe(
+          Effect.map((rawUrl) => resolveWsRpcSocketUrl(rawUrl)),
+          Effect.tapError((error) =>
+            Effect.sync(() => {
+              lifecycle.onError(formatSocketErrorMessage(error));
+            }),
+          ),
+        )
+      : resolveWsRpcSocketUrl(url);
   const trackingWebSocketConstructorLayer = Layer.succeed(
     Socket.WebSocketConstructor,
     (socketUrl, protocols) => {
-      recordWsConnectionAttempt(socketUrl);
+      lifecycle.onAttempt(socketUrl);
       const socket = new globalThis.WebSocket(socketUrl, protocols);
 
       socket.addEventListener(
         "open",
         () => {
-          recordWsConnectionOpened();
+          lifecycle.onOpen();
         },
         { once: true },
       );
       socket.addEventListener(
         "error",
         () => {
-          clearAllTrackedRpcRequests();
-          recordWsConnectionErrored("Unable to connect to the T3 server WebSocket.");
+          lifecycle.onError("Unable to connect to the T3 server WebSocket.");
         },
         { once: true },
       );
       socket.addEventListener(
         "close",
         (event) => {
-          clearAllTrackedRpcRequests();
-          recordWsConnectionClosed({
+          lifecycle.onClose({
             code: event.code,
             reason: event.reason,
           });
