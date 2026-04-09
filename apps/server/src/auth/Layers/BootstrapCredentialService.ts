@@ -29,6 +29,15 @@ type ConsumeResult =
     };
 
 const DEFAULT_ONE_TIME_TOKEN_TTL_MINUTES = Duration.minutes(5);
+const PAIRING_TOKEN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+const PAIRING_TOKEN_LENGTH = 8;
+
+const generatePairingToken = (): string => {
+  const randomBytes = crypto.getRandomValues(new Uint8Array(PAIRING_TOKEN_LENGTH));
+
+  return Array.from(randomBytes, (value) => PAIRING_TOKEN_ALPHABET[value & 31]).join("");
+};
+
 export const makeBootstrapCredentialService = Effect.gen(function* () {
   const config = yield* ServerConfig;
   const pairingLinks = yield* AuthPairingLinkRepository;
@@ -126,7 +135,7 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
   const issueOneTimeToken: BootstrapCredentialServiceShape["issueOneTimeToken"] = (input) =>
     Effect.gen(function* () {
       const id = crypto.randomUUID();
-      const credential = crypto.randomUUID();
+      const credential = generatePairingToken();
       const ttl = input?.ttl ?? DEFAULT_ONE_TIME_TOKEN_TTL_MINUTES;
       const now = yield* DateTime.now;
       const expiresAt = DateTime.add(now, { milliseconds: Duration.toMillis(ttl) });
