@@ -360,6 +360,7 @@ export const makeServerAuth = Effect.gen(function* () {
     });
 
   return {
+    sessionCookieName: descriptor.sessionCookieName,
     getDescriptor: () => Effect.succeed(descriptor),
     getSessionState,
     exchangeBootstrapCredential,

@@ -32,6 +32,7 @@ export class AuthError extends Data.TaggedError("AuthError")<{
 }> {}
 
 export interface ServerAuthShape {
+  readonly sessionCookieName: string;
   readonly getDescriptor: () => Effect.Effect<ServerAuthDescriptor>;
   readonly getSessionState: (
     request: HttpServerRequest.HttpServerRequest,
