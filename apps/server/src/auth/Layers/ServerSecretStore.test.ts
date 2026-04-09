@@ -1,6 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
-import { Deferred, Effect, FileSystem, Layer, Ref } from "effect";
+import { Cause, Deferred, Effect, FileSystem, Layer, Ref } from "effect";
 import * as PlatformError from "effect/PlatformError";
 
 import { ServerConfig } from "../../config.ts";
@@ -115,13 +115,17 @@ const ConcurrentReadMissFileSystemLayer = Layer.effect(
                     yield* Deferred.succeed(readBarrier, void 0);
                   }
                   yield* Deferred.await(readBarrier);
-                  return yield* PlatformError.systemError({
-                    _tag: "NotFound",
-                    module: "FileSystem",
-                    method: "readFile",
-                    pathOrDescriptor: String(path),
-                    description: "Secret file does not exist yet.",
-                  });
+                  return yield* Effect.failCause(
+                    Cause.fail(
+                      PlatformError.systemError({
+                        _tag: "NotFound",
+                        module: "FileSystem",
+                        method: "readFile",
+                        pathOrDescriptor: String(path),
+                        description: "Secret file does not exist yet.",
+                      }),
+                    ),
+                  );
                 });
               }),
             )

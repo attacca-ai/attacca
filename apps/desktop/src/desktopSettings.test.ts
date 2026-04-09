@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_DESKTOP_SETTINGS,
   readDesktopSettings,
+  setDesktopServerExposurePreference,
   writeDesktopSettings,
 } from "./desktopSettings";
 
@@ -37,6 +38,22 @@ describe("desktopSettings", () => {
     });
 
     expect(readDesktopSettings(settingsPath)).toEqual({
+      serverExposureMode: "network-accessible",
+    });
+  });
+
+  it("preserves the requested network-accessible preference across temporary fallback", () => {
+    expect(
+      setDesktopServerExposurePreference(
+        {
+          serverExposureMode: "local-only",
+        },
+        {
+          requestedMode: "network-accessible",
+          appliedMode: "local-only",
+        },
+      ),
+    ).toEqual({
       serverExposureMode: "network-accessible",
     });
   });

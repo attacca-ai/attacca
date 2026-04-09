@@ -10,6 +10,22 @@ export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   serverExposureMode: "local-only",
 };
 
+export function setDesktopServerExposurePreference(
+  settings: DesktopSettings,
+  input: {
+    readonly requestedMode: DesktopServerExposureMode;
+    readonly appliedMode: DesktopServerExposureMode;
+  },
+): DesktopSettings {
+  const persistedMode = input.requestedMode;
+  return settings.serverExposureMode === persistedMode
+    ? settings
+    : {
+        ...settings,
+        serverExposureMode: persistedMode,
+      };
+}
+
 export function readDesktopSettings(settingsPath: string): DesktopSettings {
   try {
     if (!FS.existsSync(settingsPath)) {

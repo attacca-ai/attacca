@@ -34,6 +34,7 @@ import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serve
 import {
   DEFAULT_DESKTOP_SETTINGS,
   readDesktopSettings,
+  setDesktopServerExposurePreference,
   writeDesktopSettings,
 } from "./desktopSettings";
 import { isBackendReadinessAborted, waitForHttpReady } from "./backendReadiness";
@@ -234,21 +235,17 @@ async function applyDesktopServerExposureMode(
   }
 
   desktopServerExposureMode = exposure.mode;
-  const previousSettings = desktopSettings;
-  desktopSettings =
-    exposure.mode === previousSettings.serverExposureMode
-      ? previousSettings
-      : {
-          ...previousSettings,
-          serverExposureMode: exposure.mode,
-        };
+  desktopSettings = setDesktopServerExposurePreference(desktopSettings, {
+    requestedMode,
+    appliedMode: exposure.mode,
+  });
   backendBindHost = exposure.bindHost;
   backendHttpUrl = exposure.localHttpUrl;
   backendWsUrl = exposure.localWsUrl;
   backendEndpointUrl = exposure.endpointUrl;
   backendAdvertisedHost = exposure.advertisedHost;
 
-  if (options?.persist || exposure.mode !== requestedMode) {
+  if (options?.persist) {
     writeDesktopSettings(DESKTOP_SETTINGS_PATH, desktopSettings);
   }
 

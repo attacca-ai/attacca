@@ -10,6 +10,7 @@ import { DateTime, Effect, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
 import { AuthError, ServerAuth } from "./Services/ServerAuth.ts";
+import { SessionCredentialService } from "./Services/SessionCredentialService.ts";
 import { deriveAuthClientMetadata } from "./clientMetadata.ts";
 
 export const respondToAuthError = (error: AuthError) =>
@@ -62,7 +63,7 @@ export const authBootstrapRouteLayer = HttpRouter.add(
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const serverAuth = yield* ServerAuth;
-    const descriptor = yield* serverAuth.getDescriptor();
+    const sessions = yield* SessionCredentialService;
     const payload = yield* HttpServerRequest.schemaBodyJson(AuthBootstrapInput).pipe(
       Effect.mapError(
         (cause) =>
@@ -79,7 +80,7 @@ export const authBootstrapRouteLayer = HttpRouter.add(
     );
 
     return yield* HttpServerResponse.jsonUnsafe(result.response, { status: 200 }).pipe(
-      HttpServerResponse.setCookie(descriptor.sessionCookieName, result.sessionToken, {
+      HttpServerResponse.setCookie(sessions.cookieName, result.sessionToken, {
         expires: DateTime.toDate(result.response.expiresAt),
         httpOnly: true,
         path: "/",
