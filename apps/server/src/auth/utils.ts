@@ -67,10 +67,10 @@ function inferBrowser(userAgent: string | undefined): string | undefined {
   const normalized = userAgent;
   if (/Edg\//.test(normalized)) return "Edge";
   if (/OPR\//.test(normalized)) return "Opera";
+  if (/Electron\//.test(normalized)) return "Electron";
   if (/Firefox\//.test(normalized)) return "Firefox";
   if (/Chrome\//.test(normalized) || /CriOS\//.test(normalized)) return "Chrome";
   if (/Safari\//.test(normalized) && !/Chrome\//.test(normalized)) return "Safari";
-  if (/Electron\//.test(normalized)) return "Electron";
   return undefined;
 }
 
