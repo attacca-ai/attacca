@@ -9,7 +9,7 @@ import { ServerSecretStoreLive } from "./ServerSecretStore.ts";
 import { SessionCredentialServiceLive } from "./SessionCredentialService.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { AuthControlPlane } from "../Services/AuthControlPlane.ts";
-import { makeAuthControlPlane } from "./authControlPlane.ts";
+import { makeAuthControlPlane } from "./AuthControlPlane.ts";
 import { SessionCredentialService } from "../Services/SessionCredentialService.ts";
 
 const makeServerConfigLayer = (

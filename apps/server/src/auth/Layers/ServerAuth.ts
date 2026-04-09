@@ -21,7 +21,7 @@ import {
   type ServerAuthShape,
 } from "../Services/ServerAuth.ts";
 import { SessionCredentialService } from "../Services/SessionCredentialService.ts";
-import { AuthControlPlaneLive, AuthCoreLive } from "./authControlPlane.ts";
+import { AuthControlPlaneLive, AuthCoreLive } from "./AuthControlPlane.ts";
 
 type BootstrapExchangeResult = {
   readonly response: AuthBootstrapResult;

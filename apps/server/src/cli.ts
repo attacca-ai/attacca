@@ -29,7 +29,7 @@ import {
 import { readBootstrapEnvelope } from "./bootstrap";
 import { expandHomePath, resolveBaseDir } from "./os-jank";
 import { runServer } from "./server";
-import { AuthControlPlaneRuntimeLive } from "./auth/Layers/authControlPlane.ts";
+import { AuthControlPlaneRuntimeLive } from "./auth/Layers/AuthControlPlane.ts";
 import {
   formatIssuedPairingCredential,
   formatIssuedSession,
