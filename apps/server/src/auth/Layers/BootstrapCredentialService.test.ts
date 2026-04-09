@@ -33,6 +33,15 @@ const makeBootstrapCredentialLayer = (
   );
 
 it.layer(NodeServices.layer)("BootstrapCredentialServiceLive", (it) => {
+  it.effect("issues pairing tokens in a short manual-entry format", () =>
+    Effect.gen(function* () {
+      const bootstrapCredentials = yield* BootstrapCredentialService;
+      const issued = yield* bootstrapCredentials.issueOneTimeToken();
+
+      expect(issued.credential).toMatch(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/);
+    }).pipe(Effect.provide(makeBootstrapCredentialLayer())),
+  );
+
   it.effect("issues one-time bootstrap tokens that can only be consumed once", () =>
     Effect.gen(function* () {
       const bootstrapCredentials = yield* BootstrapCredentialService;
