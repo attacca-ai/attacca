@@ -3,8 +3,7 @@ import { Effect, Layer } from "effect";
 
 import { ServerConfig } from "../../config.ts";
 import { ServerAuthPolicy, type ServerAuthPolicyShape } from "../Services/ServerAuthPolicy.ts";
-
-const SESSION_COOKIE_NAME = "t3_session";
+import { SESSION_COOKIE_NAME } from "../utils.ts";
 
 const isWildcardHost = (host: string | undefined): boolean =>
   host === "0.0.0.0" || host === "::" || host === "[::]";

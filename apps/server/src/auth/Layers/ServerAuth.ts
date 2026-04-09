@@ -9,7 +9,7 @@ import {
 import { DateTime, Effect, Layer, Option } from "effect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 
-import { AuthControlPlane, AuthControlPlaneLive, AuthCoreLive } from "../../authControlPlane.ts";
+import { AuthControlPlane } from "../Services/AuthControlPlane.ts";
 import { ServerAuthPolicyLive } from "./ServerAuthPolicy.ts";
 import { BootstrapCredentialService } from "../Services/BootstrapCredentialService.ts";
 import { BootstrapCredentialError } from "../Services/BootstrapCredentialService.ts";
@@ -21,6 +21,7 @@ import {
   type ServerAuthShape,
 } from "../Services/ServerAuth.ts";
 import { SessionCredentialService } from "../Services/SessionCredentialService.ts";
+import { AuthControlPlaneLive, AuthCoreLive } from "./authControlPlane.ts";
 
 type BootstrapExchangeResult = {
   readonly response: AuthBootstrapResult;

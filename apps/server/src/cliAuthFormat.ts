@@ -1,7 +1,7 @@
 import type { AuthClientMetadata, AuthClientSession, AuthPairingLink } from "@t3tools/contracts";
 import { DateTime } from "effect";
 
-import type { IssuedBearerSession, IssuedPairingLink } from "./authControlPlane.ts";
+import type { IssuedBearerSession, IssuedPairingLink } from "./auth/Services/AuthControlPlane.ts";
 
 const newline = "\n";
 

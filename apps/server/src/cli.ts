@@ -29,17 +29,14 @@ import {
 import { readBootstrapEnvelope } from "./bootstrap";
 import { expandHomePath, resolveBaseDir } from "./os-jank";
 import { runServer } from "./server";
-import {
-  AuthControlPlane,
-  AuthControlPlaneRuntimeLive,
-  type AuthControlPlaneShape,
-} from "./authControlPlane";
+import { AuthControlPlaneRuntimeLive } from "./auth/Layers/authControlPlane.ts";
 import {
   formatIssuedPairingCredential,
   formatIssuedSession,
   formatPairingCredentialList,
   formatSessionList,
 } from "./cliAuthFormat";
+import { AuthControlPlane, AuthControlPlaneShape } from "./auth/Services/AuthControlPlane.ts";
 
 const PortSchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 

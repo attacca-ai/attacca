@@ -12,17 +12,13 @@ export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
 
 export function setDesktopServerExposurePreference(
   settings: DesktopSettings,
-  input: {
-    readonly requestedMode: DesktopServerExposureMode;
-    readonly appliedMode: DesktopServerExposureMode;
-  },
+  requestedMode: DesktopServerExposureMode,
 ): DesktopSettings {
-  const persistedMode = input.requestedMode;
-  return settings.serverExposureMode === persistedMode
+  return settings.serverExposureMode === requestedMode
     ? settings
     : {
         ...settings,
-        serverExposureMode: persistedMode,
+        serverExposureMode: requestedMode,
       };
 }
 

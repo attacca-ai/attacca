@@ -48,10 +48,7 @@ describe("desktopSettings", () => {
         {
           serverExposureMode: "local-only",
         },
-        {
-          requestedMode: "network-accessible",
-          appliedMode: "local-only",
-        },
+        "network-accessible",
       ),
     ).toEqual({
       serverExposureMode: "network-accessible",

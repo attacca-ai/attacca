@@ -11,7 +11,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstab
 
 import { AuthError, ServerAuth } from "./Services/ServerAuth.ts";
 import { SessionCredentialService } from "./Services/SessionCredentialService.ts";
-import { deriveAuthClientMetadata } from "./clientMetadata.ts";
+import { deriveAuthClientMetadata } from "./utils.ts";
 
 export const respondToAuthError = (error: AuthError) =>
   Effect.gen(function* () {

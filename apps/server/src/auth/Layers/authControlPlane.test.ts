@@ -2,14 +2,15 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 
-import type { ServerConfigShape } from "./config.ts";
-import { ServerConfig } from "./config.ts";
-import { BootstrapCredentialServiceLive } from "./auth/Layers/BootstrapCredentialService.ts";
-import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
-import { SessionCredentialServiceLive } from "./auth/Layers/SessionCredentialService.ts";
-import { SqlitePersistenceMemory } from "./persistence/Layers/Sqlite.ts";
-import { SessionCredentialService } from "./auth/Services/SessionCredentialService.ts";
-import { AuthControlPlane, makeAuthControlPlane } from "./authControlPlane.ts";
+import { ServerConfigShape } from "../../config.ts";
+import { ServerConfig } from "../../config.ts";
+import { BootstrapCredentialServiceLive } from "./BootstrapCredentialService.ts";
+import { ServerSecretStoreLive } from "./ServerSecretStore.ts";
+import { SessionCredentialServiceLive } from "./SessionCredentialService.ts";
+import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
+import { AuthControlPlane } from "../Services/AuthControlPlane.ts";
+import { makeAuthControlPlane } from "./authControlPlane.ts";
+import { SessionCredentialService } from "../Services/SessionCredentialService.ts";
 
 const makeServerConfigLayer = (
   overrides?: Partial<Pick<ServerConfigShape, "desktopBootstrapToken">>,

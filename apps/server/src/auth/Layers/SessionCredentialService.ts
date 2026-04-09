@@ -5,6 +5,7 @@ import { Option } from "effect";
 import { AuthSessionRepositoryLive } from "../../persistence/Layers/AuthSessions.ts";
 import { AuthSessionRepository } from "../../persistence/Services/AuthSessions.ts";
 import { ServerSecretStore } from "../Services/ServerSecretStore.ts";
+import { SESSION_COOKIE_NAME } from "../utils.ts";
 import {
   SessionCredentialError,
   SessionCredentialService,
@@ -18,10 +19,9 @@ import {
   base64UrlEncode,
   signPayload,
   timingSafeEqualBase64Url,
-} from "../tokenCodec.ts";
+} from "../utils.ts";
 
 const SIGNING_SECRET_NAME = "server-signing-key";
-const SESSION_COOKIE_NAME = "t3_session";
 const DEFAULT_SESSION_TTL = Duration.days(30);
 const DEFAULT_WEBSOCKET_TOKEN_TTL = Duration.minutes(5);
 
