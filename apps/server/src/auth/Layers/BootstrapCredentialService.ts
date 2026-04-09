@@ -19,6 +19,7 @@ interface StoredBootstrapGrant extends BootstrapGrant {
 }
 
 type ConsumeResult =
+  | { readonly _tag: "not_found" }
   | {
       readonly _tag: "error";
       readonly error: BootstrapCredentialError;
@@ -175,13 +176,7 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
         (current): readonly [ConsumeResult, Map<string, StoredBootstrapGrant>] => {
           const grant = current.get(credential);
           if (!grant) {
-            return [
-              {
-                _tag: "error",
-                error: invalidBootstrapCredentialError("Unknown bootstrap credential."),
-              },
-              current,
-            ];
+            return [{ _tag: "not_found" }, current];
           }
 
           const next = new Map(current);
@@ -226,6 +221,9 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
 
       if (seededResult._tag === "success") {
         return seededResult.grant;
+      }
+      if (seededResult._tag === "error") {
+        return yield* seededResult.error;
       }
 
       const consumed = yield* pairingLinks.consumeAvailable({
