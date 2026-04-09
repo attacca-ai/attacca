@@ -18,6 +18,7 @@ import {
   type WsProtocolLifecycleHandlers,
   type WsRpcProtocolClient,
 } from "./rpc/protocol";
+import { isTransportConnectionErrorMessage } from "./rpc/transportError";
 
 interface SubscribeOptions {
   readonly retryDelay?: Duration.Input;
@@ -145,8 +146,16 @@ export class WsTransport {
             return;
           }
 
+          const formattedError = formatErrorMessage(error);
+          if (!isTransportConnectionErrorMessage(formattedError)) {
+            console.warn("WebSocket RPC subscription failed", {
+              error: formattedError,
+            });
+            return;
+          }
+
           console.warn("WebSocket RPC subscription disconnected", {
-            error: formatErrorMessage(error),
+            error: formattedError,
           });
           await sleep(retryDelayMs);
         }
