@@ -306,7 +306,7 @@ export const makeServerAuth = Effect.gen(function* () {
       Effect.map((issued) => {
         const url = new URL(baseUrl);
         url.pathname = "/pair";
-        url.searchParams.set("token", issued.credential);
+        url.hash = `token=${encodeURIComponent(issued.credential)}`;
         return url.toString();
       }),
     );

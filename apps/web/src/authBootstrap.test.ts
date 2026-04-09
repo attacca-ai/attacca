@@ -234,11 +234,11 @@ describe("resolveInitialServerAuthGateState", () => {
   });
 
   it("takes a pairing token from the location and strips it immediately", async () => {
-    const testWindow = installTestBrowser("http://localhost/?token=pairing-token");
+    const testWindow = installTestBrowser("http://localhost/#token=pairing-token");
     const { takePairingTokenFromUrl } = await import("./authBootstrap");
 
     expect(takePairingTokenFromUrl()).toBe("pairing-token");
-    expect(testWindow.location.searchParams.get("token")).toBeNull();
+    expect(testWindow.location.hash).toBe("");
   });
 
   it("allows manual token submission after the initial auth check requires pairing", async () => {

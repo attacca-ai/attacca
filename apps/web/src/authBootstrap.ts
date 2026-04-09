@@ -59,17 +59,22 @@ class AuthBootstrapHttpError extends Error {
 }
 
 export function peekPairingTokenFromUrl(): string | null {
-  const url = new URL(window.location.href);
-  const token = url.searchParams.get("token");
+  const hash = window.location.hash;
+  if (!hash.startsWith("#")) return null;
+  const params = new URLSearchParams(hash.slice(1));
+  const token = params.get("token");
   return token && token.length > 0 ? token : null;
 }
 
 export function stripPairingTokenFromUrl() {
+  const hash = window.location.hash;
+  if (!hash.startsWith("#")) return;
+  const params = new URLSearchParams(hash.slice(1));
+  if (!params.has("token")) return;
+  params.delete("token");
+  const remaining = params.toString();
   const url = new URL(window.location.href);
-  if (!url.searchParams.has("token")) {
-    return;
-  }
-  url.searchParams.delete("token");
+  url.hash = remaining.length > 0 ? remaining : "";
   window.history.replaceState({}, document.title, url.toString());
 }
 

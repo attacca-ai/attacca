@@ -26,7 +26,7 @@ describe("remoteEnvironmentAuth", () => {
   it("derives backend urls and token from a pairing url", () => {
     expect(
       resolveRemotePairingTarget({
-        pairingUrl: "https://remote.example.com/pair?token=pairing-token",
+        pairingUrl: "https://remote.example.com/pair#token=pairing-token",
       }),
     ).toEqual({
       credential: "pairing-token",

@@ -147,7 +147,11 @@ export function resolveRemotePairingTarget(input: {
   const pairingUrl = input.pairingUrl?.trim() ?? "";
   if (pairingUrl.length > 0) {
     const url = new URL(pairingUrl, window.location.origin);
-    const credential = url.searchParams.get("token")?.trim() ?? "";
+    const hashParams = url.hash.startsWith("#")
+      ? new URLSearchParams(url.hash.slice(1))
+      : new URLSearchParams();
+    const credential =
+      hashParams.get("token")?.trim() || url.searchParams.get("token")?.trim() || "";
     if (!credential) {
       throw new Error("Pairing URL is missing its token.");
     }

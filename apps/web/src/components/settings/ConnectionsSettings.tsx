@@ -160,13 +160,13 @@ function removeDesktopClientSession(
 function resolveDesktopPairingUrl(endpointUrl: string, credential: string): string {
   const url = new URL(endpointUrl);
   url.pathname = "/pair";
-  url.searchParams.set("token", credential);
+  url.hash = `token=${encodeURIComponent(credential)}`;
   return url.toString();
 }
 
 function resolveCurrentOriginPairingUrl(credential: string): string {
   const url = new URL("/pair", window.location.href);
-  url.searchParams.set("token", credential);
+  url.hash = `token=${encodeURIComponent(credential)}`;
   return url.toString();
 }
 
@@ -1282,7 +1282,7 @@ export function ConnectionsSettings() {
                         <Input
                           value={savedBackendPairingUrl}
                           onChange={(event) => setSavedBackendPairingUrl(event.target.value)}
-                          placeholder="https://backend.example.com/pair?token=..."
+                          placeholder="https://backend.example.com/pair#token=..."
                           disabled={isAddingSavedBackend}
                           spellCheck={false}
                         />
