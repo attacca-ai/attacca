@@ -50,7 +50,6 @@ describe("desktopSettings", () => {
         },
         {
           requestedMode: "network-accessible",
-          appliedMode: "local-only",
         },
       ),
     ).toEqual({

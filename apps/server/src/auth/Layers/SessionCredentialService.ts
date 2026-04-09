@@ -6,6 +6,7 @@ import { AuthSessionRepositoryLive } from "../../persistence/Layers/AuthSessions
 import { AuthSessionRepository } from "../../persistence/Services/AuthSessions.ts";
 import { ServerSecretStore } from "../Services/ServerSecretStore.ts";
 import {
+  SESSION_COOKIE_NAME,
   SessionCredentialError,
   SessionCredentialService,
   type IssuedSession,
@@ -21,7 +22,6 @@ import {
 } from "../tokenCodec.ts";
 
 const SIGNING_SECRET_NAME = "server-signing-key";
-const SESSION_COOKIE_NAME = "t3_session";
 const DEFAULT_SESSION_TTL = Duration.days(30);
 const DEFAULT_WEBSOCKET_TOKEN_TTL = Duration.minutes(5);
 

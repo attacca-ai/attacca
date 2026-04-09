@@ -14,7 +14,6 @@ export function setDesktopServerExposurePreference(
   settings: DesktopSettings,
   input: {
     readonly requestedMode: DesktopServerExposureMode;
-    readonly appliedMode: DesktopServerExposureMode;
   },
 ): DesktopSettings {
   const persistedMode = input.requestedMode;

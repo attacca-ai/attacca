@@ -237,7 +237,6 @@ async function applyDesktopServerExposureMode(
   desktopServerExposureMode = exposure.mode;
   desktopSettings = setDesktopServerExposurePreference(desktopSettings, {
     requestedMode,
-    appliedMode: exposure.mode,
   });
   backendBindHost = exposure.bindHost;
   backendHttpUrl = exposure.localHttpUrl;

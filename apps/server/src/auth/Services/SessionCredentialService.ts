@@ -81,6 +81,8 @@ export interface SessionCredentialServiceShape {
   readonly markDisconnected: (sessionId: AuthSessionId) => Effect.Effect<void, never>;
 }
 
+export const SESSION_COOKIE_NAME = "t3_session";
+
 export class SessionCredentialService extends ServiceMap.Service<
   SessionCredentialService,
   SessionCredentialServiceShape
