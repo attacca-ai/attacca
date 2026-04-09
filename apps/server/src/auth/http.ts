@@ -128,18 +128,6 @@ export const authWebSocketTokenRouteLayer = HttpRouter.add(
     });
   }).pipe(Effect.catchTag("AuthError", (error) => respondToAuthError(error))),
 );
-
-export const authSessionCorsRouteLayer = HttpRouter.add(
-  "GET",
-  "/api/auth/session",
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const serverAuth = yield* ServerAuth;
-    const session = yield* serverAuth.getSessionState(request);
-    return HttpServerResponse.jsonUnsafe(session, { status: 200 });
-  }),
-);
-
 export const authPairingCredentialRouteLayer = HttpRouter.add(
   "POST",
   "/api/auth/pairing-token",

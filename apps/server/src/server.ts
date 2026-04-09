@@ -61,7 +61,7 @@ import {
   authPairingLinksRevokeRouteLayer,
   authPairingLinksRouteLayer,
   authPairingCredentialRouteLayer,
-  authSessionCorsRouteLayer,
+  authSessionRouteLayer,
   authWebSocketTokenRouteLayer,
 } from "./auth/http";
 import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore";
@@ -244,7 +244,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   authPairingLinksRevokeRouteLayer,
   authPairingLinksRouteLayer,
   authPairingCredentialRouteLayer,
-  authSessionCorsRouteLayer,
+  authSessionRouteLayer,
   authWebSocketTokenRouteLayer,
   attachmentsRouteLayer,
   otlpTracesProxyRouteLayer,
