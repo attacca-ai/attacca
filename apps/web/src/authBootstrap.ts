@@ -10,6 +10,10 @@ import type {
   AuthSessionState,
 } from "@t3tools/contracts";
 import { resolveServerHttpUrl } from "./lib/utils";
+import {
+  getPairingTokenFromUrl,
+  stripPairingTokenFromUrl as stripPairingTokenUrl,
+} from "./pairingUrl";
 
 export interface ServerPairingLinkRecord {
   readonly id: string;
@@ -59,18 +63,16 @@ class AuthBootstrapHttpError extends Error {
 }
 
 export function peekPairingTokenFromUrl(): string | null {
-  const url = new URL(window.location.href);
-  const token = url.searchParams.get("token");
-  return token && token.length > 0 ? token : null;
+  return getPairingTokenFromUrl(new URL(window.location.href));
 }
 
 export function stripPairingTokenFromUrl() {
   const url = new URL(window.location.href);
-  if (!url.searchParams.has("token")) {
+  const next = stripPairingTokenUrl(url);
+  if (next.toString() === url.toString()) {
     return;
   }
-  url.searchParams.delete("token");
-  window.history.replaceState({}, document.title, url.toString());
+  window.history.replaceState({}, document.title, next.toString());
 }
 
 export function takePairingTokenFromUrl(): string | null {

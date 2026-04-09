@@ -3,6 +3,7 @@ import type {
   AuthSessionState,
   AuthWebSocketTokenResult,
 } from "@t3tools/contracts";
+import { getPairingTokenFromUrl } from "./pairingUrl";
 
 export interface ResolvedRemotePairingTarget {
   readonly credential: string;
@@ -147,7 +148,7 @@ export function resolveRemotePairingTarget(input: {
   const pairingUrl = input.pairingUrl?.trim() ?? "";
   if (pairingUrl.length > 0) {
     const url = new URL(pairingUrl, window.location.origin);
-    const credential = url.searchParams.get("token")?.trim() ?? "";
+    const credential = getPairingTokenFromUrl(url) ?? "";
     if (!credential) {
       throw new Error("Pairing URL is missing its token.");
     }
