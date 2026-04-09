@@ -4379,7 +4379,7 @@ export default function ChatView(props: ChatViewProps) {
                         respondingRequestIds={respondingRequestIds}
                         answers={activePendingDraftAnswers}
                         questionIndex={activePendingQuestionIndex}
-                        onSelectOption={onSelectActivePendingUserInputOption}
+                        onToggleOption={onSelectActivePendingUserInputOption}
                         onAdvance={onAdvanceActivePendingUserInput}
                       />
                     </div>

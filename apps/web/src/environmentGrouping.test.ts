@@ -12,7 +12,7 @@ import {
 } from "./store";
 import { deriveLogicalProjectKey } from "./logicalProject";
 import type { Project, SidebarThreadSummary } from "./types";
-import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE } from "./types";
+import { DEFAULT_INTERACTION_MODE } from "./types";
 
 // ── Fixture Identifiers ──────────────────────────────────────────────
 
@@ -293,7 +293,7 @@ describe("environment grouping", () => {
       const state = makeFixtureState();
       const projects = selectProjectsAcrossEnvironments(state);
       expect(projects).toHaveLength(4);
-      const names = projects.map((p) => p.name).sort();
+      const names = projects.map((p) => p.name).toSorted();
       expect(names).toEqual(["local-only", "remote-only", "shared-repo", "shared-repo"]);
     });
   });
@@ -408,8 +408,8 @@ describe("environment grouping", () => {
       const sharedGroup = groups.get(SHARED_REPO_CANONICAL_KEY);
       expect(sharedGroup).toBeDefined();
       expect(sharedGroup).toHaveLength(2);
-      expect(sharedGroup!.map((p) => p.environmentId).sort()).toEqual(
-        [primaryEnvId, remoteEnvId].sort(),
+      expect(sharedGroup!.map((p) => p.environmentId).toSorted()).toEqual(
+        [primaryEnvId, remoteEnvId].toSorted(),
       );
 
       // Build member refs for the grouped project and fetch threads
