@@ -1,12 +1,14 @@
 export interface WaitForHttpReadyOptions {
   readonly timeoutMs?: number;
   readonly intervalMs?: number;
+  readonly requestTimeoutMs?: number;
   readonly fetchImpl?: typeof fetch;
   readonly signal?: AbortSignal;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_INTERVAL_MS = 100;
+const DEFAULT_REQUEST_TIMEOUT_MS = 1_000;
 
 export class BackendReadinessAbortedError extends Error {
   constructor() {
@@ -54,6 +56,7 @@ export async function waitForHttpReady(
   const signal = options?.signal;
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const intervalMs = options?.intervalMs ?? DEFAULT_INTERVAL_MS;
+  const requestTimeoutMs = options?.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const deadline = Date.now() + timeoutMs;
 
   for (;;) {
@@ -61,10 +64,19 @@ export async function waitForHttpReady(
       throw new BackendReadinessAbortedError();
     }
 
+    const requestController = new AbortController();
+    const requestTimeout = setTimeout(() => {
+      requestController.abort();
+    }, requestTimeoutMs);
+    const abortRequest = () => {
+      requestController.abort();
+    };
+    signal?.addEventListener("abort", abortRequest, { once: true });
+
     try {
       const response = await fetchImpl(`${baseUrl}/api/auth/session`, {
         redirect: "manual",
-        ...(signal ? { signal } : {}),
+        signal: requestController.signal,
       });
       if (response.ok) {
         return;
@@ -77,6 +89,9 @@ export async function waitForHttpReady(
         throw new BackendReadinessAbortedError();
       }
       // Retry until the backend becomes reachable or the deadline expires.
+    } finally {
+      clearTimeout(requestTimeout);
+      signal?.removeEventListener("abort", abortRequest);
     }
 
     if (Date.now() >= deadline) {

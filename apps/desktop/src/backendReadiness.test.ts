@@ -22,6 +22,33 @@ describe("waitForHttpReady", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it("retries after a readiness request stalls past the per-request timeout", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(
+        (_input, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => {
+                reject(new Error("request timed out"));
+              },
+              { once: true },
+            );
+          }) as ReturnType<typeof fetch>,
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await waitForHttpReady("http://127.0.0.1:3773", {
+      fetchImpl,
+      timeoutMs: 100,
+      intervalMs: 0,
+      requestTimeoutMs: 1,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it("aborts an in-flight readiness wait", async () => {
     const controller = new AbortController();
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(

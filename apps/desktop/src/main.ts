@@ -213,12 +213,25 @@ async function applyDesktopServerExposureMode(
   options?: { readonly persist?: boolean; readonly rejectIfUnavailable?: boolean },
 ): Promise<DesktopServerExposureState> {
   const advertisedHostOverride = resolveAdvertisedHostOverride();
-  const exposure = resolveDesktopServerExposure({
+  const requestedMode = mode;
+  let exposure = resolveDesktopServerExposure({
     mode,
     port: backendPort,
     networkInterfaces: OS.networkInterfaces(),
     ...(advertisedHostOverride ? { advertisedHostOverride } : {}),
   });
+
+  if (requestedMode === "network-accessible" && exposure.endpointUrl === null) {
+    if (options?.rejectIfUnavailable) {
+      throw new Error("No reachable network address is available for this desktop right now.");
+    }
+    exposure = resolveDesktopServerExposure({
+      mode: "local-only",
+      port: backendPort,
+      networkInterfaces: OS.networkInterfaces(),
+      ...(advertisedHostOverride ? { advertisedHostOverride } : {}),
+    });
+  }
 
   desktopServerExposureMode = exposure.mode;
   const previousSettings = desktopSettings;
@@ -235,7 +248,7 @@ async function applyDesktopServerExposureMode(
   backendEndpointUrl = exposure.endpointUrl;
   backendAdvertisedHost = exposure.advertisedHost;
 
-  if (options?.persist || exposure.mode !== mode) {
+  if (options?.persist || exposure.mode !== requestedMode) {
     writeDesktopSettings(DESKTOP_SETTINGS_PATH, desktopSettings);
   }
 
@@ -1727,13 +1740,19 @@ app
     registerDesktopProtocol();
     configureAutoUpdater();
     void bootstrap().catch((error) => {
+      if (isBackendReadinessAborted(error) && isQuitting) {
+        return;
+      }
       handleFatalStartupError("bootstrap", error);
     });
 
     app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        mainWindow = createWindow();
+      const existingWindow = mainWindow ?? BrowserWindow.getAllWindows()[0];
+      if (existingWindow) {
+        revealWindow(existingWindow);
+        return;
       }
+      mainWindow = createWindow();
     });
   })
   .catch((error) => {
