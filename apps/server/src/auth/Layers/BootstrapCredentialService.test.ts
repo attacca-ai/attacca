@@ -38,7 +38,7 @@ it.layer(NodeServices.layer)("BootstrapCredentialServiceLive", (it) => {
       const bootstrapCredentials = yield* BootstrapCredentialService;
       const issued = yield* bootstrapCredentials.issueOneTimeToken();
 
-      expect(issued.credential).toMatch(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/);
+      expect(issued.credential).toMatch(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{12}$/);
     }).pipe(Effect.provide(makeBootstrapCredentialLayer())),
   );
 
