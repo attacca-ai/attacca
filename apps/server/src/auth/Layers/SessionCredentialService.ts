@@ -119,17 +119,31 @@ export const makeSessionCredentialService = Effect.gen(function* () {
           client: toClientMetadata(row.value.client),
           issuedAt: row.value.issuedAt,
           expiresAt: row.value.expiresAt,
+          lastConnectedAt: row.value.lastConnectedAt,
           connected: connectedSessions.has(row.value.sessionId),
         }),
       );
     });
 
   const markConnected: SessionCredentialServiceShape["markConnected"] = (sessionId) =>
-    Ref.update(connectedSessionsRef, (current) => {
+    Ref.modify(connectedSessionsRef, (current) => {
       const next = new Map(current);
+      const wasDisconnected = !next.has(sessionId);
       next.set(sessionId, (next.get(sessionId) ?? 0) + 1);
-      return next;
+      return [wasDisconnected, next] as const;
     }).pipe(
+      Effect.flatMap((wasDisconnected) =>
+        wasDisconnected
+          ? DateTime.now.pipe(
+              Effect.flatMap((lastConnectedAt) =>
+                authSessions.setLastConnectedAt({
+                  sessionId,
+                  lastConnectedAt,
+                }),
+              ),
+            )
+          : Effect.void,
+      ),
       Effect.flatMap(() => loadActiveSession(sessionId)),
       Effect.flatMap((session) =>
         Option.isSome(session) ? emitUpsert(session.value) : Effect.void,
@@ -214,6 +228,7 @@ export const makeSessionCredentialService = Effect.gen(function* () {
           client,
           issuedAt,
           expiresAt,
+          lastConnectedAt: null,
           connected: false,
         }),
       );
@@ -404,6 +419,7 @@ export const makeSessionCredentialService = Effect.gen(function* () {
           client: toClientMetadata(row.client),
           issuedAt: row.issuedAt,
           expiresAt: row.expiresAt,
+          lastConnectedAt: row.lastConnectedAt,
           connected: connectedSessions.has(row.sessionId),
         }),
       );

@@ -5,14 +5,14 @@ import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
-/** Re-render every `intervalMs`; return value is a counter (compare time with `Date.now()` in render). */
+/** Re-render every `intervalMs`; return a stable timestamp snapshot for render-time relative labels. */
 export function useRelativeTimeTick(intervalMs = 1_000) {
-  const [tick, setTick] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setTick((n) => n + 1), intervalMs);
+    const id = setInterval(() => setNowMs(Date.now()), intervalMs);
     return () => clearInterval(id);
   }, [intervalMs]);
-  return tick;
+  return nowMs;
 }
 
 export function SettingsSection({

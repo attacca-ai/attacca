@@ -159,6 +159,7 @@ export function formatSessionList(
         connected: session.connected,
         issuedAt: toIsoString(session.issuedAt),
         expiresAt: toIsoString(session.expiresAt),
+        lastConnectedAt: session.lastConnectedAt ? toIsoString(session.lastConnectedAt) : null,
       })),
       null,
       2,
@@ -178,6 +179,9 @@ export function formatSessionList(
           `  subject: ${session.subject}`,
           `  client: ${formatClientMetadata(session.client)}`,
           `  issued: ${toIsoString(session.issuedAt)}`,
+          `  last connected: ${
+            session.lastConnectedAt ? toIsoString(session.lastConnectedAt) : "never"
+          }`,
           `  expires: ${toIsoString(session.expiresAt)}`,
         ].join(newline),
       )

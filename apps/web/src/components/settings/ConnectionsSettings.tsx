@@ -1,5 +1,4 @@
 import { PlusIcon, QrCodeIcon } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   type AuthClientSession,
@@ -20,7 +19,7 @@ import {
 } from "../../authBootstrap";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { cn } from "../../lib/utils";
-import { formatExpiresInLabel } from "../../timestampFormat";
+import { formatElapsedDurationLabel, formatExpiresInLabel } from "../../timestampFormat";
 import { getPrimaryWsRpcClientEntry } from "../../wsRpcClient";
 import {
   SettingsPageContainer,
@@ -49,6 +48,7 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { QRCodeSvg } from "../ui/qr-code";
 import { Spinner } from "../ui/spinner";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
@@ -62,6 +62,8 @@ import {
 } from "../../environmentManager";
 import { setPairingTokenOnUrl } from "../../pairingUrl";
 import {
+  type SavedEnvironmentRecord,
+  type SavedEnvironmentRuntimeState,
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
 } from "../../savedEnvironmentsStore";
@@ -77,6 +79,85 @@ function formatAccessTimestamp(value: string): string {
     return value;
   }
   return accessTimestampFormatter.format(parsed);
+}
+
+type ConnectionStatusDotProps = {
+  tooltipText?: string | null;
+  dotClassName: string;
+  pingClassName?: string | null;
+};
+
+function ConnectionStatusDot({
+  tooltipText,
+  dotClassName,
+  pingClassName,
+}: ConnectionStatusDotProps) {
+  const dotContent = (
+    <>
+      {pingClassName ? (
+        <span
+          className={cn(
+            "absolute inline-flex h-full w-full animate-ping rounded-full",
+            pingClassName,
+          )}
+        />
+      ) : null}
+      <span className={cn("relative inline-flex size-2 rounded-full", dotClassName)} />
+    </>
+  );
+
+  if (!tooltipText) {
+    return (
+      <span className="relative flex size-3 shrink-0 items-center justify-center">
+        {dotContent}
+      </span>
+    );
+  }
+
+  const dot = (
+    <button
+      type="button"
+      title={tooltipText}
+      aria-label={tooltipText}
+      className="relative flex size-3 shrink-0 cursor-help items-center justify-center rounded-full outline-hidden"
+    >
+      {dotContent}
+    </button>
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={dot} />
+      <TooltipPopup side="top" className="max-w-80 whitespace-pre-wrap leading-tight">
+        {tooltipText}
+      </TooltipPopup>
+    </Tooltip>
+  );
+}
+
+function getSavedBackendStatusTooltip(
+  runtime: SavedEnvironmentRuntimeState | null,
+  record: SavedEnvironmentRecord,
+  nowMs: number,
+) {
+  const connectionState = runtime?.connectionState ?? "disconnected";
+
+  if (connectionState === "connected") {
+    const connectedAt = runtime?.connectedAt ?? record.lastConnectedAt;
+    return connectedAt ? `Connected for ${formatElapsedDurationLabel(connectedAt, nowMs)}` : null;
+  }
+
+  if (connectionState === "connecting") {
+    return null;
+  }
+
+  if (connectionState === "error") {
+    return runtime?.lastError ?? "An unknown connection error occurred.";
+  }
+
+  return record.lastConnectedAt
+    ? `Last connected at ${formatAccessTimestamp(record.lastConnectedAt)}`
+    : "Not connected yet.";
 }
 
 /** Direct row in the card – same pattern as the Provider / ACP-agent list rows. */
@@ -116,6 +197,10 @@ function toDesktopClientSessionRecord(clientSession: AuthClientSession): ServerC
     ...clientSession,
     issuedAt: DateTime.formatIso(clientSession.issuedAt),
     expiresAt: DateTime.formatIso(clientSession.expiresAt),
+    lastConnectedAt:
+      clientSession.lastConnectedAt === null
+        ? null
+        : DateTime.formatIso(clientSession.lastConnectedAt),
   };
 }
 
@@ -192,8 +277,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
   revokingPairingLinkId,
   onRevoke,
 }: PairingLinkListRowProps) {
-  useRelativeTimeTick(1_000);
-  const nowMs = Date.now();
+  const nowMs = useRelativeTimeTick(1_000);
   const expiresAtMs = useMemo(
     () => new Date(pairingLink.expiresAt).getTime(),
     [pairingLink.expiresAt],
@@ -254,7 +338,10 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
       <div className={ITEM_ROW_INNER_CLASSNAME}>
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex min-h-5 items-center gap-1.5">
-            <span className="size-2 shrink-0 rounded-full bg-amber-400" aria-hidden />
+            <ConnectionStatusDot
+              tooltipText={`Link created at ${formatAccessTimestamp(pairingLink.createdAt)}`}
+              dotClassName="bg-amber-400"
+            />
             <h3 className="text-sm font-medium text-foreground">{primaryLabel}</h3>
             <Popover>
               {shareablePairingUrl ? (
@@ -274,7 +361,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
                     <QrCodeIcon aria-hidden className="size-3" />
                   </PopoverTrigger>
                   <PopoverPopup side="top" align="start" tooltipStyle className="w-max">
-                    <QRCodeSVG
+                    <QRCodeSvg
                       value={shareablePairingUrl}
                       size={88}
                       level="M"
@@ -326,7 +413,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
                 />
                 {shareablePairingUrl ? (
                   <div className="flex justify-center rounded-xl border border-border/60 bg-muted/30 p-4">
-                    <QRCodeSVG
+                    <QRCodeSvg
                       value={shareablePairingUrl}
                       size={132}
                       level="M"
@@ -373,7 +460,16 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
   revokingClientSessionId,
   onRevokeSession,
 }: ConnectedClientListRowProps) {
+  const nowMs = useRelativeTimeTick(1_000);
   const isLive = clientSession.current || clientSession.connected;
+  const lastConnectedAt = clientSession.lastConnectedAt;
+  const statusTooltip = isLive
+    ? lastConnectedAt
+      ? `Connected for ${formatElapsedDurationLabel(lastConnectedAt, nowMs)}`
+      : "Connected"
+    : lastConnectedAt
+      ? `Last connected at ${formatAccessTimestamp(lastConnectedAt)}`
+      : "Not connected yet.";
   const roleLabel = clientSession.role === "owner" ? "Owner" : "Client";
   const deviceInfoBits = [
     clientSession.client.deviceType !== "unknown"
@@ -393,17 +489,11 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
       <div className={ITEM_ROW_INNER_CLASSNAME}>
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex min-h-5 items-center gap-1.5">
-            <span className="relative flex size-2 shrink-0" aria-hidden>
-              {isLive && (
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success/60 duration-2000" />
-              )}
-              <span
-                className={cn(
-                  "relative inline-flex size-2 rounded-full",
-                  isLive ? "bg-success" : "bg-muted-foreground/30",
-                )}
-              />
-            </span>
+            <ConnectionStatusDot
+              tooltipText={statusTooltip}
+              dotClassName={isLive ? "bg-success" : "bg-muted-foreground/30"}
+              pingClassName={isLive ? "bg-success/60 duration-2000" : null}
+            />
             <h3 className="text-sm font-medium text-foreground">{primaryLabel}</h3>
             {clientSession.current ? (
               <span className="text-[10px] text-muted-foreground/80 rounded-md border border-border/50 bg-muted/50 px-1 py-0.5">
@@ -600,6 +690,7 @@ function SavedBackendListRow({
   onReconnect,
   onRemove,
 }: SavedBackendListRowProps) {
+  const nowMs = useRelativeTimeTick(1_000);
   const record = useSavedEnvironmentRegistryStore((state) => state.byId[environmentId] ?? null);
   const runtime = useSavedEnvironmentRuntimeStore((state) => state.byId[environmentId] ?? null);
 
@@ -616,49 +707,35 @@ function SavedBackendListRow({
         : connectionState === "error"
           ? "bg-destructive"
           : "bg-muted-foreground/40";
-  const statusLabel =
-    connectionState === "connected"
-      ? "Connected"
-      : connectionState === "connecting"
-        ? "Connecting"
-        : connectionState === "error"
-          ? "Error"
-          : "Disconnected";
   const roleLabel = runtime?.role ? (runtime.role === "owner" ? "Owner" : "Client") : null;
   const descriptorLabel = runtime?.descriptor?.label ?? null;
+  const statusTooltip = getSavedBackendStatusTooltip(runtime, record, nowMs);
+  const metadataBits = [
+    roleLabel,
+    record.lastConnectedAt
+      ? `Last connected ${formatAccessTimestamp(record.lastConnectedAt)}`
+      : null,
+  ].filter((value): value is string => value !== null);
 
   return (
     <div className={ITEM_ROW_CLASSNAME}>
       <div className={ITEM_ROW_INNER_CLASSNAME}>
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex min-h-5 items-center gap-1.5">
-            <span className="relative flex size-2 shrink-0" aria-hidden>
-              {connectionState === "connecting" && (
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning/60 duration-2000" />
-              )}
-              <span className={cn("relative inline-flex size-2 rounded-full", stateDotClassName)} />
-            </span>
+            <ConnectionStatusDot
+              tooltipText={statusTooltip}
+              dotClassName={stateDotClassName}
+              pingClassName={
+                connectionState === "connecting" ? "bg-warning/60 duration-2000" : null
+              }
+            />
             <h3 className="text-sm font-medium text-foreground">{record.label}</h3>
           </div>
-          <p className="text-xs text-muted-foreground">
-            <span
-              className={cn(
-                connectionState === "connected" && "text-success-foreground/80",
-                connectionState === "error" && "text-destructive",
-              )}
-            >
-              {statusLabel}
-            </span>
-            {roleLabel ? ` · ${roleLabel}` : null}
-            {record.lastConnectedAt
-              ? ` · Last connected ${formatAccessTimestamp(record.lastConnectedAt)}`
-              : null}
-          </p>
+          {metadataBits.length > 0 ? (
+            <p className="text-xs text-muted-foreground">{metadataBits.join(" · ")}</p>
+          ) : null}
           {descriptorLabel && descriptorLabel !== record.label ? (
             <p className="text-xs text-muted-foreground">Server label: {descriptorLabel}</p>
-          ) : null}
-          {runtime?.lastError ? (
-            <p className="text-xs text-destructive/80">{runtime.lastError}</p>
           ) : null}
         </div>
         <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">

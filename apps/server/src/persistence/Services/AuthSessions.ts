@@ -22,6 +22,7 @@ export const AuthSessionRecord = Schema.Struct({
   client: AuthSessionClientMetadataRecord,
   issuedAt: Schema.DateTimeUtcFromString,
   expiresAt: Schema.DateTimeUtcFromString,
+  lastConnectedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
   revokedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
 });
 export type AuthSessionRecord = typeof AuthSessionRecord.Type;
@@ -59,6 +60,12 @@ export const RevokeOtherAuthSessionsInput = Schema.Struct({
 });
 export type RevokeOtherAuthSessionsInput = typeof RevokeOtherAuthSessionsInput.Type;
 
+export const SetAuthSessionLastConnectedAtInput = Schema.Struct({
+  sessionId: AuthSessionId,
+  lastConnectedAt: Schema.DateTimeUtcFromString,
+});
+export type SetAuthSessionLastConnectedAtInput = typeof SetAuthSessionLastConnectedAtInput.Type;
+
 export interface AuthSessionRepositoryShape {
   readonly create: (
     input: CreateAuthSessionInput,
@@ -75,6 +82,9 @@ export interface AuthSessionRepositoryShape {
   readonly revokeAllExcept: (
     input: RevokeOtherAuthSessionsInput,
   ) => Effect.Effect<ReadonlyArray<AuthSessionId>, AuthSessionRepositoryError>;
+  readonly setLastConnectedAt: (
+    input: SetAuthSessionLastConnectedAtInput,
+  ) => Effect.Effect<void, AuthSessionRepositoryError>;
 }
 
 export class AuthSessionRepository extends ServiceMap.Service<

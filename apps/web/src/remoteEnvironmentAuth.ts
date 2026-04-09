@@ -112,19 +112,10 @@ async function fetchRemoteJson<T>(input: {
       ...(input.body !== undefined ? { body: JSON.stringify(input.body) } : {}),
     });
   } catch (error) {
-    const endpointPath = new URL(requestUrl).pathname;
-    if (
-      input.bearerToken &&
-      error instanceof TypeError &&
-      typeof window !== "undefined" &&
-      window.location.origin !== new URL(requestUrl).origin
-    ) {
-      throw new Error(
-        `Cross-origin remote auth failed before ${endpointPath} completed. Check the remote backend's CORS policy for Authorization headers.`,
-        { cause: error },
-      );
-    }
-    throw error;
+    throw new Error(
+      `Failed to fetch remote auth endpoint ${requestUrl} (${(error as Error).message}).`,
+      { cause: error },
+    );
   }
 
   if (!response.ok) {

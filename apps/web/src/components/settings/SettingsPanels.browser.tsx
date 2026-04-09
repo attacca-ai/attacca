@@ -199,6 +199,7 @@ function makeClientSession(input: {
   };
   readonly issuedAt: string;
   readonly expiresAt: string;
+  readonly lastConnectedAt?: string | null;
   readonly connected: boolean;
   readonly current: boolean;
 }): AuthAccessSnapshot["clientSessions"][number] {
@@ -211,6 +212,10 @@ function makeClientSession(input: {
     sessionId: AuthSessionId.makeUnsafe(input.sessionId),
     issuedAt: makeUtc(input.issuedAt),
     expiresAt: makeUtc(input.expiresAt),
+    lastConnectedAt:
+      input.lastConnectedAt === undefined || input.lastConnectedAt === null
+        ? null
+        : makeUtc(input.lastConnectedAt),
   };
 }
 

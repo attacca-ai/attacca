@@ -180,20 +180,6 @@ describe("remoteEnvironmentAuth", () => {
       }),
     ).resolves.toBe("wss://remote.example.com/?wsToken=ws-token");
   });
-
-  it("surfaces a useful message when cross-origin bearer auth is blocked before the request completes", async () => {
-    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-    globalThis.fetch = fetchMock as typeof fetch;
-
-    await expect(
-      issueRemoteWebSocketToken({
-        httpBaseUrl: "https://remote.example.com/",
-        bearerToken: "bearer-token",
-      }),
-    ).rejects.toThrow(
-      "Cross-origin remote auth failed before /api/auth/ws-token completed. Check the remote backend's CORS policy for Authorization headers.",
-    );
-  });
 });
 
 afterEach(() => {

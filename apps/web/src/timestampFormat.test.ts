@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  formatElapsedDurationLabel,
   formatExpiresInLabel,
   formatRelativeTimeUntilLabel,
   getTimestampFormatOptions,
@@ -86,5 +87,28 @@ describe("formatExpiresInLabel", () => {
   it("uses hours with minute and second remainder", () => {
     expect(formatExpiresInLabel("2026-04-07T14:02:03.000Z")).toBe("Expires in 2h 2m 3s");
     expect(formatExpiresInLabel("2026-04-07T18:00:00.000Z")).toBe("Expires in 6h");
+  });
+});
+
+describe("formatElapsedDurationLabel", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-07T12:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("returns just now when the instant is current or in the future", () => {
+    expect(formatElapsedDurationLabel("2026-04-07T12:00:00.000Z")).toBe("just now");
+    expect(formatElapsedDurationLabel("2026-04-07T12:01:00.000Z")).toBe("just now");
+  });
+
+  it("formats seconds, minutes, hours, and days", () => {
+    expect(formatElapsedDurationLabel("2026-04-07T11:59:45.000Z")).toBe("15s");
+    expect(formatElapsedDurationLabel("2026-04-07T11:45:00.000Z")).toBe("15m");
+    expect(formatElapsedDurationLabel("2026-04-07T06:00:00.000Z")).toBe("6h");
+    expect(formatElapsedDurationLabel("2026-04-03T12:00:00.000Z")).toBe("4d");
   });
 });

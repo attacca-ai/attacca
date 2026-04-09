@@ -17,6 +17,7 @@ import {
   ListActiveAuthSessionsInput,
   RevokeAuthSessionInput,
   RevokeOtherAuthSessionsInput,
+  SetAuthSessionLastConnectedAtInput,
 } from "../Services/AuthSessions.ts";
 
 const AuthSessionDbRow = Schema.Struct({
@@ -32,6 +33,7 @@ const AuthSessionDbRow = Schema.Struct({
   clientBrowser: Schema.NullOr(Schema.String),
   issuedAt: Schema.DateTimeUtcFromString,
   expiresAt: Schema.DateTimeUtcFromString,
+  lastConnectedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
   revokedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
 });
 
@@ -51,6 +53,7 @@ function toAuthSessionRecord(row: typeof AuthSessionDbRow.Type): typeof AuthSess
     },
     issuedAt: row.issuedAt,
     expiresAt: row.expiresAt,
+    lastConnectedAt: row.lastConnectedAt,
     revokedAt: row.revokedAt,
   };
 }
@@ -120,6 +123,7 @@ const makeAuthSessionRepository = Effect.gen(function* () {
           client_browser AS "clientBrowser",
           issued_at AS "issuedAt",
           expires_at AS "expiresAt",
+          last_connected_at AS "lastConnectedAt",
           revoked_at AS "revokedAt"
         FROM auth_sessions
         WHERE session_id = ${sessionId}
@@ -144,11 +148,23 @@ const makeAuthSessionRepository = Effect.gen(function* () {
           client_browser AS "clientBrowser",
           issued_at AS "issuedAt",
           expires_at AS "expiresAt",
+          last_connected_at AS "lastConnectedAt",
           revoked_at AS "revokedAt"
         FROM auth_sessions
         WHERE revoked_at IS NULL
           AND expires_at > ${now}
         ORDER BY issued_at DESC, session_id DESC
+      `,
+  });
+
+  const setLastConnectedAtRow = SqlSchema.void({
+    Request: SetAuthSessionLastConnectedAtInput,
+    execute: ({ sessionId, lastConnectedAt }) =>
+      sql`
+        UPDATE auth_sessions
+        SET last_connected_at = ${lastConnectedAt}
+        WHERE session_id = ${sessionId}
+          AND revoked_at IS NULL
       `,
   });
 
@@ -237,12 +253,23 @@ const makeAuthSessionRepository = Effect.gen(function* () {
       Effect.map((rows) => rows.map((row) => row.sessionId)),
     );
 
+  const setLastConnectedAt: AuthSessionRepositoryShape["setLastConnectedAt"] = (input) =>
+    setLastConnectedAtRow(input).pipe(
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "AuthSessionRepository.setLastConnectedAt:query",
+          "AuthSessionRepository.setLastConnectedAt:encodeRequest",
+        ),
+      ),
+    );
+
   return {
     create,
     getById,
     listActive,
     revoke,
     revokeAllExcept,
+    setLastConnectedAt,
   } satisfies AuthSessionRepositoryShape;
 });
 

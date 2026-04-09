@@ -146,4 +146,46 @@ it.layer(NodeServices.layer)("SessionCredentialServiceLive", (it) => {
       expect(revokedClient.message).toContain("revoked");
     }).pipe(Effect.provide(makeSessionCredentialLayer())),
   );
+
+  it.effect("persists lastConnectedAt on first connect and updates it after reconnect", () =>
+    Effect.gen(function* () {
+      const sessions = yield* SessionCredentialService;
+      const issued = yield* sessions.issue({
+        subject: "reconnect-test",
+        method: "bearer-session-token",
+      });
+
+      const beforeConnect = yield* sessions.listActive();
+      expect(beforeConnect[0]?.lastConnectedAt).toBeNull();
+
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* sessions.markConnected(issued.sessionId);
+      const firstConnect = yield* sessions.listActive();
+      const firstConnectedAt = firstConnect[0]?.lastConnectedAt;
+
+      expect(firstConnect[0]?.connected).toBe(true);
+      expect(firstConnectedAt).not.toBeNull();
+
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* sessions.markConnected(issued.sessionId);
+      const stillConnected = yield* sessions.listActive();
+
+      expect(stillConnected[0]?.lastConnectedAt?.toString()).toBe(firstConnectedAt?.toString());
+
+      yield* sessions.markDisconnected(issued.sessionId);
+      yield* sessions.markDisconnected(issued.sessionId);
+      const afterDisconnect = yield* sessions.listActive();
+
+      expect(afterDisconnect[0]?.connected).toBe(false);
+      expect(afterDisconnect[0]?.lastConnectedAt?.toString()).toBe(firstConnectedAt?.toString());
+
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* sessions.markConnected(issued.sessionId);
+      const afterReconnect = yield* sessions.listActive();
+
+      expect(afterReconnect[0]?.connected).toBe(true);
+      expect(afterReconnect[0]?.lastConnectedAt).not.toBeNull();
+      expect(afterReconnect[0]?.lastConnectedAt?.toString()).not.toBe(firstConnectedAt?.toString());
+    }).pipe(Effect.provide(Layer.merge(makeSessionCredentialLayer(), TestClock.layer()))),
+  );
 });

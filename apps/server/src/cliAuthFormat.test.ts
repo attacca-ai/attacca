@@ -77,6 +77,7 @@ it("formats issued sessions with the bearer token but omits tokens from listings
         current: false,
         issuedAt: DateTime.fromDateUnsafe(new Date("2026-04-08T09:00:00.000Z")),
         expiresAt: DateTime.fromDateUnsafe(new Date("2026-04-08T10:00:00.000Z")),
+        lastConnectedAt: null,
       },
     ],
     { json: false },

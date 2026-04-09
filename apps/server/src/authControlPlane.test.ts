@@ -90,4 +90,21 @@ it.layer(NodeServices.layer)("AuthControlPlane", (it) => {
       expect(listedAfterRevoke).toHaveLength(0);
     }).pipe(Effect.provide(makeAuthControlPlaneLayer())),
   );
+
+  it.effect("surfaces lastConnectedAt through the listed session view", () =>
+    Effect.gen(function* () {
+      const authControlPlane = yield* AuthControlPlane;
+      const sessionCredentials = yield* SessionCredentialService;
+
+      const issued = yield* authControlPlane.issueSession({
+        label: "remote-ipad",
+      });
+      const beforeConnect = yield* authControlPlane.listSessions();
+      yield* sessionCredentials.markConnected(issued.sessionId);
+      const afterConnect = yield* authControlPlane.listSessions();
+
+      expect(beforeConnect[0]?.lastConnectedAt).toBeNull();
+      expect(afterConnect[0]?.lastConnectedAt).not.toBeNull();
+    }).pipe(Effect.provide(makeAuthControlPlaneLayer())),
+  );
 });
