@@ -1674,7 +1674,7 @@ async function bootstrap(): Promise<void> {
     );
   } else if (desktopSettings.serverExposureMode === "network-accessible") {
     writeDesktopLogHeader(
-      "bootstrap fell back to local-only because no advertised network host was available",
+      "bootstrap server is network-accessible but no advertised LAN address was detected; the server is still bound to all interfaces",
     );
   }
 
