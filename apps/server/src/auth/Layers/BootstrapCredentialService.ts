@@ -30,7 +30,7 @@ type ConsumeResult =
 
 const DEFAULT_ONE_TIME_TOKEN_TTL_MINUTES = Duration.minutes(5);
 const PAIRING_TOKEN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-const PAIRING_TOKEN_LENGTH = 8;
+const PAIRING_TOKEN_LENGTH = 12;
 
 const generatePairingToken = (): string => {
   const randomBytes = crypto.getRandomValues(new Uint8Array(PAIRING_TOKEN_LENGTH));
