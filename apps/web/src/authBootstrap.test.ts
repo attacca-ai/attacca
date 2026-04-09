@@ -233,7 +233,16 @@ describe("resolveInitialServerAuthGateState", () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
-  it("takes a pairing token from the location and strips it immediately", async () => {
+  it("takes a pairing token from the location hash and strips it immediately", async () => {
+    const testWindow = installTestBrowser("http://localhost/#token=pairing-token");
+    const { takePairingTokenFromUrl } = await import("./authBootstrap");
+
+    expect(takePairingTokenFromUrl()).toBe("pairing-token");
+    expect(testWindow.location.hash).toBe("");
+    expect(testWindow.location.searchParams.get("token")).toBeNull();
+  });
+
+  it("accepts query-string pairing tokens as a backward-compatible fallback", async () => {
     const testWindow = installTestBrowser("http://localhost/?token=pairing-token");
     const { takePairingTokenFromUrl } = await import("./authBootstrap");
 

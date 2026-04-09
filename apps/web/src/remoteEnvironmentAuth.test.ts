@@ -26,6 +26,18 @@ describe("remoteEnvironmentAuth", () => {
   it("derives backend urls and token from a pairing url", () => {
     expect(
       resolveRemotePairingTarget({
+        pairingUrl: "https://remote.example.com/pair#token=pairing-token",
+      }),
+    ).toEqual({
+      credential: "pairing-token",
+      httpBaseUrl: "https://remote.example.com/",
+      wsBaseUrl: "wss://remote.example.com/",
+    });
+  });
+
+  it("accepts pairing urls that still use a query token", () => {
+    expect(
+      resolveRemotePairingTarget({
         pairingUrl: "https://remote.example.com/pair?token=pairing-token",
       }),
     ).toEqual({
