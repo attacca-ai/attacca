@@ -227,6 +227,9 @@ export const makeBootstrapCredentialService = Effect.gen(function* () {
       if (seededResult._tag === "success") {
         return seededResult.grant;
       }
+      if (seededResult.error.message !== "Unknown bootstrap credential.") {
+        return yield* seededResult.error;
+      }
 
       const consumed = yield* pairingLinks.consumeAvailable({
         credential,

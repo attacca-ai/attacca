@@ -126,6 +126,8 @@ it.layer(NodeServices.layer)("cli log-level parsing", (it) => {
       }
       assert.equal(ttlError.option, "ttl");
       assert.equal(ttlError.value, "soon");
+      assert.isTrue(ttlError.message.includes("Invalid duration"));
+      assert.isTrue(ttlError.message.includes("5m, 1h, 30d, or 15 minutes"));
     }),
   );
 });

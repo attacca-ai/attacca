@@ -425,8 +425,7 @@ const DurationFromString = Schema.String.pipe(
         }
         return Effect.fail(
           new SchemaIssue.InvalidValue(Option.some(value), {
-            title: "Invalid duration",
-            detail: "Use values like 5m, 1h, 30d, or 15 minutes.",
+            message: "Invalid duration. Use values like 5m, 1h, 30d, or 15 minutes.",
           }),
         );
       },

@@ -31,6 +31,9 @@ export const makeServerSecretStore = Effect.gen(function* () {
   const isMissingSecretFileError = (cause: unknown): cause is PlatformError.PlatformError =>
     cause instanceof PlatformError.PlatformError && cause.reason._tag === "NotFound";
 
+  const isAlreadyExistsSecretFileError = (cause: unknown): cause is PlatformError.PlatformError =>
+    cause instanceof PlatformError.PlatformError && cause.reason._tag === "AlreadyExists";
+
   const get: ServerSecretStoreShape["get"] = (name) =>
     fileSystem.readFile(resolveSecretPath(name)).pipe(
       Effect.map((bytes) => Uint8Array.from(bytes)),
@@ -71,6 +74,29 @@ export const makeServerSecretStore = Effect.gen(function* () {
     );
   };
 
+  const create: ServerSecretStoreShape["set"] = (name, value) => {
+    const secretPath = resolveSecretPath(name);
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const file = yield* fileSystem.open(secretPath, {
+          flag: "wx",
+          mode: 0o600,
+        });
+        yield* file.writeAll(value);
+        yield* file.sync;
+        yield* fileSystem.chmod(secretPath, 0o600);
+      }),
+    ).pipe(
+      Effect.mapError(
+        (cause) =>
+          new SecretStoreError({
+            message: `Failed to persist secret ${name}.`,
+            cause,
+          }),
+      ),
+    );
+  };
+
   const getOrCreateRandom: ServerSecretStoreShape["getOrCreateRandom"] = (name, bytes) =>
     get(name).pipe(
       Effect.flatMap((existing) => {
@@ -79,7 +105,24 @@ export const makeServerSecretStore = Effect.gen(function* () {
         }
 
         const generated = Crypto.randomBytes(bytes);
-        return set(name, generated).pipe(Effect.as(Uint8Array.from(generated)));
+        return create(name, generated).pipe(
+          Effect.as(Uint8Array.from(generated)),
+          Effect.catchTag("SecretStoreError", (error) =>
+            isAlreadyExistsSecretFileError(error.cause)
+              ? get(name).pipe(
+                  Effect.flatMap((created) =>
+                    created !== null
+                      ? Effect.succeed(created)
+                      : Effect.fail(
+                          new SecretStoreError({
+                            message: `Failed to read secret ${name} after concurrent creation.`,
+                          }),
+                        ),
+                  ),
+                )
+              : Effect.fail(error),
+          ),
+        );
       }),
     );
 

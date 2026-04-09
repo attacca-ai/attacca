@@ -1,6 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
+import { Duration, Effect, Layer } from "effect";
+import { TestClock } from "effect/testing";
 
 import type { ServerConfigShape } from "../../config.ts";
 import { ServerConfig } from "../../config.ts";
@@ -100,6 +101,28 @@ it.layer(NodeServices.layer)("BootstrapCredentialServiceLive", (it) => {
         makeBootstrapCredentialLayer({
           desktopBootstrapToken: "desktop-bootstrap-token",
         }),
+      ),
+    ),
+  );
+
+  it.effect("reports seeded desktop bootstrap credentials as expired after their ttl", () =>
+    Effect.gen(function* () {
+      const bootstrapCredentials = yield* BootstrapCredentialService;
+
+      yield* TestClock.adjust(Duration.minutes(6));
+      const expired = yield* Effect.flip(bootstrapCredentials.consume("desktop-bootstrap-token"));
+
+      expect(expired._tag).toBe("BootstrapCredentialError");
+      expect(expired.status).toBe(401);
+      expect(expired.message).toContain("Bootstrap credential expired");
+    }).pipe(
+      Effect.provide(
+        Layer.merge(
+          makeBootstrapCredentialLayer({
+            desktopBootstrapToken: "desktop-bootstrap-token",
+          }),
+          TestClock.layer(),
+        ),
       ),
     ),
   );
