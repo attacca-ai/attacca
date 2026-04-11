@@ -10,6 +10,8 @@ import { join, basename } from "node:path";
 import {
   FACTORY_DIR,
   FACTORY_FILES,
+  FACTORY_PROTOCOL_VERSION,
+  FactoryProtocolVersionError,
   type FactoryConfig,
   type FactoryDirectory,
   type FactoryStatus,
@@ -95,16 +97,36 @@ function readTextFile(filePath: string): string | null {
   }
 }
 
-function readConfig(factoryPath: string): FactoryConfig | null {
+/**
+ * Check whether a parsed config's protocol version is supported. Throws
+ * FactoryProtocolVersionError for versions newer than the client supports.
+ * Missing version is treated as 1 (backward compat with Phase 1 configs).
+ */
+function assertSupportedVersion(
+  config: { version?: unknown },
+  projectPath: string,
+): number {
+  const raw = config.version;
+  const found =
+    typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? raw : 1;
+  if (found > FACTORY_PROTOCOL_VERSION) {
+    throw new FactoryProtocolVersionError({
+      message: `This project uses .factory/ protocol v${found} but this Attacca client supports up to v${FACTORY_PROTOCOL_VERSION}. Update Attacca or downgrade the project.`,
+      foundVersion: found,
+      supportedVersion: FACTORY_PROTOCOL_VERSION,
+      projectPath,
+    });
+  }
+  return found;
+}
+
+function readConfig(factoryPath: string, projectPath: string): FactoryConfig | null {
   const configPath = join(factoryPath, FACTORY_FILES.CONFIG);
   if (!existsSync(configPath)) return null;
-  try {
-    const raw = readFileSync(configPath, "utf-8");
-    const parsed = parseSimpleYaml(raw);
-    return parsed as unknown as FactoryConfig;
-  } catch {
-    return null;
-  }
+  const raw = readFileSync(configPath, "utf-8");
+  const parsed = parseSimpleYaml(raw);
+  const version = assertSupportedVersion(parsed, projectPath);
+  return { ...parsed, version } as unknown as FactoryConfig;
 }
 
 function readSessions(factoryPath: string): SessionLog[] {
@@ -153,7 +175,7 @@ export function readFactoryDirectory(projectPath: string): FactoryDirectory {
   return {
     exists: true,
     path: factoryPath,
-    config: readConfig(factoryPath),
+    config: readConfig(factoryPath, projectPath),
     status: readJsonFile<FactoryStatus>(join(factoryPath, FACTORY_FILES.STATUS)),
     queue: readJsonFile<WorkQueue>(join(factoryPath, FACTORY_FILES.QUEUE)),
     syncStatus: readJsonFile<SyncStatus>(join(factoryPath, FACTORY_FILES.SYNC_STATUS)),
@@ -181,7 +203,7 @@ export function readFactorySummary(
 ): { config: FactoryConfig | null; status: FactoryStatus | null } {
   const factoryPath = join(projectPath, FACTORY_DIR);
   return {
-    config: readConfig(factoryPath),
+    config: readConfig(factoryPath, projectPath),
     status: readJsonFile<FactoryStatus>(join(factoryPath, FACTORY_FILES.STATUS)),
   };
 }

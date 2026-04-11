@@ -6,9 +6,11 @@
  * they can be wired into the WebSocket RPC group.
  */
 
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import {
   type FactoryConfig,
+  type FactoryDirectory,
+  FactoryProtocolVersionError,
   FactoryReadError,
   type FactoryReadSummaryResult,
   type FactoryRegenerateClaudeMdResult,
@@ -28,11 +30,12 @@ import {
 } from "./index";
 import { loadForgeSkills } from "./forgeSkills";
 
-const toReadError = (cause: unknown, message: string) =>
-  new FactoryReadError({
-    message,
-    cause,
-  });
+const isProtocolVersionError = Schema.is(FactoryProtocolVersionError);
+
+const toReadOrProtocolError = (cause: unknown, message: string) => {
+  if (isProtocolVersionError(cause)) return cause;
+  return new FactoryReadError({ message, cause });
+};
 
 const toWriteError = (cause: unknown, message: string) =>
   new FactoryWriteError({
@@ -40,18 +43,24 @@ const toWriteError = (cause: unknown, message: string) =>
     cause,
   });
 
-export const readFactoryDirectoryEffect = (projectPath: string) =>
+export const readFactoryDirectoryEffect = (
+  projectPath: string,
+): Effect.Effect<FactoryDirectory, FactoryReadError | FactoryProtocolVersionError> =>
   Effect.try({
     try: () => readFactoryDirectory(projectPath),
-    catch: (cause) => toReadError(cause, `Failed to read .factory/ at ${projectPath}`),
+    catch: (cause) => toReadOrProtocolError(cause, `Failed to read .factory/ at ${projectPath}`),
   });
 
 export const readFactorySummaryEffect = (
   projectPath: string,
-): Effect.Effect<FactoryReadSummaryResult, FactoryReadError> =>
+): Effect.Effect<
+  FactoryReadSummaryResult,
+  FactoryReadError | FactoryProtocolVersionError
+> =>
   Effect.try({
     try: () => readFactorySummary(projectPath),
-    catch: (cause) => toReadError(cause, `Failed to read .factory/ summary at ${projectPath}`),
+    catch: (cause) =>
+      toReadOrProtocolError(cause, `Failed to read .factory/ summary at ${projectPath}`),
   });
 
 export const initializeFactoryEffect = (projectPath: string, config: FactoryConfig) =>
@@ -76,17 +85,22 @@ export const writeSessionLogEffect = (projectPath: string, session: SessionLog) 
 export const listForgeSkillsEffect = (): Effect.Effect<ForgeSkillListResult, FactoryReadError> =>
   Effect.try({
     try: () => loadForgeSkills(),
-    catch: (cause) => toReadError(cause, "Failed to load Forge skills"),
+    catch: (cause) => new FactoryReadError({ message: "Failed to load Forge skills", cause }),
   });
 
 export const regenerateClaudeMdEffect = (
   projectPath: string,
-): Effect.Effect<FactoryRegenerateClaudeMdResult, FactoryWriteError> =>
+): Effect.Effect<
+  FactoryRegenerateClaudeMdResult,
+  FactoryWriteError | FactoryProtocolVersionError
+> =>
   Effect.try({
     try: (): FactoryRegenerateClaudeMdResult => {
       const content = regenerateClaudeMd(projectPath);
       return { content, generatedAt: new Date().toISOString() };
     },
-    catch: (cause) =>
-      toWriteError(cause, `Failed to regenerate .factory/CLAUDE.md at ${projectPath}`),
+    catch: (cause) => {
+      if (isProtocolVersionError(cause)) return cause;
+      return toWriteError(cause, `Failed to regenerate .factory/CLAUDE.md at ${projectPath}`);
+    },
   });

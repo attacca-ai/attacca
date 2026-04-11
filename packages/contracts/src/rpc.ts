@@ -32,6 +32,7 @@ import {
   FactoryDirectory,
   FactoryInitializeInput,
   FactoryProjectPathInput,
+  FactoryProtocolVersionError,
   FactoryReadError,
   FactoryReadSummaryResult,
   FactoryRegenerateClaudeMdResult,
@@ -185,13 +186,13 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
 export const WsFactoryReadRpc = Rpc.make(WS_METHODS.factoryRead, {
   payload: FactoryProjectPathInput,
   success: FactoryDirectory,
-  error: FactoryReadError,
+  error: Schema.Union([FactoryReadError, FactoryProtocolVersionError]),
 });
 
 export const WsFactoryReadSummaryRpc = Rpc.make(WS_METHODS.factoryReadSummary, {
   payload: FactoryProjectPathInput,
   success: FactoryReadSummaryResult,
-  error: FactoryReadError,
+  error: Schema.Union([FactoryReadError, FactoryProtocolVersionError]),
 });
 
 export const WsFactoryInitializeRpc = Rpc.make(WS_METHODS.factoryInitialize, {
@@ -218,7 +219,7 @@ export const WsFactoryListForgeSkillsRpc = Rpc.make(WS_METHODS.factoryListForgeS
 export const WsFactoryRegenerateClaudeMdRpc = Rpc.make(WS_METHODS.factoryRegenerateClaudeMd, {
   payload: FactoryProjectPathInput,
   success: FactoryRegenerateClaudeMdResult,
-  error: FactoryWriteError,
+  error: Schema.Union([FactoryWriteError, FactoryProtocolVersionError]),
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {

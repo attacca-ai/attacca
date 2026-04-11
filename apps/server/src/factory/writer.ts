@@ -10,6 +10,7 @@ import { join } from "node:path";
 import {
   FACTORY_DIR,
   FACTORY_FILES,
+  FACTORY_PROTOCOL_VERSION,
   type FactoryConfig,
   type FactoryStatus,
   type WorkQueue,
@@ -26,6 +27,7 @@ import { readFactoryDirectory } from "./reader";
 function configToYaml(config: FactoryConfig): string {
   const lines: string[] = [];
 
+  lines.push(`version: ${config.version ?? FACTORY_PROTOCOL_VERSION}`);
   lines.push(`name: "${config.name}"`);
   lines.push(`display_name: "${config.display_name}"`);
   lines.push(`type: "${config.type}"`);
@@ -280,7 +282,7 @@ export function initializeFactory(
   config: FactoryConfig,
 ): void {
   ensureFactoryDir(projectPath);
-  writeConfig(projectPath, config);
+  writeConfig(projectPath, { ...config, version: FACTORY_PROTOCOL_VERSION });
 
   const status: FactoryStatus = {
     state: config.phase,

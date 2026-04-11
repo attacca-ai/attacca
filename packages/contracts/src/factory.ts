@@ -10,6 +10,22 @@
 import { Schema } from "effect";
 
 // ---------------------------------------------------------------------------
+// Protocol version
+// ---------------------------------------------------------------------------
+
+/**
+ * Current `.factory/` protocol version.
+ *
+ * Bumped when the on-disk layout or required fields change in a way that
+ * older clients cannot safely read. The reader migrates missing versions
+ * to 1 for backward compatibility with pre-versioned (Phase 1) configs.
+ *
+ * Independent of the `attacca-forge` npm package version, which versions
+ * skills, not protocol.
+ */
+export const FACTORY_PROTOCOL_VERSION = 1 as const;
+
+// ---------------------------------------------------------------------------
 // Enums & Literals
 // ---------------------------------------------------------------------------
 
@@ -67,6 +83,7 @@ export const FactoryConfig = Schema.Struct({
   phase: Phase,
   track: ProjectTrack,
   // Optional
+  version: Schema.optional(Schema.Number),
   stack: Schema.optional(Schema.Array(Schema.String)),
   repo: Schema.optional(Schema.String),
   assigned_dev: Schema.optional(Schema.String),
@@ -299,6 +316,50 @@ export const FactoryWriteSessionLogInput = Schema.Struct({
 export type FactoryWriteSessionLogInput = typeof FactoryWriteSessionLogInput.Type;
 
 // ---------------------------------------------------------------------------
+// Scanner (Podium mode)
+// ---------------------------------------------------------------------------
+
+export const ScannedProject = Schema.Struct({
+  slug: Schema.String,
+  displayName: Schema.String,
+  path: Schema.String,
+  hasFactory: Schema.Boolean,
+  phase: Phase,
+  health: Health,
+  track: ProjectTrack,
+  trustTier: Schema.Number,
+  completionPct: Schema.Number,
+  gapCount: Schema.Number,
+  assignedDev: Schema.NullOr(Schema.String),
+  nextAction: Schema.NullOr(Schema.String),
+  lastActivity: Schema.NullOr(Schema.String),
+  repo: Schema.NullOr(Schema.String),
+  stack: Schema.Array(Schema.String),
+});
+export type ScannedProject = typeof ScannedProject.Type;
+
+export const ScanProjectsInput = Schema.Struct({
+  rootDir: Schema.String,
+});
+export type ScanProjectsInput = typeof ScanProjectsInput.Type;
+
+export const ScanProjectsResult = Schema.Struct({
+  rootDir: Schema.String,
+  projects: Schema.Array(ScannedProject),
+});
+export type ScanProjectsResult = typeof ScanProjectsResult.Type;
+
+// ---------------------------------------------------------------------------
+// Identity (Phase 2)
+// ---------------------------------------------------------------------------
+
+export const GitIdentityResult = Schema.Struct({
+  name: Schema.NullOr(Schema.String),
+  source: Schema.Literals(["git", "os", "none"]),
+});
+export type GitIdentityResult = typeof GitIdentityResult.Type;
+
+// ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
 
@@ -315,6 +376,23 @@ export class FactoryWriteError extends Schema.TaggedErrorClass<FactoryWriteError
   {
     message: Schema.String,
     cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+/**
+ * Thrown when a `.factory/config.yaml` declares a protocol version higher
+ * than the current client supports. Surfaces as a user-facing error in the
+ * UI: "This project uses .factory/ protocol v{foundVersion} but this Attacca
+ * client supports up to v{supportedVersion}. Update Attacca or downgrade
+ * the project."
+ */
+export class FactoryProtocolVersionError extends Schema.TaggedErrorClass<FactoryProtocolVersionError>()(
+  "FactoryProtocolVersionError",
+  {
+    message: Schema.String,
+    foundVersion: Schema.Number,
+    supportedVersion: Schema.Number,
+    projectPath: Schema.String,
   },
 ) {}
 
