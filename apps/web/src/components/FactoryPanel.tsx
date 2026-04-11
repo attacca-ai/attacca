@@ -1,16 +1,37 @@
-import { memo, useEffect } from "react";
+import { memo, useEffect, useState } from "react";
 import type { FactoryDirectory, SessionLog, WorkItem } from "@t3tools/contracts";
-import { FactoryIcon, LoaderIcon, PanelRightCloseIcon, RefreshCwIcon } from "lucide-react";
+import {
+  CirclePlayIcon,
+  CircleStopIcon,
+  FactoryIcon,
+  LoaderIcon,
+  PanelRightCloseIcon,
+  RefreshCwIcon,
+} from "lucide-react";
 
 import { cn } from "~/lib/utils";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { ScrollArea } from "./ui/scroll-area";
+import { Textarea } from "./ui/textarea";
 import { useFactoryStore } from "../stores/factory";
 
 interface FactoryPanelProps {
   readonly projectPath: string | null;
   readonly onClose: () => void;
+  readonly dev: string;
+}
+
+function formatElapsed(startedAtIso: string, now: number): string {
+  const started = Date.parse(startedAtIso);
+  if (!Number.isFinite(started)) return "0m";
+  const totalSeconds = Math.max(0, Math.floor((now - started) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
 }
 
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
@@ -156,6 +177,92 @@ function WorkQueueSection({ directory }: { readonly directory: FactoryDirectory 
   );
 }
 
+interface ActiveSessionSectionProps {
+  readonly projectPath: string;
+  readonly dev: string;
+}
+
+function ActiveSessionSection({ projectPath, dev }: ActiveSessionSectionProps) {
+  const active = useFactoryStore(
+    (state) => state.activeSessionsByProjectPath[projectPath] ?? null,
+  );
+  const startSession = useFactoryStore((state) => state.startSession);
+  const updateActiveSessionNotes = useFactoryStore(
+    (state) => state.updateActiveSessionNotes,
+  );
+  const endSession = useFactoryStore((state) => state.endSession);
+  const [isEnding, setIsEnding] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  const activeSessionId = active?.sessionId ?? null;
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const interval = window.setInterval(() => setNow(Date.now()), 10_000);
+    return () => window.clearInterval(interval);
+  }, [activeSessionId]);
+
+  const handleStart = () => {
+    startSession(projectPath, dev);
+    setNow(Date.now());
+  };
+
+  const handleEnd = async () => {
+    setIsEnding(true);
+    try {
+      await endSession(projectPath);
+    } finally {
+      setIsEnding(false);
+    }
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <SectionHeading>Session</SectionHeading>
+      {!active ? (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleStart}
+          className="h-7 w-full justify-start gap-2 text-[12px]"
+        >
+          <CirclePlayIcon className="size-3.5" />
+          Start session
+        </Button>
+      ) : (
+        <div className="space-y-2 rounded-lg border border-border/50 bg-background/40 p-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-[11px] font-mono text-muted-foreground/60">
+                {active.sessionId}
+              </p>
+              <p className="text-[11px] text-muted-foreground/70">
+                Elapsed {formatElapsed(active.startedAt, now)}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void handleEnd()}
+              disabled={isEnding}
+              className="h-7 shrink-0 gap-1.5 text-[12px]"
+            >
+              <CircleStopIcon className="size-3.5" />
+              End
+            </Button>
+          </div>
+          <Textarea
+            value={active.notes}
+            onChange={(event) => updateActiveSessionNotes(projectPath, event.target.value)}
+            placeholder="Session notes..."
+            rows={3}
+            className="min-h-[60px] resize-none border-border/40 bg-transparent text-[12px]"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SessionInfoSection({ session }: { readonly session: SessionLog | null }) {
   if (!session) {
     return (
@@ -189,7 +296,7 @@ function SessionInfoSection({ session }: { readonly session: SessionLog | null }
   );
 }
 
-const FactoryPanel = memo(function FactoryPanel({ projectPath, onClose }: FactoryPanelProps) {
+const FactoryPanel = memo(function FactoryPanel({ projectPath, onClose, dev }: FactoryPanelProps) {
   const entry = useFactoryStore((state) =>
     projectPath ? (state.entries[projectPath] ?? null) : null,
   );
@@ -291,6 +398,9 @@ const FactoryPanel = memo(function FactoryPanel({ projectPath, onClose }: Factor
             <>
               <ConfigSection directory={directory} />
               <WorkQueueSection directory={directory} />
+              {projectPath ? (
+                <ActiveSessionSection projectPath={projectPath} dev={dev} />
+              ) : null}
               <SessionInfoSection session={latestSession} />
               {claudeMdError ? (
                 <p className="text-[11px] text-red-400/80">

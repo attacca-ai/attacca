@@ -4715,6 +4715,7 @@ export default function ChatView(props: ChatViewProps) {
         {factoryPanelOpen ? (
           <FactoryPanel
             projectPath={activeProject?.cwd ?? null}
+            dev="developer"
             onClose={() => setFactoryPanelOpen(false)}
           />
         ) : null}

@@ -37,10 +37,18 @@ interface ForgeSkillsState {
   readonly source: string | null;
 }
 
+interface ActiveSession {
+  readonly sessionId: string;
+  readonly dev: string;
+  readonly startedAt: string;
+  readonly notes: string;
+}
+
 interface FactoryState {
   readonly activeProjectPath: string | null;
   readonly entries: Record<string, FactoryProjectEntry>;
   readonly forgeSkills: ForgeSkillsState;
+  readonly activeSessionsByProjectPath: Record<string, ActiveSession>;
   readonly setActiveProjectPath: (projectPath: string | null) => void;
   readonly loadFactory: (projectPath: string) => Promise<FactoryDirectory | null>;
   readonly initializeFactory: (
@@ -51,6 +59,9 @@ interface FactoryState {
   readonly writeSessionLog: (projectPath: string, session: SessionLog) => Promise<void>;
   readonly loadForgeSkills: () => Promise<ReadonlyArray<ForgeSkill>>;
   readonly regenerateClaudeMd: (projectPath: string) => Promise<string | null>;
+  readonly startSession: (projectPath: string, dev: string) => ActiveSession;
+  readonly updateActiveSessionNotes: (projectPath: string, notes: string) => void;
+  readonly endSession: (projectPath: string) => Promise<SessionLog | null>;
   readonly clear: (projectPath?: string) => void;
 }
 
@@ -84,10 +95,16 @@ const setEntry = (
   };
 };
 
+function generateSessionId(): string {
+  const iso = new Date().toISOString().replace(/:/g, "-").replace(/\./g, "-");
+  return `session-${iso}`;
+}
+
 export const useFactoryStore = create<FactoryState>((set, get) => ({
   activeProjectPath: null,
   entries: {},
   forgeSkills: initialForgeSkillsState,
+  activeSessionsByProjectPath: {},
 
   setActiveProjectPath: (projectPath) => {
     set({ activeProjectPath: projectPath });
@@ -192,15 +209,91 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
     }
   },
 
+  startSession: (projectPath, dev) => {
+    const session: ActiveSession = {
+      sessionId: generateSessionId(),
+      dev,
+      startedAt: new Date().toISOString(),
+      notes: "",
+    };
+    set((state) => ({
+      activeSessionsByProjectPath: {
+        ...state.activeSessionsByProjectPath,
+        [projectPath]: session,
+      },
+    }));
+    return session;
+  },
+
+  updateActiveSessionNotes: (projectPath, notes) => {
+    set((state) => {
+      const existing = state.activeSessionsByProjectPath[projectPath];
+      if (!existing) return state;
+      return {
+        activeSessionsByProjectPath: {
+          ...state.activeSessionsByProjectPath,
+          [projectPath]: { ...existing, notes },
+        },
+      };
+    });
+  },
+
+  endSession: async (projectPath) => {
+    const active = get().activeSessionsByProjectPath[projectPath];
+    if (!active) return null;
+
+    const endedAt = new Date().toISOString();
+    const startedMs = Date.parse(active.startedAt);
+    const endedMs = Date.parse(endedAt);
+    const durationMinutes =
+      Number.isFinite(startedMs) && Number.isFinite(endedMs)
+        ? Math.max(0, Math.round((endedMs - startedMs) / 60_000))
+        : 0;
+
+    const session: SessionLog = {
+      session_id: active.sessionId,
+      dev: active.dev,
+      started: active.startedAt,
+      ended: endedAt,
+      duration_minutes: durationMinutes,
+      ...(active.notes.trim().length > 0 ? { notes: active.notes.trim() } : {}),
+    };
+
+    try {
+      await getWsRpcClient().factory.writeSessionLog({ projectPath, session });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Failed to write session log";
+      set((state) => ({
+        entries: setEntry(state.entries, projectPath, { error: message, status: "error" }),
+      }));
+      return null;
+    }
+
+    set((state) => {
+      const { [projectPath]: _dropped, ...rest } = state.activeSessionsByProjectPath;
+      return { activeSessionsByProjectPath: rest };
+    });
+    await get().loadFactory(projectPath);
+    return session;
+  },
+
   clear: (projectPath) => {
     if (projectPath === undefined) {
-      set({ entries: {}, activeProjectPath: null, forgeSkills: initialForgeSkillsState });
+      set({
+        entries: {},
+        activeProjectPath: null,
+        forgeSkills: initialForgeSkillsState,
+        activeSessionsByProjectPath: {},
+      });
       return;
     }
     set((state) => {
-      const { [projectPath]: _dropped, ...rest } = state.entries;
+      const { [projectPath]: _droppedEntry, ...restEntries } = state.entries;
+      const { [projectPath]: _droppedSession, ...restSessions } =
+        state.activeSessionsByProjectPath;
       return {
-        entries: rest,
+        entries: restEntries,
+        activeSessionsByProjectPath: restSessions,
         activeProjectPath:
           state.activeProjectPath === projectPath ? null : state.activeProjectPath,
       };
