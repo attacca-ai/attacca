@@ -219,6 +219,79 @@ export const SessionLog = Schema.Struct({
 export type SessionLog = typeof SessionLog.Type;
 
 // ---------------------------------------------------------------------------
+// .factory/ directory aggregate (read result)
+// ---------------------------------------------------------------------------
+
+export const FactoryDirectory = Schema.Struct({
+  exists: Schema.Boolean,
+  path: Schema.String,
+  config: Schema.NullOr(FactoryConfig),
+  status: Schema.NullOr(FactoryStatus),
+  queue: Schema.NullOr(WorkQueue),
+  syncStatus: Schema.NullOr(SyncStatus),
+  specContent: Schema.NullOr(Schema.String),
+  contextContent: Schema.NullOr(Schema.String),
+  intentContract: Schema.NullOr(Schema.String),
+  scenarios: Schema.NullOr(Schema.String),
+  sessions: Schema.Array(SessionLog),
+  claudeMd: Schema.NullOr(Schema.String),
+});
+export type FactoryDirectory = typeof FactoryDirectory.Type;
+
+// ---------------------------------------------------------------------------
+// RPC inputs / outputs
+// ---------------------------------------------------------------------------
+
+export const FactoryProjectPathInput = Schema.Struct({
+  projectPath: Schema.String,
+});
+export type FactoryProjectPathInput = typeof FactoryProjectPathInput.Type;
+
+export const FactoryReadSummaryResult = Schema.Struct({
+  config: Schema.NullOr(FactoryConfig),
+  status: Schema.NullOr(FactoryStatus),
+});
+export type FactoryReadSummaryResult = typeof FactoryReadSummaryResult.Type;
+
+export const FactoryInitializeInput = Schema.Struct({
+  projectPath: Schema.String,
+  config: FactoryConfig,
+});
+export type FactoryInitializeInput = typeof FactoryInitializeInput.Type;
+
+export const FactoryWriteQueueInput = Schema.Struct({
+  projectPath: Schema.String,
+  queue: WorkQueue,
+});
+export type FactoryWriteQueueInput = typeof FactoryWriteQueueInput.Type;
+
+export const FactoryWriteSessionLogInput = Schema.Struct({
+  projectPath: Schema.String,
+  session: SessionLog,
+});
+export type FactoryWriteSessionLogInput = typeof FactoryWriteSessionLogInput.Type;
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+export class FactoryReadError extends Schema.TaggedErrorClass<FactoryReadError>()(
+  "FactoryReadError",
+  {
+    message: Schema.String,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export class FactoryWriteError extends Schema.TaggedErrorClass<FactoryWriteError>()(
+  "FactoryWriteError",
+  {
+    message: Schema.String,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+// ---------------------------------------------------------------------------
 // Factory directory paths (constants)
 // ---------------------------------------------------------------------------
 

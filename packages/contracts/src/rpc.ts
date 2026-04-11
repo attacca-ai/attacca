@@ -28,6 +28,16 @@ import {
   GitStatusResult,
   GitStatusStreamEvent,
 } from "./git";
+import {
+  FactoryDirectory,
+  FactoryInitializeInput,
+  FactoryProjectPathInput,
+  FactoryReadError,
+  FactoryReadSummaryResult,
+  FactoryWriteError,
+  FactoryWriteQueueInput,
+  FactoryWriteSessionLogInput,
+} from "./factory";
 import { KeybindingsConfigError } from "./keybindings";
 import {
   ClientOrchestrationCommand,
@@ -80,6 +90,13 @@ export const WS_METHODS = {
   projectsRemove: "projects.remove",
   projectsSearchEntries: "projects.searchEntries",
   projectsWriteFile: "projects.writeFile",
+
+  // .factory/ protocol (Stand mode)
+  factoryRead: "factory.read",
+  factoryReadSummary: "factory.readSummary",
+  factoryInitialize: "factory.initialize",
+  factoryWriteQueue: "factory.writeQueue",
+  factoryWriteSessionLog: "factory.writeSessionLog",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -159,6 +176,33 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
   payload: ProjectWriteFileInput,
   success: ProjectWriteFileResult,
   error: ProjectWriteFileError,
+});
+
+export const WsFactoryReadRpc = Rpc.make(WS_METHODS.factoryRead, {
+  payload: FactoryProjectPathInput,
+  success: FactoryDirectory,
+  error: FactoryReadError,
+});
+
+export const WsFactoryReadSummaryRpc = Rpc.make(WS_METHODS.factoryReadSummary, {
+  payload: FactoryProjectPathInput,
+  success: FactoryReadSummaryResult,
+  error: FactoryReadError,
+});
+
+export const WsFactoryInitializeRpc = Rpc.make(WS_METHODS.factoryInitialize, {
+  payload: FactoryInitializeInput,
+  error: FactoryWriteError,
+});
+
+export const WsFactoryWriteQueueRpc = Rpc.make(WS_METHODS.factoryWriteQueue, {
+  payload: FactoryWriteQueueInput,
+  error: FactoryWriteError,
+});
+
+export const WsFactoryWriteSessionLogRpc = Rpc.make(WS_METHODS.factoryWriteSessionLog, {
+  payload: FactoryWriteSessionLogInput,
+  error: FactoryWriteError,
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
@@ -342,6 +386,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsWriteFileRpc,
+  WsFactoryReadRpc,
+  WsFactoryReadSummaryRpc,
+  WsFactoryInitializeRpc,
+  WsFactoryWriteQueueRpc,
+  WsFactoryWriteSessionLogRpc,
   WsShellOpenInEditorRpc,
   WsSubscribeGitStatusRpc,
   WsGitPullRpc,

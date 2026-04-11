@@ -25,6 +25,13 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery";
 import { ServerConfig } from "./config";
+import {
+  initializeFactoryEffect,
+  readFactoryDirectoryEffect,
+  readFactorySummaryEffect,
+  writeQueueEffect,
+  writeSessionLogEffect,
+} from "./factory/FactoryRpc";
 import { GitCore } from "./git/Services/GitCore";
 import { GitManager } from "./git/Services/GitManager";
 import { GitStatusBroadcaster } from "./git/Services/GitStatusBroadcaster";
@@ -614,6 +621,36 @@ const WsRpcLayer = WsRpcGroup.toLayer(
             }),
           ),
           { "rpc.aggregate": "workspace" },
+        ),
+      [WS_METHODS.factoryRead]: (input) =>
+        observeRpcEffect(
+          WS_METHODS.factoryRead,
+          readFactoryDirectoryEffect(input.projectPath),
+          { "rpc.aggregate": "factory" },
+        ),
+      [WS_METHODS.factoryReadSummary]: (input) =>
+        observeRpcEffect(
+          WS_METHODS.factoryReadSummary,
+          readFactorySummaryEffect(input.projectPath),
+          { "rpc.aggregate": "factory" },
+        ),
+      [WS_METHODS.factoryInitialize]: (input) =>
+        observeRpcEffect(
+          WS_METHODS.factoryInitialize,
+          initializeFactoryEffect(input.projectPath, input.config),
+          { "rpc.aggregate": "factory" },
+        ),
+      [WS_METHODS.factoryWriteQueue]: (input) =>
+        observeRpcEffect(
+          WS_METHODS.factoryWriteQueue,
+          writeQueueEffect(input.projectPath, input.queue),
+          { "rpc.aggregate": "factory" },
+        ),
+      [WS_METHODS.factoryWriteSessionLog]: (input) =>
+        observeRpcEffect(
+          WS_METHODS.factoryWriteSessionLog,
+          writeSessionLogEffect(input.projectPath, input.session),
+          { "rpc.aggregate": "factory" },
         ),
       [WS_METHODS.shellOpenInEditor]: (input) =>
         observeRpcEffect(WS_METHODS.shellOpenInEditor, open.openInEditor(input), {

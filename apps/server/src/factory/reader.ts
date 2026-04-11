@@ -11,6 +11,7 @@ import {
   FACTORY_DIR,
   FACTORY_FILES,
   type FactoryConfig,
+  type FactoryDirectory,
   type FactoryStatus,
   type WorkQueue,
   type SyncStatus,
@@ -75,21 +76,6 @@ function parseSimpleYaml(content: string): Record<string, unknown> {
 // ---------------------------------------------------------------------------
 // Reader functions
 // ---------------------------------------------------------------------------
-
-export interface FactoryDirectory {
-  exists: boolean;
-  path: string;
-  config: FactoryConfig | null;
-  status: FactoryStatus | null;
-  queue: WorkQueue | null;
-  syncStatus: SyncStatus | null;
-  specContent: string | null;
-  contextContent: string | null;
-  intentContract: string | null;
-  scenarios: string | null;
-  sessions: SessionLog[];
-  claudeMd: string | null;
-}
 
 function readJsonFile<T>(filePath: string): T | null {
   if (!existsSync(filePath)) return null;

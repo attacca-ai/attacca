@@ -1,5 +1,4 @@
 export { readFactoryDirectory, readFactorySummary, hasFactoryDir } from "./reader";
-export type { FactoryDirectory } from "./reader";
 export {
   ensureFactoryDir,
   writeConfig,
