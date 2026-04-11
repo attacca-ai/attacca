@@ -34,6 +34,7 @@ import {
   FactoryProjectPathInput,
   FactoryReadError,
   FactoryReadSummaryResult,
+  FactoryRegenerateClaudeMdResult,
   FactoryWriteError,
   FactoryWriteQueueInput,
   FactoryWriteSessionLogInput,
@@ -99,6 +100,7 @@ export const WS_METHODS = {
   factoryWriteQueue: "factory.writeQueue",
   factoryWriteSessionLog: "factory.writeSessionLog",
   factoryListForgeSkills: "factory.listForgeSkills",
+  factoryRegenerateClaudeMd: "factory.regenerateClaudeMd",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -211,6 +213,12 @@ export const WsFactoryListForgeSkillsRpc = Rpc.make(WS_METHODS.factoryListForgeS
   payload: Schema.Struct({}),
   success: ForgeSkillListResult,
   error: FactoryReadError,
+});
+
+export const WsFactoryRegenerateClaudeMdRpc = Rpc.make(WS_METHODS.factoryRegenerateClaudeMd, {
+  payload: FactoryProjectPathInput,
+  success: FactoryRegenerateClaudeMdResult,
+  error: FactoryWriteError,
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
@@ -400,6 +408,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsFactoryWriteQueueRpc,
   WsFactoryWriteSessionLogRpc,
   WsFactoryListForgeSkillsRpc,
+  WsFactoryRegenerateClaudeMdRpc,
   WsShellOpenInEditorRpc,
   WsSubscribeGitStatusRpc,
   WsGitPullRpc,

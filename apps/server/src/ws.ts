@@ -30,6 +30,7 @@ import {
   listForgeSkillsEffect,
   readFactoryDirectoryEffect,
   readFactorySummaryEffect,
+  regenerateClaudeMdEffect,
   writeQueueEffect,
   writeSessionLogEffect,
 } from "./factory/FactoryRpc";
@@ -657,6 +658,12 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(WS_METHODS.factoryListForgeSkills, listForgeSkillsEffect(), {
           "rpc.aggregate": "factory",
         }),
+      [WS_METHODS.factoryRegenerateClaudeMd]: (input) =>
+        observeRpcEffect(
+          WS_METHODS.factoryRegenerateClaudeMd,
+          regenerateClaudeMdEffect(input.projectPath),
+          { "rpc.aggregate": "factory" },
+        ),
       [WS_METHODS.shellOpenInEditor]: (input) =>
         observeRpcEffect(WS_METHODS.shellOpenInEditor, open.openInEditor(input), {
           "rpc.aggregate": "workspace",

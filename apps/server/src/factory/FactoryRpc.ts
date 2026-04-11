@@ -11,6 +11,7 @@ import {
   type FactoryConfig,
   FactoryReadError,
   type FactoryReadSummaryResult,
+  type FactoryRegenerateClaudeMdResult,
   FactoryWriteError,
   type ForgeSkillListResult,
   type SessionLog,
@@ -21,6 +22,7 @@ import {
   initializeFactory,
   readFactoryDirectory,
   readFactorySummary,
+  regenerateClaudeMd,
   writeQueue,
   writeSessionLog,
 } from "./index";
@@ -75,4 +77,16 @@ export const listForgeSkillsEffect = (): Effect.Effect<ForgeSkillListResult, Fac
   Effect.try({
     try: () => loadForgeSkills(),
     catch: (cause) => toReadError(cause, "Failed to load Forge skills"),
+  });
+
+export const regenerateClaudeMdEffect = (
+  projectPath: string,
+): Effect.Effect<FactoryRegenerateClaudeMdResult, FactoryWriteError> =>
+  Effect.try({
+    try: (): FactoryRegenerateClaudeMdResult => {
+      const content = regenerateClaudeMd(projectPath);
+      return { content, generatedAt: new Date().toISOString() };
+    },
+    catch: (cause) =>
+      toWriteError(cause, `Failed to regenerate .factory/CLAUDE.md at ${projectPath}`),
   });

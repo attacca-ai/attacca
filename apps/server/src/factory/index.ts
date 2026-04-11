@@ -10,5 +10,6 @@ export {
   writeClaudeMd,
   writeSpecMd,
   generateClaudeMd,
+  regenerateClaudeMd,
   initializeFactory,
 } from "./writer";

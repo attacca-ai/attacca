@@ -256,6 +256,16 @@ export const ForgeSkillListResult = Schema.Struct({
 export type ForgeSkillListResult = typeof ForgeSkillListResult.Type;
 
 // ---------------------------------------------------------------------------
+// Regenerated CLAUDE.md
+// ---------------------------------------------------------------------------
+
+export const FactoryRegenerateClaudeMdResult = Schema.Struct({
+  content: Schema.String,
+  generatedAt: Schema.String,
+});
+export type FactoryRegenerateClaudeMdResult = typeof FactoryRegenerateClaudeMdResult.Type;
+
+// ---------------------------------------------------------------------------
 // RPC inputs / outputs
 // ---------------------------------------------------------------------------
 

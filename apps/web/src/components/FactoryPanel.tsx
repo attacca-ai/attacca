@@ -194,19 +194,36 @@ const FactoryPanel = memo(function FactoryPanel({ projectPath, onClose }: Factor
     projectPath ? (state.entries[projectPath] ?? null) : null,
   );
   const loadFactory = useFactoryStore((state) => state.loadFactory);
+  const regenerateClaudeMd = useFactoryStore((state) => state.regenerateClaudeMd);
 
   useEffect(() => {
     if (!projectPath) return;
-    void loadFactory(projectPath);
-  }, [projectPath, loadFactory]);
+    let cancelled = false;
+    void (async () => {
+      const directory = await loadFactory(projectPath);
+      if (cancelled) return;
+      if (directory?.exists && directory.config) {
+        await regenerateClaudeMd(projectPath);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectPath, loadFactory, regenerateClaudeMd]);
 
-  const handleRefresh = () => {
-    if (projectPath) void loadFactory(projectPath);
+  const handleRefresh = async () => {
+    if (!projectPath) return;
+    const directory = await loadFactory(projectPath);
+    if (directory?.exists && directory.config) {
+      await regenerateClaudeMd(projectPath);
+    }
   };
 
   const directory = entry?.directory ?? null;
   const isLoading = entry?.status === "loading";
   const latestSession = directory?.sessions[0] ?? null;
+  const claudeMdGeneratedAt = entry?.claudeMdGeneratedAt ?? null;
+  const claudeMdError = entry?.claudeMdError ?? null;
 
   return (
     <div className="flex h-full w-[340px] shrink-0 flex-col border-l border-border/70 bg-card/50">
@@ -225,7 +242,7 @@ const FactoryPanel = memo(function FactoryPanel({ projectPath, onClose }: Factor
           <Button
             size="icon-xs"
             variant="ghost"
-            onClick={handleRefresh}
+            onClick={() => void handleRefresh()}
             disabled={!projectPath || isLoading}
             aria-label="Refresh factory"
             className="text-muted-foreground/50 hover:text-foreground/70"
@@ -275,6 +292,15 @@ const FactoryPanel = memo(function FactoryPanel({ projectPath, onClose }: Factor
               <ConfigSection directory={directory} />
               <WorkQueueSection directory={directory} />
               <SessionInfoSection session={latestSession} />
+              {claudeMdError ? (
+                <p className="text-[11px] text-red-400/80">
+                  CLAUDE.md: {claudeMdError}
+                </p>
+              ) : claudeMdGeneratedAt ? (
+                <p className="text-[10px] text-muted-foreground/40">
+                  CLAUDE.md regenerated {new Date(claudeMdGeneratedAt).toLocaleTimeString()}
+                </p>
+              ) : null}
             </>
           )}
         </div>

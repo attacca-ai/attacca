@@ -25,6 +25,8 @@ interface FactoryProjectEntry {
   readonly directory: FactoryDirectory | null;
   readonly error: string | null;
   readonly loadedAt: number | null;
+  readonly claudeMdGeneratedAt: string | null;
+  readonly claudeMdError: string | null;
 }
 
 interface ForgeSkillsState {
@@ -48,6 +50,7 @@ interface FactoryState {
   readonly writeQueue: (projectPath: string, queue: WorkQueue) => Promise<void>;
   readonly writeSessionLog: (projectPath: string, session: SessionLog) => Promise<void>;
   readonly loadForgeSkills: () => Promise<ReadonlyArray<ForgeSkill>>;
+  readonly regenerateClaudeMd: (projectPath: string) => Promise<string | null>;
   readonly clear: (projectPath?: string) => void;
 }
 
@@ -65,6 +68,8 @@ const emptyEntry = (projectPath: string): FactoryProjectEntry => ({
   directory: null,
   error: null,
   loadedAt: null,
+  claudeMdGeneratedAt: null,
+  claudeMdError: null,
 });
 
 const setEntry = (
@@ -139,6 +144,27 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
   writeSessionLog: async (projectPath, session) => {
     await getWsRpcClient().factory.writeSessionLog({ projectPath, session });
     await get().loadFactory(projectPath);
+  },
+
+  regenerateClaudeMd: async (projectPath) => {
+    try {
+      const result = await getWsRpcClient().factory.regenerateClaudeMd({ projectPath });
+      set((state) => ({
+        entries: setEntry(state.entries, projectPath, {
+          claudeMdGeneratedAt: result.generatedAt,
+          claudeMdError: null,
+        }),
+      }));
+      return result.content;
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Failed to regenerate CLAUDE.md";
+      set((state) => ({
+        entries: setEntry(state.entries, projectPath, {
+          claudeMdError: message,
+        }),
+      }));
+      return null;
+    }
   },
 
   loadForgeSkills: async () => {

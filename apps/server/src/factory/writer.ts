@@ -17,6 +17,8 @@ import {
   type SessionLog,
 } from "@t3tools/contracts";
 
+import { readFactoryDirectory } from "./reader";
+
 // ---------------------------------------------------------------------------
 // YAML serializer (minimal, config.yaml only)
 // ---------------------------------------------------------------------------
@@ -229,6 +231,49 @@ function getEscalationRules(tier: number): string {
 // ---------------------------------------------------------------------------
 // Initialize a new .factory/ directory
 // ---------------------------------------------------------------------------
+
+/**
+ * Regenerate .factory/CLAUDE.md from the current on-disk state.
+ *
+ * Throws if the project has no .factory/config.yaml — there's nothing to
+ * generate from in that case. Returns the generated content so the caller
+ * can surface it without a follow-up read.
+ */
+export function regenerateClaudeMd(projectPath: string): string {
+  const directory = readFactoryDirectory(projectPath);
+  if (!directory.exists || !directory.config) {
+    throw new Error(
+      `Cannot regenerate CLAUDE.md: no .factory/config.yaml at ${projectPath}`,
+    );
+  }
+
+  const queueItems = directory.queue?.items
+    .filter((item) => item.status !== "done")
+    .slice(0, 20)
+    .map((item) => ({
+      priority: item.priority,
+      title: item.title,
+      ...(item.description !== undefined ? { description: item.description } : {}),
+    }));
+
+  const recentSessions = directory.sessions.slice(0, 3).map((session) => ({
+    session_id: session.session_id,
+    ...(session.notes !== undefined ? { notes: session.notes } : {}),
+    ...(session.work_items_completed !== undefined
+      ? { work_items_completed: [...session.work_items_completed] }
+      : {}),
+  }));
+
+  const content = generateClaudeMd({
+    config: directory.config,
+    ...(directory.contextContent !== null ? { contextContent: directory.contextContent } : {}),
+    ...(queueItems && queueItems.length > 0 ? { queueItems } : {}),
+    ...(recentSessions.length > 0 ? { recentSessions } : {}),
+  });
+
+  writeClaudeMd(projectPath, content);
+  return content;
+}
 
 export function initializeFactory(
   projectPath: string,
