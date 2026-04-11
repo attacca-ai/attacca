@@ -65,6 +65,13 @@ export interface WsRpcClient {
     readonly searchEntries: RpcUnaryMethod<typeof WS_METHODS.projectsSearchEntries>;
     readonly writeFile: RpcUnaryMethod<typeof WS_METHODS.projectsWriteFile>;
   };
+  readonly factory: {
+    readonly read: RpcUnaryMethod<typeof WS_METHODS.factoryRead>;
+    readonly readSummary: RpcUnaryMethod<typeof WS_METHODS.factoryReadSummary>;
+    readonly initialize: RpcUnaryMethod<typeof WS_METHODS.factoryInitialize>;
+    readonly writeQueue: RpcUnaryMethod<typeof WS_METHODS.factoryWriteQueue>;
+    readonly writeSessionLog: RpcUnaryMethod<typeof WS_METHODS.factoryWriteSessionLog>;
+  };
   readonly shell: {
     readonly openInEditor: (input: {
       readonly cwd: Parameters<LocalApi["shell"]["openInEditor"]>[0];
@@ -291,6 +298,17 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.projectsSearchEntries](input)),
       writeFile: (input) =>
         transport.request((client) => client[WS_METHODS.projectsWriteFile](input)),
+    },
+    factory: {
+      read: (input) => transport.request((client) => client[WS_METHODS.factoryRead](input)),
+      readSummary: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryReadSummary](input)),
+      initialize: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryInitialize](input)),
+      writeQueue: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryWriteQueue](input)),
+      writeSessionLog: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryWriteSessionLog](input)),
     },
     shell: {
       openInEditor: (input) =>
