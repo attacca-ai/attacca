@@ -99,6 +99,7 @@ import { useTheme } from "../hooks/useTheme";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import BranchToolbar from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
+import FactoryPanel from "./FactoryPanel";
 import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import {
@@ -107,6 +108,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CircleAlertIcon,
+  FactoryIcon,
   ListTodoIcon,
   LockIcon,
   LockOpenIcon,
@@ -759,6 +761,7 @@ export default function ChatView(props: ChatViewProps) {
     useState<Record<string, number>>({});
   const [expandedWorkGroups, setExpandedWorkGroups] = useState<Record<string, boolean>>({});
   const [planSidebarOpen, setPlanSidebarOpen] = useState(false);
+  const [factoryPanelOpen, setFactoryPanelOpen] = useState(false);
   const [isComposerFooterCompact, setIsComposerFooterCompact] = useState(false);
   const [isComposerPrimaryActionsCompact, setIsComposerPrimaryActionsCompact] = useState(false);
   // Tracks whether the user explicitly dismissed the sidebar for the active turn.
@@ -2170,10 +2173,19 @@ export default function ChatView(props: ChatViewProps) {
         }
       } else {
         planSidebarDismissedForTurnRef.current = null;
+        setFactoryPanelOpen(false);
       }
       return !open;
     });
   }, [activePlan?.turnId, sidebarProposedPlan?.turnId]);
+  const toggleFactoryPanel = useCallback(() => {
+    setFactoryPanelOpen((open) => {
+      if (!open) {
+        setPlanSidebarOpen(false);
+      }
+      return !open;
+    });
+  }, []);
 
   const persistThreadSettingsForNextTurn = useCallback(
     async (input: {
@@ -4570,6 +4582,26 @@ export default function ChatView(props: ChatViewProps) {
                                 </Button>
                               </>
                             ) : null}
+                            <Separator
+                              orientation="vertical"
+                              className="mx-0.5 hidden h-4 sm:block"
+                            />
+                            <Button
+                              variant="ghost"
+                              className={cn(
+                                "shrink-0 whitespace-nowrap px-2 sm:px-3",
+                                factoryPanelOpen
+                                  ? "text-purple-400 hover:text-purple-300"
+                                  : "text-muted-foreground/70 hover:text-foreground/80",
+                              )}
+                              size="sm"
+                              type="button"
+                              onClick={toggleFactoryPanel}
+                              title={factoryPanelOpen ? "Hide factory panel" : "Show factory panel"}
+                            >
+                              <FactoryIcon />
+                              <span className="sr-only sm:not-sr-only">Factory</span>
+                            </Button>
                           </>
                         )}
                       </div>
@@ -4674,6 +4706,14 @@ export default function ChatView(props: ChatViewProps) {
                 planSidebarDismissedForTurnRef.current = turnKey;
               }
             }}
+          />
+        ) : null}
+
+        {/* Factory panel */}
+        {factoryPanelOpen ? (
+          <FactoryPanel
+            projectPath={activeProject?.cwd ?? null}
+            onClose={() => setFactoryPanelOpen(false)}
           />
         ) : null}
       </div>
