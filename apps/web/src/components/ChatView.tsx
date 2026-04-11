@@ -100,6 +100,7 @@ import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import BranchToolbar from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import FactoryPanel from "./FactoryPanel";
+import ForgeSkillMenu from "./ForgeSkillMenu";
 import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import {
@@ -4586,6 +4587,7 @@ export default function ChatView(props: ChatViewProps) {
                               orientation="vertical"
                               className="mx-0.5 hidden h-4 sm:block"
                             />
+                            <ForgeSkillMenu currentPrompt={prompt} onInsertSkill={setPrompt} />
                             <Button
                               variant="ghost"
                               className={cn(

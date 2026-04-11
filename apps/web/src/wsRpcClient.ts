@@ -71,6 +71,7 @@ export interface WsRpcClient {
     readonly initialize: RpcUnaryMethod<typeof WS_METHODS.factoryInitialize>;
     readonly writeQueue: RpcUnaryMethod<typeof WS_METHODS.factoryWriteQueue>;
     readonly writeSessionLog: RpcUnaryMethod<typeof WS_METHODS.factoryWriteSessionLog>;
+    readonly listForgeSkills: RpcUnaryNoArgMethod<typeof WS_METHODS.factoryListForgeSkills>;
   };
   readonly shell: {
     readonly openInEditor: (input: {
@@ -309,6 +310,8 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.factoryWriteQueue](input)),
       writeSessionLog: (input) =>
         transport.request((client) => client[WS_METHODS.factoryWriteSessionLog](input)),
+      listForgeSkills: () =>
+        transport.request((client) => client[WS_METHODS.factoryListForgeSkills]({})),
     },
     shell: {
       openInEditor: (input) =>

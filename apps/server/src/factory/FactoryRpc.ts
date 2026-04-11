@@ -12,6 +12,7 @@ import {
   FactoryReadError,
   type FactoryReadSummaryResult,
   FactoryWriteError,
+  type ForgeSkillListResult,
   type SessionLog,
   type WorkQueue,
 } from "@t3tools/contracts";
@@ -23,6 +24,7 @@ import {
   writeQueue,
   writeSessionLog,
 } from "./index";
+import { loadForgeSkills } from "./forgeSkills";
 
 const toReadError = (cause: unknown, message: string) =>
   new FactoryReadError({
@@ -67,4 +69,10 @@ export const writeSessionLogEffect = (projectPath: string, session: SessionLog) 
     try: () => writeSessionLog(projectPath, session),
     catch: (cause) =>
       toWriteError(cause, `Failed to write .factory/progress session log at ${projectPath}`),
+  });
+
+export const listForgeSkillsEffect = (): Effect.Effect<ForgeSkillListResult, FactoryReadError> =>
+  Effect.try({
+    try: () => loadForgeSkills(),
+    catch: (cause) => toReadError(cause, "Failed to load Forge skills"),
   });

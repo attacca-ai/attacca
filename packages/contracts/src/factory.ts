@@ -239,6 +239,23 @@ export const FactoryDirectory = Schema.Struct({
 export type FactoryDirectory = typeof FactoryDirectory.Type;
 
 // ---------------------------------------------------------------------------
+// Forge skills
+// ---------------------------------------------------------------------------
+
+export const ForgeSkill = Schema.Struct({
+  name: Schema.String,
+  description: Schema.String,
+  path: Schema.String,
+});
+export type ForgeSkill = typeof ForgeSkill.Type;
+
+export const ForgeSkillListResult = Schema.Struct({
+  skills: Schema.Array(ForgeSkill),
+  source: Schema.String,
+});
+export type ForgeSkillListResult = typeof ForgeSkillListResult.Type;
+
+// ---------------------------------------------------------------------------
 // RPC inputs / outputs
 // ---------------------------------------------------------------------------
 

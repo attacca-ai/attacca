@@ -37,6 +37,7 @@ import {
   FactoryWriteError,
   FactoryWriteQueueInput,
   FactoryWriteSessionLogInput,
+  ForgeSkillListResult,
 } from "./factory";
 import { KeybindingsConfigError } from "./keybindings";
 import {
@@ -97,6 +98,7 @@ export const WS_METHODS = {
   factoryInitialize: "factory.initialize",
   factoryWriteQueue: "factory.writeQueue",
   factoryWriteSessionLog: "factory.writeSessionLog",
+  factoryListForgeSkills: "factory.listForgeSkills",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -203,6 +205,12 @@ export const WsFactoryWriteQueueRpc = Rpc.make(WS_METHODS.factoryWriteQueue, {
 export const WsFactoryWriteSessionLogRpc = Rpc.make(WS_METHODS.factoryWriteSessionLog, {
   payload: FactoryWriteSessionLogInput,
   error: FactoryWriteError,
+});
+
+export const WsFactoryListForgeSkillsRpc = Rpc.make(WS_METHODS.factoryListForgeSkills, {
+  payload: Schema.Struct({}),
+  success: ForgeSkillListResult,
+  error: FactoryReadError,
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
@@ -391,6 +399,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsFactoryInitializeRpc,
   WsFactoryWriteQueueRpc,
   WsFactoryWriteSessionLogRpc,
+  WsFactoryListForgeSkillsRpc,
   WsShellOpenInEditorRpc,
   WsSubscribeGitStatusRpc,
   WsGitPullRpc,

@@ -11,6 +11,7 @@
 import {
   type FactoryConfig,
   type FactoryDirectory,
+  type ForgeSkill,
   type SessionLog,
   type WorkQueue,
 } from "@t3tools/contracts";
@@ -26,9 +27,18 @@ interface FactoryProjectEntry {
   readonly loadedAt: number | null;
 }
 
+interface ForgeSkillsState {
+  readonly status: "idle" | "loading" | "ready" | "error";
+  readonly skills: ReadonlyArray<ForgeSkill>;
+  readonly error: string | null;
+  readonly loadedAt: number | null;
+  readonly source: string | null;
+}
+
 interface FactoryState {
   readonly activeProjectPath: string | null;
   readonly entries: Record<string, FactoryProjectEntry>;
+  readonly forgeSkills: ForgeSkillsState;
   readonly setActiveProjectPath: (projectPath: string | null) => void;
   readonly loadFactory: (projectPath: string) => Promise<FactoryDirectory | null>;
   readonly initializeFactory: (
@@ -37,8 +47,17 @@ interface FactoryState {
   ) => Promise<FactoryDirectory | null>;
   readonly writeQueue: (projectPath: string, queue: WorkQueue) => Promise<void>;
   readonly writeSessionLog: (projectPath: string, session: SessionLog) => Promise<void>;
+  readonly loadForgeSkills: () => Promise<ReadonlyArray<ForgeSkill>>;
   readonly clear: (projectPath?: string) => void;
 }
+
+const initialForgeSkillsState: ForgeSkillsState = {
+  status: "idle",
+  skills: [],
+  error: null,
+  loadedAt: null,
+  source: null,
+};
 
 const emptyEntry = (projectPath: string): FactoryProjectEntry => ({
   projectPath,
@@ -63,6 +82,7 @@ const setEntry = (
 export const useFactoryStore = create<FactoryState>((set, get) => ({
   activeProjectPath: null,
   entries: {},
+  forgeSkills: initialForgeSkillsState,
 
   setActiveProjectPath: (projectPath) => {
     set({ activeProjectPath: projectPath });
@@ -121,9 +141,34 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
     await get().loadFactory(projectPath);
   },
 
+  loadForgeSkills: async () => {
+    set((state) => ({
+      forgeSkills: { ...state.forgeSkills, status: "loading", error: null },
+    }));
+    try {
+      const result = await getWsRpcClient().factory.listForgeSkills();
+      set({
+        forgeSkills: {
+          status: "ready",
+          skills: result.skills,
+          source: result.source,
+          error: null,
+          loadedAt: Date.now(),
+        },
+      });
+      return result.skills;
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Failed to load Forge skills";
+      set((state) => ({
+        forgeSkills: { ...state.forgeSkills, status: "error", error: message },
+      }));
+      return [];
+    }
+  },
+
   clear: (projectPath) => {
     if (projectPath === undefined) {
-      set({ entries: {}, activeProjectPath: null });
+      set({ entries: {}, activeProjectPath: null, forgeSkills: initialForgeSkillsState });
       return;
     }
     set((state) => {
