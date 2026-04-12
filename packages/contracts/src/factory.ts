@@ -402,6 +402,21 @@ export class FactoryProtocolVersionError extends Schema.TaggedErrorClass<Factory
   },
 ) {}
 
+/**
+ * Thrown when a write RPC targets a path that is not inside the resolved
+ * Podium scan root. Defense-in-depth against arbitrary filesystem writes
+ * via the WebSocket boundary. The typed shape lets the UI distinguish this
+ * from generic write errors.
+ */
+export class FactoryPathError extends Schema.TaggedErrorClass<FactoryPathError>()(
+  "FactoryPathError",
+  {
+    message: Schema.String,
+    projectPath: Schema.String,
+    scanRoot: Schema.String,
+  },
+) {}
+
 // ---------------------------------------------------------------------------
 // Factory directory paths (constants)
 // ---------------------------------------------------------------------------

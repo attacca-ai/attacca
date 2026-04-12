@@ -31,6 +31,7 @@ import {
 import {
   FactoryDirectory,
   FactoryInitializeInput,
+  FactoryPathError,
   FactoryProjectPathInput,
   FactoryProtocolVersionError,
   FactoryReadError,
@@ -204,17 +205,17 @@ export const WsFactoryReadSummaryRpc = Rpc.make(WS_METHODS.factoryReadSummary, {
 
 export const WsFactoryInitializeRpc = Rpc.make(WS_METHODS.factoryInitialize, {
   payload: FactoryInitializeInput,
-  error: FactoryWriteError,
+  error: Schema.Union([FactoryWriteError, FactoryPathError]),
 });
 
 export const WsFactoryWriteQueueRpc = Rpc.make(WS_METHODS.factoryWriteQueue, {
   payload: FactoryWriteQueueInput,
-  error: FactoryWriteError,
+  error: Schema.Union([FactoryWriteError, FactoryPathError]),
 });
 
 export const WsFactoryWriteSessionLogRpc = Rpc.make(WS_METHODS.factoryWriteSessionLog, {
   payload: FactoryWriteSessionLogInput,
-  error: FactoryWriteError,
+  error: Schema.Union([FactoryWriteError, FactoryPathError]),
 });
 
 export const WsFactoryListForgeSkillsRpc = Rpc.make(WS_METHODS.factoryListForgeSkills, {
@@ -226,7 +227,11 @@ export const WsFactoryListForgeSkillsRpc = Rpc.make(WS_METHODS.factoryListForgeS
 export const WsFactoryRegenerateClaudeMdRpc = Rpc.make(WS_METHODS.factoryRegenerateClaudeMd, {
   payload: FactoryProjectPathInput,
   success: FactoryRegenerateClaudeMdResult,
-  error: Schema.Union([FactoryWriteError, FactoryProtocolVersionError]),
+  error: Schema.Union([
+    FactoryWriteError,
+    FactoryProtocolVersionError,
+    FactoryPathError,
+  ]),
 });
 
 export const WsFactoryGetGitIdentityRpc = Rpc.make(WS_METHODS.factoryGetGitIdentity, {

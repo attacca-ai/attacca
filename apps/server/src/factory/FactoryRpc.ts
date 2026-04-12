@@ -7,11 +7,12 @@
  */
 
 import { Effect, Schema } from "effect";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { homedir, platform as osPlatform } from "node:os";
+import { isAbsolute, join, resolve, sep } from "node:path";
 import {
   type FactoryConfig,
   type FactoryDirectory,
+  FactoryPathError,
   FactoryProtocolVersionError,
   FactoryReadError,
   type FactoryReadSummaryResult,
@@ -50,6 +51,11 @@ const toWriteError = (cause: unknown, message: string) =>
     cause,
   });
 
+const toWriteOrPathError = (cause: unknown, message: string) => {
+  if (isFactoryPathError(cause)) return cause;
+  return toWriteError(cause, message);
+};
+
 export const readFactoryDirectoryEffect = (
   projectPath: string,
 ): Effect.Effect<FactoryDirectory, FactoryReadError | FactoryProtocolVersionError> =>
@@ -70,23 +76,46 @@ export const readFactorySummaryEffect = (
       toReadOrProtocolError(cause, `Failed to read .factory/ summary at ${projectPath}`),
   });
 
-export const initializeFactoryEffect = (projectPath: string, config: FactoryConfig) =>
+export const initializeFactoryEffect = (
+  projectPath: string,
+  config: FactoryConfig,
+): Effect.Effect<void, FactoryWriteError | FactoryPathError> =>
   Effect.try({
-    try: () => initializeFactory(projectPath, config),
-    catch: (cause) => toWriteError(cause, `Failed to initialize .factory/ at ${projectPath}`),
-  });
-
-export const writeQueueEffect = (projectPath: string, queue: WorkQueue) =>
-  Effect.try({
-    try: () => writeQueue(projectPath, queue),
-    catch: (cause) => toWriteError(cause, `Failed to write .factory/queue.json at ${projectPath}`),
-  });
-
-export const writeSessionLogEffect = (projectPath: string, session: SessionLog) =>
-  Effect.try({
-    try: () => writeSessionLog(projectPath, session),
+    try: () => {
+      assertPathInsideScanRoot(projectPath);
+      initializeFactory(projectPath, config);
+    },
     catch: (cause) =>
-      toWriteError(cause, `Failed to write .factory/progress session log at ${projectPath}`),
+      toWriteOrPathError(cause, `Failed to initialize .factory/ at ${projectPath}`),
+  });
+
+export const writeQueueEffect = (
+  projectPath: string,
+  queue: WorkQueue,
+): Effect.Effect<void, FactoryWriteError | FactoryPathError> =>
+  Effect.try({
+    try: () => {
+      assertPathInsideScanRoot(projectPath);
+      writeQueue(projectPath, queue);
+    },
+    catch: (cause) =>
+      toWriteOrPathError(cause, `Failed to write .factory/queue.json at ${projectPath}`),
+  });
+
+export const writeSessionLogEffect = (
+  projectPath: string,
+  session: SessionLog,
+): Effect.Effect<void, FactoryWriteError | FactoryPathError> =>
+  Effect.try({
+    try: () => {
+      assertPathInsideScanRoot(projectPath);
+      writeSessionLog(projectPath, session);
+    },
+    catch: (cause) =>
+      toWriteOrPathError(
+        cause,
+        `Failed to write .factory/progress session log at ${projectPath}`,
+      ),
   });
 
 export const listForgeSkillsEffect = (): Effect.Effect<ForgeSkillListResult, FactoryReadError> =>
@@ -110,6 +139,41 @@ function resolvePodiumRoot(): PodiumRootResult {
   }
   return { rootDir: join(homedir(), "projects"), source: "default" };
 }
+
+const PATH_CASE_SENSITIVE = osPlatform() !== "win32" && osPlatform() !== "darwin";
+
+function normalizePathForCompare(value: string): string {
+  const absolute = isAbsolute(value) ? resolve(value) : resolve(value);
+  const trimmed = absolute.replace(/[\\/]+$/, "");
+  return PATH_CASE_SENSITIVE ? trimmed : trimmed.toLowerCase();
+}
+
+/**
+ * Assert that `projectPath` is inside the resolved Podium scan root.
+ * Defense-in-depth against arbitrary writes via the WebSocket boundary —
+ * the spec explicitly accepts "no auth", but write RPCs should still
+ * refuse paths outside the factory surface. Throws FactoryPathError.
+ */
+function assertPathInsideScanRoot(projectPath: string): void {
+  const { rootDir } = resolvePodiumRoot();
+  const normalizedRoot = normalizePathForCompare(rootDir);
+  const normalizedProject = normalizePathForCompare(projectPath);
+  if (normalizedProject === normalizedRoot) return;
+  if (!normalizedProject.startsWith(normalizedRoot + sep.replace(/\\/g, "/"))) {
+    // Also try native-sep comparison in case the resolve() above produced
+    // a path with native separators.
+    const nativePrefix = normalizedRoot + sep;
+    if (!normalizedProject.startsWith(nativePrefix.toLowerCase())) {
+      throw new FactoryPathError({
+        message: `Refusing to write outside the Podium scan root. Project path ${projectPath} is not inside ${rootDir}.`,
+        projectPath,
+        scanRoot: rootDir,
+      });
+    }
+  }
+}
+
+const isFactoryPathError = Schema.is(FactoryPathError);
 
 export const getPodiumRootEffect = (): Effect.Effect<PodiumRootResult, never> =>
   Effect.sync(() => resolvePodiumRoot());
@@ -136,15 +200,17 @@ export const regenerateClaudeMdEffect = (
   projectPath: string,
 ): Effect.Effect<
   FactoryRegenerateClaudeMdResult,
-  FactoryWriteError | FactoryProtocolVersionError
+  FactoryWriteError | FactoryProtocolVersionError | FactoryPathError
 > =>
   Effect.try({
     try: (): FactoryRegenerateClaudeMdResult => {
+      assertPathInsideScanRoot(projectPath);
       const content = regenerateClaudeMd(projectPath);
       return { content, generatedAt: new Date().toISOString() };
     },
     catch: (cause) => {
       if (isProtocolVersionError(cause)) return cause;
+      if (isFactoryPathError(cause)) return cause;
       return toWriteError(cause, `Failed to regenerate .factory/CLAUDE.md at ${projectPath}`);
     },
   });
