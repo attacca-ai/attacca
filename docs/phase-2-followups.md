@@ -1,14 +1,16 @@
 # Phase 2 follow-ups
 
-**Status**: open tracker, populated 2026-04-11 after the post-ship code review of Phase 1 + Phase 2 v0.
-**Scope**: issues surfaced during `coderabbit:code-reviewer` review of commits `b96308fc..a883d92f`. Hotfixes (Group A) landed in `6486eed6..5a652278`. This doc tracks Group B (small follow-ups) and Group C (deferred to Phase 2.5).
+**Status**: Group A + Group B shipped. Group C deferred.
+**Scope**: issues surfaced during `coderabbit:code-reviewer` review of commits `b96308fc..a883d92f`. Hotfixes (Group A) landed in `6486eed6..5a652278`. Group B landed in `ba31a30f..4c737cf3`.
 **Relates to**: `docs/phase-2-podium-spec.md`, `docs/factory-protocol.md`.
 
 ---
 
-## Group B — small follow-ups (~30 min total)
+## Group B — shipped (`ba31a30f..4c737cf3`)
 
-### B1. Reconcile "stalled" source of truth between spec and code
+All five items landed. Summaries retained below for history.
+
+### B1. Reconcile "stalled" source of truth between spec and code — ✅ shipped (`ba31a30f`)
 
 **What**: The Phase 2 spec, scenario 4, says "Given a Tracked project whose *most recent session log* is dated > 7 days ago". The implementation in `apps/web/src/stores/podium.ts#selectStalledProjects` actually uses `ScannedProject.lastActivity`, which is sourced from `status.json#last_activity` by the server scanner — not from session log file mtimes. Those two can diverge.
 
@@ -18,7 +20,7 @@
 
 **Why it's not a hotfix**: no behavior change, just a doc correction.
 
-### B2. Surface initialize errors on Discovered rows
+### B2. Surface initialize errors on Discovered rows — ✅ shipped (`f5ed5f62`)
 
 **What**: `apps/web/src/routes/_chat.podium.tsx#handleInitialize` awaits `initializeFactory(...)` and clears the spinner, then calls `refresh()` regardless of whether the init actually succeeded. `initializeFactory` in `apps/web/src/stores/factory.ts` swallows errors and returns `null`. A user clicking Initialize on a permission-denied directory (or any other failure) sees the spinner disappear and nothing change, with no feedback.
 
@@ -26,7 +28,7 @@
 
 **Why it's not a hotfix**: the UX is bad but not *data-loss* bad, and there's no easy smoke test for the toast path without a browser.
 
-### B3. Scanner permission-denied falls through to error modal
+### B3. Scanner permission-denied falls through to error modal — ✅ shipped (`6983adbe`)
 
 **What**: `apps/server/src/scanner/index.ts#scanProjects` checks `existsSync(rootDir)` and returns `[]` when the directory doesn't exist (matching spec scenario 7 — missing root renders empty state). But if the directory exists and `readdirSync(rootDir)` throws `EACCES` (Windows permission-denied, locked folder, etc.), the error propagates up to `scanProjectsEffect` and becomes a `FactoryReadError`, which the dashboard renders as a red error card instead of the calm empty state.
 
@@ -34,13 +36,13 @@
 
 **Why it's not a hotfix**: rare in practice, and the error card isn't *wrong* — it's just less graceful than the empty state. Worth fixing but not urgent.
 
-### B4. Identity bootstrap cross-tab race
+### B4. Identity bootstrap cross-tab race — ✅ shipped (`ad3f1d77`)
 
 **What**: `apps/web/src/hooks/useSettings.ts#bootstrapAttaccaUserIfMissing` does read-RPC-write on localStorage. If another tab writes `attaccaUser` between the read and the write, we clobber their change. Near-impossible in practice (user has to cold-open two tabs *and* change identity in one before the other's bootstrap completes), but trivial to fix.
 
 **Action**: re-read localStorage immediately before the write, inside the same try, and only write if `attaccaUser` is still empty. Three lines.
 
-### B5. `useShallow` on podium selectors for render perf
+### B5. `useShallow` on podium selectors for render perf — ✅ shipped (`4c737cf3`)
 
 **What**: `apps/web/src/stores/podium.ts` exports `selectTrackedProjects`, `selectDiscoveredProjects`, `selectStalledProjects`. Each creates a fresh array via `[...state.projects].filter(...)`. The dashboard uses them as `usePodiumStore(selectTrackedProjects)`, which means any unrelated store write triggers a re-render because the array reference changes. Not a correctness issue — just unnecessary rerenders.
 
@@ -101,10 +103,12 @@
 
 **What**: The schema has `version: Schema.optional(Schema.Number)` because legacy configs don't have it, but the reader always normalizes missing values to 1 before returning, so every in-memory `FactoryConfig` actually has a version. The type should reflect this. Either split into `FactoryConfigOnDisk` (optional version) and `FactoryConfig` (required version), or accept the mild inconsistency.
 
-## Triage recommendation
+## Triage recommendation (updated)
 
-**Do before Phase 3**: B1, B2, B3, C1, C2, C7. These close spec scenario gaps, improve UX on obvious failure paths, and add defense-in-depth before Arco ships (which introduces more write surfaces).
+**Group A + Group B shipped.** Remaining open items are all in Group C.
 
-**Can wait until the feature arrives**: C3, C4, C5, C6 — these are Phase 2.5 sprint candidates with their own specs.
+**Do before Phase 3**: C1 (draft chat on row click — the one remaining spec scenario gap), C2 (path validation for write RPCs — defense-in-depth before Arco adds more write surfaces), C7 (settings UI for defaultMode / attaccaUser / scan root override — needed to actually *use* the `defaultMode` setting at startup).
 
-**Nice-to-have but low priority**: B4, B5, C8, C9, C10 — none are user-visible failures, all trivial when touched.
+**Can wait until the feature arrives**: C3 (external intake), C4 (gap analysis + work dispatch), C5 (multi-root), C6 (Dismiss UI) — Phase 2.5 sprint candidates with their own specs.
+
+**Nice-to-have but low priority**: C8 (pagination), C9 (real YAML lib), C10 (non-optional in-memory version) — none are user-visible failures, all trivial when touched.
