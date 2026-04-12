@@ -293,28 +293,51 @@ export function regenerateClaudeMd(projectPath: string): string {
   return content;
 }
 
+/**
+ * Initialize a new `.factory/` directory. Idempotent: existing files are
+ * not overwritten so intake of a path that was already initialized (by
+ * another Attacca instance, or the CLI) does not clobber user edits.
+ * Only creates files that are *missing*.
+ */
 export function initializeFactory(
   projectPath: string,
   config: FactoryConfig,
 ): void {
-  ensureFactoryDir(projectPath);
-  writeConfig(projectPath, { ...config, version: FACTORY_PROTOCOL_VERSION });
+  const factoryPath = ensureFactoryDir(projectPath);
 
-  const status: FactoryStatus = {
-    state: config.phase,
-    health: "active",
-    track: config.track,
-    archived: false,
-    completion_pct: 0,
-    gap_count: 0,
-    last_activity: new Date().toISOString(),
-    assigned_dev: config.assigned_dev,
-  };
-  writeStatus(projectPath, status);
+  const configPath = join(factoryPath, FACTORY_FILES.CONFIG);
+  if (!existsSync(configPath)) {
+    writeConfig(projectPath, { ...config, version: FACTORY_PROTOCOL_VERSION });
+  }
 
-  const contextContent = `# ${config.display_name} — Project Context\n\n## Architecture\n\n(Add architecture notes here)\n\n## Domain Notes\n\n(Add domain-specific context here)\n\n## Gotchas\n\n(Add known issues and workarounds here)\n`;
-  writeContextMd(projectPath, contextContent);
+  const statusPath = join(factoryPath, FACTORY_FILES.STATUS);
+  if (!existsSync(statusPath)) {
+    const status: FactoryStatus = {
+      state: config.phase,
+      health: "active",
+      track: config.track,
+      archived: false,
+      completion_pct: 0,
+      gap_count: 0,
+      last_activity: new Date().toISOString(),
+      assigned_dev: config.assigned_dev,
+    };
+    writeStatus(projectPath, status);
+  }
 
-  const claudeMd = generateClaudeMd({ config, contextContent });
-  writeClaudeMd(projectPath, claudeMd);
+  const contextPath = join(factoryPath, FACTORY_FILES.CONTEXT);
+  if (!existsSync(contextPath)) {
+    const contextContent = `# ${config.display_name} — Project Context\n\n## Architecture\n\n(Add architecture notes here)\n\n## Domain Notes\n\n(Add domain-specific context here)\n\n## Gotchas\n\n(Add known issues and workarounds here)\n`;
+    writeContextMd(projectPath, contextContent);
+  }
+
+  const claudeMdPath = join(factoryPath, FACTORY_FILES.CLAUDE_MD);
+  if (!existsSync(claudeMdPath)) {
+    const readConfig = existsSync(configPath);
+    const usedConfig = readConfig
+      ? ({ ...config, version: FACTORY_PROTOCOL_VERSION } as FactoryConfig)
+      : config;
+    const claudeMd = generateClaudeMd({ config: usedConfig });
+    writeClaudeMd(projectPath, claudeMd);
+  }
 }
