@@ -242,9 +242,18 @@ export async function bootstrapAttaccaUserIfMissing(): Promise<void> {
 
     const identity = await getWsRpcClient().factory.getGitIdentity();
     const next = identity.name ?? "";
+
+    // Re-check localStorage right before the write — another tab may have
+    // set attaccaUser while the RPC was in flight, and we don't want to
+    // clobber their value.
+    const rawAfter = localStorage.getItem(CLIENT_SETTINGS_STORAGE_KEY);
+    const currentAfter = rawAfter ? (JSON.parse(rawAfter) as Record<string, unknown>) : {};
+    const existingAfter = currentAfter.attaccaUser;
+    if (typeof existingAfter === "string" && existingAfter.trim().length > 0) return;
+
     localStorage.setItem(
       CLIENT_SETTINGS_STORAGE_KEY,
-      JSON.stringify({ ...current, attaccaUser: next }),
+      JSON.stringify({ ...currentAfter, attaccaUser: next }),
     );
   } catch (error) {
     console.warn("[identity] failed to bootstrap attaccaUser", error);
