@@ -642,19 +642,19 @@ const WsRpcLayer = WsRpcGroup.toLayer(
       [WS_METHODS.factoryInitialize]: (input) =>
         observeRpcEffect(
           WS_METHODS.factoryInitialize,
-          initializeFactoryEffect(input.projectPath, input.config),
+          initializeFactoryEffect(input.projectPath, input.config, input.allowedRoots),
           { "rpc.aggregate": "factory" },
         ),
       [WS_METHODS.factoryWriteQueue]: (input) =>
         observeRpcEffect(
           WS_METHODS.factoryWriteQueue,
-          writeQueueEffect(input.projectPath, input.queue),
+          writeQueueEffect(input.projectPath, input.queue, input.allowedRoots),
           { "rpc.aggregate": "factory" },
         ),
       [WS_METHODS.factoryWriteSessionLog]: (input) =>
         observeRpcEffect(
           WS_METHODS.factoryWriteSessionLog,
-          writeSessionLogEffect(input.projectPath, input.session),
+          writeSessionLogEffect(input.projectPath, input.session, input.allowedRoots),
           { "rpc.aggregate": "factory" },
         ),
       [WS_METHODS.factoryListForgeSkills]: (_input) =>
@@ -664,7 +664,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
       [WS_METHODS.factoryRegenerateClaudeMd]: (input) =>
         observeRpcEffect(
           WS_METHODS.factoryRegenerateClaudeMd,
-          regenerateClaudeMdEffect(input.projectPath),
+          regenerateClaudeMdEffect(input.projectPath, input.allowedRoots),
           { "rpc.aggregate": "factory" },
         ),
       [WS_METHODS.factoryGetGitIdentity]: (_input) =>

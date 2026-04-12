@@ -57,6 +57,16 @@ export const ClientSettingsSchema = Schema.Struct({
    * means "use whatever the server reports".
    */
   podiumScanRootOverride: Schema.String.pipe(Schema.withDecodingDefault(() => "")),
+  /**
+   * Parent directories the user has allowed Attacca to write `.factory/`
+   * metadata into during external intake (C3). The server extends its
+   * scan-root path-containment check with this list on every write RPC
+   * so intake can land outside the Podium scan root without bypassing
+   * the defense-in-depth guard entirely. Entries are absolute paths.
+   */
+  externalIntakeRoots: Schema.Array(Schema.String).pipe(
+    Schema.withDecodingDefault(() => [] as ReadonlyArray<string>),
+  ),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 

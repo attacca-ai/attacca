@@ -286,8 +286,17 @@ export type FactoryRegenerateClaudeMdResult = typeof FactoryRegenerateClaudeMdRe
 // RPC inputs / outputs
 // ---------------------------------------------------------------------------
 
+/**
+ * Client-side allowlist of extra directories the server may write into,
+ * in addition to the resolved Podium scan root. Populated from the
+ * `externalIntakeRoots` client setting on every write RPC call. Absent or
+ * empty means "no extra roots, write must stay inside the scan root".
+ */
+const AllowedRoots = Schema.optional(Schema.Array(Schema.String));
+
 export const FactoryProjectPathInput = Schema.Struct({
   projectPath: Schema.String,
+  allowedRoots: AllowedRoots,
 });
 export type FactoryProjectPathInput = typeof FactoryProjectPathInput.Type;
 
@@ -300,18 +309,21 @@ export type FactoryReadSummaryResult = typeof FactoryReadSummaryResult.Type;
 export const FactoryInitializeInput = Schema.Struct({
   projectPath: Schema.String,
   config: FactoryConfig,
+  allowedRoots: AllowedRoots,
 });
 export type FactoryInitializeInput = typeof FactoryInitializeInput.Type;
 
 export const FactoryWriteQueueInput = Schema.Struct({
   projectPath: Schema.String,
   queue: WorkQueue,
+  allowedRoots: AllowedRoots,
 });
 export type FactoryWriteQueueInput = typeof FactoryWriteQueueInput.Type;
 
 export const FactoryWriteSessionLogInput = Schema.Struct({
   projectPath: Schema.String,
   session: SessionLog,
+  allowedRoots: AllowedRoots,
 });
 export type FactoryWriteSessionLogInput = typeof FactoryWriteSessionLogInput.Type;
 

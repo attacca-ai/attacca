@@ -79,10 +79,11 @@ export const readFactorySummaryEffect = (
 export const initializeFactoryEffect = (
   projectPath: string,
   config: FactoryConfig,
+  allowedRoots?: ReadonlyArray<string>,
 ): Effect.Effect<void, FactoryWriteError | FactoryPathError> =>
   Effect.try({
     try: () => {
-      assertPathInsideScanRoot(projectPath);
+      assertPathInsideAllowedRoot(projectPath, allowedRoots);
       initializeFactory(projectPath, config);
     },
     catch: (cause) =>
@@ -92,10 +93,11 @@ export const initializeFactoryEffect = (
 export const writeQueueEffect = (
   projectPath: string,
   queue: WorkQueue,
+  allowedRoots?: ReadonlyArray<string>,
 ): Effect.Effect<void, FactoryWriteError | FactoryPathError> =>
   Effect.try({
     try: () => {
-      assertPathInsideScanRoot(projectPath);
+      assertPathInsideAllowedRoot(projectPath, allowedRoots);
       writeQueue(projectPath, queue);
     },
     catch: (cause) =>
@@ -105,10 +107,11 @@ export const writeQueueEffect = (
 export const writeSessionLogEffect = (
   projectPath: string,
   session: SessionLog,
+  allowedRoots?: ReadonlyArray<string>,
 ): Effect.Effect<void, FactoryWriteError | FactoryPathError> =>
   Effect.try({
     try: () => {
-      assertPathInsideScanRoot(projectPath);
+      assertPathInsideAllowedRoot(projectPath, allowedRoots);
       writeSessionLog(projectPath, session);
     },
     catch: (cause) =>
@@ -149,28 +152,45 @@ function normalizePathForCompare(value: string): string {
 }
 
 /**
- * Assert that `projectPath` is inside the resolved Podium scan root.
- * Defense-in-depth against arbitrary writes via the WebSocket boundary —
- * the spec explicitly accepts "no auth", but write RPCs should still
- * refuse paths outside the factory surface. Throws FactoryPathError.
+ * Check whether `normalizedProject` is a subpath of `normalizedRoot`.
  */
-function assertPathInsideScanRoot(projectPath: string): void {
+function isSubpath(normalizedProject: string, normalizedRoot: string): boolean {
+  if (normalizedProject === normalizedRoot) return true;
+  const fwdPrefix = normalizedRoot + "/";
+  if (normalizedProject.startsWith(fwdPrefix)) return true;
+  const nativePrefix = normalizedRoot + sep;
+  if (normalizedProject.startsWith(nativePrefix.toLowerCase())) return true;
+  return false;
+}
+
+/**
+ * Assert that `projectPath` is inside the resolved Podium scan root OR
+ * inside any of the extra allowed roots passed by the client (the
+ * `externalIntakeRoots` setting). Throws FactoryPathError if none match.
+ */
+function assertPathInsideAllowedRoot(
+  projectPath: string,
+  extraRoots?: ReadonlyArray<string>,
+): void {
   const { rootDir } = resolvePodiumRoot();
-  const normalizedRoot = normalizePathForCompare(rootDir);
   const normalizedProject = normalizePathForCompare(projectPath);
-  if (normalizedProject === normalizedRoot) return;
-  if (!normalizedProject.startsWith(normalizedRoot + sep.replace(/\\/g, "/"))) {
-    // Also try native-sep comparison in case the resolve() above produced
-    // a path with native separators.
-    const nativePrefix = normalizedRoot + sep;
-    if (!normalizedProject.startsWith(nativePrefix.toLowerCase())) {
-      throw new FactoryPathError({
-        message: `Refusing to write outside the Podium scan root. Project path ${projectPath} is not inside ${rootDir}.`,
-        projectPath,
-        scanRoot: rootDir,
-      });
+
+  // Check primary scan root.
+  if (isSubpath(normalizedProject, normalizePathForCompare(rootDir))) return;
+
+  // Check client-provided extra roots.
+  if (extraRoots) {
+    for (const extra of extraRoots) {
+      if (extra.trim().length === 0) continue;
+      if (isSubpath(normalizedProject, normalizePathForCompare(extra))) return;
     }
   }
+
+  throw new FactoryPathError({
+    message: `Refusing to write outside allowed roots. Project path ${projectPath} is not inside ${rootDir} or any intake root.`,
+    projectPath,
+    scanRoot: rootDir,
+  });
 }
 
 const isFactoryPathError = Schema.is(FactoryPathError);
@@ -198,13 +218,14 @@ export const scanProjectsEffect = (
 
 export const regenerateClaudeMdEffect = (
   projectPath: string,
+  allowedRoots?: ReadonlyArray<string>,
 ): Effect.Effect<
   FactoryRegenerateClaudeMdResult,
   FactoryWriteError | FactoryProtocolVersionError | FactoryPathError
 > =>
   Effect.try({
     try: (): FactoryRegenerateClaudeMdResult => {
-      assertPathInsideScanRoot(projectPath);
+      assertPathInsideAllowedRoot(projectPath, allowedRoots);
       const content = regenerateClaudeMd(projectPath);
       return { content, generatedAt: new Date().toISOString() };
     },
