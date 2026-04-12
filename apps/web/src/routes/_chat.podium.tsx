@@ -172,9 +172,9 @@ function PodiumRouteView() {
   const error = usePodiumStore((s) => s.error);
   const scan = usePodiumStore((s) => s.scan);
   const refresh = usePodiumStore((s) => s.refresh);
-  const tracked = usePodiumStore(selectTrackedProjects);
-  const discovered = usePodiumStore(selectDiscoveredProjects);
-  const stalled = usePodiumStore(selectStalledProjects);
+  const tracked = usePodiumStore(useShallow(selectTrackedProjects));
+  const discovered = usePodiumStore(useShallow(selectDiscoveredProjects));
+  const stalled = usePodiumStore(useShallow(selectStalledProjects));
   const initializeFactory = useFactoryStore((s) => s.initializeFactory);
   const orchestrationProjects = useStore(useShallow(selectProjectsAcrossEnvironments));
   const setProjectExpanded = useUiStateStore((s) => s.setProjectExpanded);
