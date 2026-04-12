@@ -186,7 +186,6 @@ function PodiumRouteView() {
   const status = usePodiumStore((s) => s.status);
   const error = usePodiumStore((s) => s.error);
   const scan = usePodiumStore((s) => s.scan);
-  const refresh = usePodiumStore((s) => s.refresh);
   const tracked = usePodiumStore(useShallow(selectTrackedProjects));
   const discovered = usePodiumStore(useShallow(selectDiscoveredProjects));
   const stalled = usePodiumStore(useShallow(selectStalledProjects));
@@ -195,6 +194,7 @@ function PodiumRouteView() {
   const setProjectExpanded = useUiStateStore((s) => s.setProjectExpanded);
   const activeEnvironmentId = useStore((s) => s.activeEnvironmentId);
   const defaultThreadEnvMode = useSettings((s) => s.defaultThreadEnvMode);
+  const podiumScanRootOverride = useSettings((s) => s.podiumScanRootOverride);
   const { handleNewThread } = useHandleNewThread();
 
   const [initializingPath, setInitializingPath] = useState<string | null>(null);
@@ -202,9 +202,10 @@ function PodiumRouteView() {
 
   useEffect(() => {
     if (status === "idle") {
-      void scan();
+      const override = podiumScanRootOverride.trim();
+      void scan(override.length > 0 ? override : undefined);
     }
-  }, [status, scan]);
+  }, [status, scan, podiumScanRootOverride]);
 
   const handleOpenProject = useCallback(
     async (project: ScannedProject) => {
@@ -284,12 +285,17 @@ function PodiumRouteView() {
     ],
   );
 
+  const refreshWithOverride = useCallback(() => {
+    const override = podiumScanRootOverride.trim();
+    return scan(override.length > 0 ? override : undefined);
+  }, [podiumScanRootOverride, scan]);
+
   const handleInitialize = useCallback(
     async (project: ScannedProject) => {
       setInitializingPath(project.path);
       try {
         await initializeFactory(project.path, defaultConfigFor(project));
-        await refresh();
+        await refreshWithOverride();
       } catch (error) {
         toastManager.add({
           type: "error",
@@ -300,7 +306,7 @@ function PodiumRouteView() {
         setInitializingPath(null);
       }
     },
-    [initializeFactory, refresh],
+    [initializeFactory, refreshWithOverride],
   );
 
   const isLoading = status === "loading";
@@ -326,7 +332,7 @@ function PodiumRouteView() {
         <Button
           size="sm"
           variant="ghost"
-          onClick={() => void refresh()}
+          onClick={() => void refreshWithOverride()}
           disabled={isLoading}
           className="h-7 gap-1.5 text-[12px]"
           aria-label="Refresh scan"

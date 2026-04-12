@@ -46,11 +46,17 @@ export const ClientSettingsSchema = Schema.Struct({
    */
   attaccaUser: Schema.String.pipe(Schema.withDecodingDefault(() => "")),
   /**
-   * Which Attacca mode the app opens in. Settings-UI override lands with the
-   * Phase 2.5 settings work; today this only affects the mode switcher's
-   * idea of "home".
+   * Which Attacca mode the app opens in. The __root.tsx bootstrap redirects
+   * from "/" to the matching route on first load.
    */
   defaultMode: AttaccaMode.pipe(Schema.withDecodingDefault(() => DEFAULT_ATTACCA_MODE)),
+  /**
+   * Client-side override for the Podium scan root. When non-empty, Podium
+   * passes this value to factory.scanProjects instead of letting the server
+   * resolve via ATTACCA_PODIUM_ROOT or the default ~/projects. Empty string
+   * means "use whatever the server reports".
+   */
+  podiumScanRootOverride: Schema.String.pipe(Schema.withDecodingDefault(() => "")),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
