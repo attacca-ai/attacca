@@ -74,6 +74,7 @@ export interface WsRpcClient {
     readonly listForgeSkills: RpcUnaryNoArgMethod<typeof WS_METHODS.factoryListForgeSkills>;
     readonly regenerateClaudeMd: RpcUnaryMethod<typeof WS_METHODS.factoryRegenerateClaudeMd>;
     readonly getGitIdentity: RpcUnaryNoArgMethod<typeof WS_METHODS.factoryGetGitIdentity>;
+    readonly scanProjects: RpcUnaryMethod<typeof WS_METHODS.factoryScanProjects>;
   };
   readonly shell: {
     readonly openInEditor: (input: {
@@ -318,6 +319,8 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.factoryRegenerateClaudeMd](input)),
       getGitIdentity: () =>
         transport.request((client) => client[WS_METHODS.factoryGetGitIdentity]({})),
+      scanProjects: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryScanProjects](input)),
     },
     shell: {
       openInEditor: (input) =>

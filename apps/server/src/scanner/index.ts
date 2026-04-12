@@ -9,34 +9,37 @@
 import { readdirSync, statSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { hasFactoryDir, readFactorySummary } from "../factory";
-import type { FactoryConfig, FactoryStatus, Phase, Health, ProjectTrack } from "@t3tools/contracts";
+import type {
+  FactoryConfig,
+  FactoryStatus,
+  Health,
+  Phase,
+  ProjectTrack,
+  ScannedProject,
+} from "@t3tools/contracts";
 
-const EXCLUDE = new Set([
+const DEFAULT_EXCLUDE = [
   "node_modules",
   ".git",
   ".next",
   ".turbo",
   "dist",
   "attacca", // Don't scan ourselves
-]);
+] as const;
 
-export interface ScannedProject {
-  slug: string;
-  displayName: string;
-  path: string;
-  hasFactory: boolean;
-  phase: Phase;
-  health: Health;
-  track: ProjectTrack;
-  trustTier: number;
-  completionPct: number;
-  gapCount: number;
-  assignedDev: string | null;
-  nextAction: string | null;
-  lastActivity: string | null;
-  repo: string | null;
-  stack: string[];
+function buildExcludeSet(): Set<string> {
+  const set = new Set<string>(DEFAULT_EXCLUDE);
+  const extra = process.env.ATTACCA_PODIUM_EXCLUDE;
+  if (extra) {
+    for (const name of extra.split(",")) {
+      const trimmed = name.trim();
+      if (trimmed.length > 0) set.add(trimmed);
+    }
+  }
+  return set;
 }
+
+export type { ScannedProject };
 
 /**
  * Infer basic project state from filesystem when no .factory/ exists.
@@ -82,7 +85,7 @@ function fromFactory(
     lastActivity: status?.last_activity ?? null,
     repo: config?.repo ?? null,
     stack: config?.stack ? [...config.stack] : [],
-  };
+  } satisfies ScannedProject;
 }
 
 /**
@@ -92,11 +95,12 @@ function fromFactory(
 export function scanProjects(rootDir: string): ScannedProject[] {
   if (!existsSync(rootDir)) return [];
 
+  const exclude = buildExcludeSet();
   const entries = readdirSync(rootDir);
   const projects: ScannedProject[] = [];
 
   for (const entry of entries) {
-    if (EXCLUDE.has(entry)) continue;
+    if (exclude.has(entry)) continue;
     if (entry.startsWith(".")) continue;
 
     const fullPath = join(rootDir, entry);

@@ -17,6 +17,7 @@ import {
   FactoryWriteError,
   type ForgeSkillListResult,
   type GitIdentityResult,
+  type ScanProjectsResult,
   type SessionLog,
   type WorkQueue,
 } from "@t3tools/contracts";
@@ -31,6 +32,7 @@ import {
 } from "./index";
 import { loadForgeSkills } from "./forgeSkills";
 import { resolveGitIdentity } from "./identity";
+import { scanProjects } from "../scanner";
 
 const isProtocolVersionError = Schema.is(FactoryProtocolVersionError);
 
@@ -92,6 +94,18 @@ export const listForgeSkillsEffect = (): Effect.Effect<ForgeSkillListResult, Fac
 
 export const getGitIdentityEffect = (): Effect.Effect<GitIdentityResult, never> =>
   Effect.sync(() => resolveGitIdentity());
+
+export const scanProjectsEffect = (
+  rootDir: string,
+): Effect.Effect<ScanProjectsResult, FactoryReadError> =>
+  Effect.try({
+    try: (): ScanProjectsResult => ({
+      rootDir,
+      projects: scanProjects(rootDir),
+    }),
+    catch: (cause) =>
+      new FactoryReadError({ message: `Failed to scan projects at ${rootDir}`, cause }),
+  });
 
 export const regenerateClaudeMdEffect = (
   projectPath: string,

@@ -32,6 +32,7 @@ import {
   readFactoryDirectoryEffect,
   readFactorySummaryEffect,
   regenerateClaudeMdEffect,
+  scanProjectsEffect,
   writeQueueEffect,
   writeSessionLogEffect,
 } from "./factory/FactoryRpc";
@@ -667,6 +668,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         ),
       [WS_METHODS.factoryGetGitIdentity]: (_input) =>
         observeRpcEffect(WS_METHODS.factoryGetGitIdentity, getGitIdentityEffect(), {
+          "rpc.aggregate": "factory",
+        }),
+      [WS_METHODS.factoryScanProjects]: (input) =>
+        observeRpcEffect(WS_METHODS.factoryScanProjects, scanProjectsEffect(input.rootDir), {
           "rpc.aggregate": "factory",
         }),
       [WS_METHODS.shellOpenInEditor]: (input) =>

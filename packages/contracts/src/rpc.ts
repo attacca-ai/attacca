@@ -41,6 +41,8 @@ import {
   FactoryWriteSessionLogInput,
   ForgeSkillListResult,
   GitIdentityResult,
+  ScanProjectsInput,
+  ScanProjectsResult,
 } from "./factory";
 import { KeybindingsConfigError } from "./keybindings";
 import {
@@ -104,6 +106,7 @@ export const WS_METHODS = {
   factoryListForgeSkills: "factory.listForgeSkills",
   factoryRegenerateClaudeMd: "factory.regenerateClaudeMd",
   factoryGetGitIdentity: "factory.getGitIdentity",
+  factoryScanProjects: "factory.scanProjects",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -227,6 +230,12 @@ export const WsFactoryRegenerateClaudeMdRpc = Rpc.make(WS_METHODS.factoryRegener
 export const WsFactoryGetGitIdentityRpc = Rpc.make(WS_METHODS.factoryGetGitIdentity, {
   payload: Schema.Struct({}),
   success: GitIdentityResult,
+});
+
+export const WsFactoryScanProjectsRpc = Rpc.make(WS_METHODS.factoryScanProjects, {
+  payload: ScanProjectsInput,
+  success: ScanProjectsResult,
+  error: FactoryReadError,
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
@@ -418,6 +427,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsFactoryListForgeSkillsRpc,
   WsFactoryRegenerateClaudeMdRpc,
   WsFactoryGetGitIdentityRpc,
+  WsFactoryScanProjectsRpc,
   WsShellOpenInEditorRpc,
   WsSubscribeGitStatusRpc,
   WsGitPullRpc,
