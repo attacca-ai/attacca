@@ -6,7 +6,7 @@
  * Used by Podium for the project dashboard.
  */
 
-import { readdirSync, statSync, existsSync } from "node:fs";
+import { readdirSync, lstatSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { hasFactoryDir, readFactorySummary } from "../factory";
 import type {
@@ -105,8 +105,8 @@ export function scanProjects(rootDir: string): ScannedProject[] {
 
     const fullPath = join(rootDir, entry);
     try {
-      const stat = statSync(fullPath);
-      if (!stat.isDirectory()) continue;
+      const stat = lstatSync(fullPath);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) continue;
     } catch {
       continue;
     }

@@ -24,6 +24,29 @@ import {
 // YAML parser (minimal, config.yaml only — no deps)
 // ---------------------------------------------------------------------------
 
+/**
+ * Decode a YAML double-quoted scalar. Mirrors the writer's yamlQuote escaping:
+ * \\ → \, \" → ", \n → newline, \r → CR, \t → tab. Silently strips single
+ * quotes on single-quoted scalars (no escape support there — we never emit
+ * them from the writer). Leaves bare scalars as-is.
+ */
+function decodeYamlScalar(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    const inner = trimmed.slice(1, -1);
+    return inner.replace(/\\(["\\nrt])/g, (_, ch: string) => {
+      if (ch === "n") return "\n";
+      if (ch === "r") return "\r";
+      if (ch === "t") return "\t";
+      return ch;
+    });
+  }
+  if (trimmed.length >= 2 && trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
 function parseSimpleYaml(content: string): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   let currentArrayKey: string | null = null;
@@ -35,8 +58,7 @@ function parseSimpleYaml(content: string): Record<string, unknown> {
 
     // Array item
     if (trimmed.startsWith("- ") && currentArrayKey) {
-      const value = trimmed.slice(2).trim().replace(/^["']|["']$/g, "");
-      currentArray.push(value);
+      currentArray.push(decodeYamlScalar(trimmed.slice(2)));
       continue;
     }
 
@@ -59,12 +81,25 @@ function parseSimpleYaml(content: string): Record<string, unknown> {
       continue;
     }
 
-    // Parse value
-    const value = rawValue.replace(/^["']|["']$/g, "");
-    if (value === "true") result[key] = true;
-    else if (value === "false") result[key] = false;
-    else if (/^\d+$/.test(value)) result[key] = parseInt(value, 10);
-    else result[key] = value;
+    // Unquoted bare values: bool / number / fallthrough.
+    const wasQuoted =
+      (rawValue.startsWith('"') && rawValue.endsWith('"')) ||
+      (rawValue.startsWith("'") && rawValue.endsWith("'"));
+    if (!wasQuoted) {
+      if (rawValue === "true") {
+        result[key] = true;
+        continue;
+      }
+      if (rawValue === "false") {
+        result[key] = false;
+        continue;
+      }
+      if (/^-?\d+(?:\.\d+)?$/.test(rawValue)) {
+        result[key] = Number(rawValue);
+        continue;
+      }
+    }
+    result[key] = decodeYamlScalar(rawValue);
   }
 
   // Flush final array
@@ -102,13 +137,20 @@ function readTextFile(filePath: string): string | null {
  * FactoryProtocolVersionError for versions newer than the client supports.
  * Missing version is treated as 1 (backward compat with Phase 1 configs).
  */
+function coerceVersion(raw: unknown): number {
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) return raw;
+  if (typeof raw === "string") {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return 1;
+}
+
 function assertSupportedVersion(
   config: { version?: unknown },
   projectPath: string,
 ): number {
-  const raw = config.version;
-  const found =
-    typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? raw : 1;
+  const found = coerceVersion(config.version);
   if (found > FACTORY_PROTOCOL_VERSION) {
     throw new FactoryProtocolVersionError({
       message: `This project uses .factory/ protocol v${found} but this Attacca client supports up to v${FACTORY_PROTOCOL_VERSION}. Update Attacca or downgrade the project.`,

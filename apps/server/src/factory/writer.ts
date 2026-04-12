@@ -24,29 +24,45 @@ import { readFactoryDirectory } from "./reader";
 // YAML serializer (minimal, config.yaml only)
 // ---------------------------------------------------------------------------
 
+/**
+ * Escape a string for safe embedding inside a double-quoted YAML scalar.
+ * Handles backslash, double quote, and control characters. Windows paths
+ * (containing `\`) and directory names with `"` would otherwise corrupt
+ * the config or inject forged fields.
+ */
+function yamlQuote(value: string): string {
+  const escaped = value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/\t/g, "\\t");
+  return `"${escaped}"`;
+}
+
 function configToYaml(config: FactoryConfig): string {
   const lines: string[] = [];
 
-  lines.push(`version: ${config.version ?? FACTORY_PROTOCOL_VERSION}`);
-  lines.push(`name: "${config.name}"`);
-  lines.push(`display_name: "${config.display_name}"`);
-  lines.push(`type: "${config.type}"`);
+  lines.push(`version: ${FACTORY_PROTOCOL_VERSION}`);
+  lines.push(`name: ${yamlQuote(config.name)}`);
+  lines.push(`display_name: ${yamlQuote(config.display_name)}`);
+  lines.push(`type: ${yamlQuote(config.type)}`);
   lines.push(`trust_tier: ${config.trust_tier}`);
-  lines.push(`phase: "${config.phase}"`);
-  lines.push(`track: "${config.track}"`);
+  lines.push(`phase: ${yamlQuote(config.phase)}`);
+  lines.push(`track: ${yamlQuote(config.track)}`);
 
   if (config.stack?.length) {
     lines.push("stack:");
-    for (const s of config.stack) lines.push(`  - "${s}"`);
+    for (const s of config.stack) lines.push(`  - ${yamlQuote(s)}`);
   }
-  if (config.repo) lines.push(`repo: "${config.repo}"`);
-  if (config.assigned_dev) lines.push(`assigned_dev: "${config.assigned_dev}"`);
-  if (config.created) lines.push(`created: "${config.created}"`);
-  if (config.updated) lines.push(`updated: "${config.updated}"`);
-  if (config.experience_level) lines.push(`experience_level: "${config.experience_level}"`);
+  if (config.repo) lines.push(`repo: ${yamlQuote(config.repo)}`);
+  if (config.assigned_dev) lines.push(`assigned_dev: ${yamlQuote(config.assigned_dev)}`);
+  if (config.created) lines.push(`created: ${yamlQuote(config.created)}`);
+  if (config.updated) lines.push(`updated: ${yamlQuote(config.updated)}`);
+  if (config.experience_level) lines.push(`experience_level: ${yamlQuote(config.experience_level)}`);
   if (config.completed_phases?.length) {
     lines.push("completed_phases:");
-    for (const p of config.completed_phases) lines.push(`  - "${p}"`);
+    for (const p of config.completed_phases) lines.push(`  - ${yamlQuote(p)}`);
   }
 
   return lines.join("\n") + "\n";
