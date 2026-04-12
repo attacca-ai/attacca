@@ -5,9 +5,9 @@
  * the factory store so the two concerns don't contaminate each other: factory
  * store is per-project state, podium store is cross-project discovery.
  *
- * The root directory comes from the server environment (env var
- * ATTACCA_PODIUM_ROOT) with a hardcoded fallback. v0 exposes no settings UI
- * for the root — that's Phase 2.5.
+ * The root directory is resolved server-side via factory.scanProjects (which
+ * falls back to ATTACCA_PODIUM_ROOT or ~/projects when the client passes no
+ * override). The store just surfaces whatever the server reports.
  */
 
 import type { ScannedProject } from "@t3tools/contracts";
@@ -15,15 +15,9 @@ import { create } from "zustand";
 
 import { getWsRpcClient } from "../wsRpcClient";
 
-/**
- * Default scan root when ATTACCA_PODIUM_ROOT is unset. Absolute Windows
- * path matching the user's projects directory — future work will read
- * this from server settings.
- */
-export const DEFAULT_PODIUM_ROOT = "C:/Users/jhon1/projects";
-
 interface PodiumState {
   readonly rootDir: string;
+  readonly rootSource: "env" | "default" | "override" | null;
   readonly status: "idle" | "loading" | "ready" | "error";
   readonly projects: ReadonlyArray<ScannedProject>;
   readonly error: string | null;
@@ -32,11 +26,11 @@ interface PodiumState {
   readonly scan: (rootDir?: string) => Promise<ReadonlyArray<ScannedProject>>;
   readonly refresh: () => Promise<ReadonlyArray<ScannedProject>>;
   readonly setSelectedProjectPath: (projectPath: string | null) => void;
-  readonly setRootDir: (rootDir: string) => void;
 }
 
 export const usePodiumStore = create<PodiumState>((set, get) => ({
-  rootDir: DEFAULT_PODIUM_ROOT,
+  rootDir: "",
+  rootSource: null,
   status: "idle",
   projects: [],
   error: null,
@@ -44,12 +38,25 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
   selectedProjectPath: null,
 
   scan: async (overrideRoot) => {
-    const rootDir = overrideRoot ?? get().rootDir;
-    set({ rootDir, status: "loading", error: null });
+    const client = getWsRpcClient();
+    set({ status: "loading", error: null });
     try {
-      const result = await getWsRpcClient().factory.scanProjects({ rootDir });
+      // Resolve the root source tag from the server on the first call so the
+      // UI can show "from env var" vs "default" without a second round-trip.
+      let rootSource = get().rootSource;
+      if (rootSource === null && overrideRoot === undefined) {
+        const rootInfo = await client.factory.getPodiumRoot();
+        rootSource = rootInfo.source;
+      } else if (overrideRoot !== undefined) {
+        rootSource = "override";
+      }
+
+      const result = await client.factory.scanProjects(
+        overrideRoot !== undefined ? { rootDir: overrideRoot } : {},
+      );
       set({
         rootDir: result.rootDir,
+        rootSource,
         status: "ready",
         projects: result.projects,
         error: null,
@@ -63,16 +70,10 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
     }
   },
 
-  refresh: async () => {
-    return get().scan(get().rootDir);
-  },
+  refresh: async () => get().scan(),
 
   setSelectedProjectPath: (projectPath) => {
     set({ selectedProjectPath: projectPath });
-  },
-
-  setRootDir: (rootDir) => {
-    set({ rootDir });
   },
 }));
 

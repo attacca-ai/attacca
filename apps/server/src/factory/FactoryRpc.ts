@@ -7,6 +7,8 @@
  */
 
 import { Effect, Schema } from "effect";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import {
   type FactoryConfig,
   type FactoryDirectory,
@@ -17,6 +19,7 @@ import {
   FactoryWriteError,
   type ForgeSkillListResult,
   type GitIdentityResult,
+  type PodiumRootResult,
   type ScanProjectsResult,
   type SessionLog,
   type WorkQueue,
@@ -95,16 +98,38 @@ export const listForgeSkillsEffect = (): Effect.Effect<ForgeSkillListResult, Fac
 export const getGitIdentityEffect = (): Effect.Effect<GitIdentityResult, never> =>
   Effect.sync(() => resolveGitIdentity());
 
+/**
+ * Resolve the Podium scan root. Reads `ATTACCA_PODIUM_ROOT` first, falls back
+ * to `~/projects` on the server host. Callers can still pass an explicit
+ * `rootDir` via the scanProjects RPC to override both.
+ */
+function resolvePodiumRoot(): PodiumRootResult {
+  const fromEnv = process.env.ATTACCA_PODIUM_ROOT?.trim();
+  if (fromEnv && fromEnv.length > 0) {
+    return { rootDir: fromEnv, source: "env" };
+  }
+  return { rootDir: join(homedir(), "projects"), source: "default" };
+}
+
+export const getPodiumRootEffect = (): Effect.Effect<PodiumRootResult, never> =>
+  Effect.sync(() => resolvePodiumRoot());
+
 export const scanProjectsEffect = (
-  rootDir: string,
+  rootDir: string | undefined,
 ): Effect.Effect<ScanProjectsResult, FactoryReadError> =>
   Effect.try({
-    try: (): ScanProjectsResult => ({
-      rootDir,
-      projects: scanProjects(rootDir),
-    }),
+    try: (): ScanProjectsResult => {
+      const effectiveRoot = rootDir?.trim() || resolvePodiumRoot().rootDir;
+      return {
+        rootDir: effectiveRoot,
+        projects: scanProjects(effectiveRoot),
+      };
+    },
     catch: (cause) =>
-      new FactoryReadError({ message: `Failed to scan projects at ${rootDir}`, cause }),
+      new FactoryReadError({
+        message: `Failed to scan projects at ${rootDir ?? "<default>"}`,
+        cause,
+      }),
   });
 
 export const regenerateClaudeMdEffect = (

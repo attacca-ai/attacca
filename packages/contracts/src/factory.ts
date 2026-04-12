@@ -339,7 +339,7 @@ export const ScannedProject = Schema.Struct({
 export type ScannedProject = typeof ScannedProject.Type;
 
 export const ScanProjectsInput = Schema.Struct({
-  rootDir: Schema.String,
+  rootDir: Schema.optional(Schema.String),
 });
 export type ScanProjectsInput = typeof ScanProjectsInput.Type;
 
@@ -348,6 +348,12 @@ export const ScanProjectsResult = Schema.Struct({
   projects: Schema.Array(ScannedProject),
 });
 export type ScanProjectsResult = typeof ScanProjectsResult.Type;
+
+export const PodiumRootResult = Schema.Struct({
+  rootDir: Schema.String,
+  source: Schema.Literals(["env", "default"]),
+});
+export type PodiumRootResult = typeof PodiumRootResult.Type;
 
 // ---------------------------------------------------------------------------
 // Identity (Phase 2)

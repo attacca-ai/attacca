@@ -41,6 +41,7 @@ import {
   FactoryWriteSessionLogInput,
   ForgeSkillListResult,
   GitIdentityResult,
+  PodiumRootResult,
   ScanProjectsInput,
   ScanProjectsResult,
 } from "./factory";
@@ -107,6 +108,7 @@ export const WS_METHODS = {
   factoryRegenerateClaudeMd: "factory.regenerateClaudeMd",
   factoryGetGitIdentity: "factory.getGitIdentity",
   factoryScanProjects: "factory.scanProjects",
+  factoryGetPodiumRoot: "factory.getPodiumRoot",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -236,6 +238,11 @@ export const WsFactoryScanProjectsRpc = Rpc.make(WS_METHODS.factoryScanProjects,
   payload: ScanProjectsInput,
   success: ScanProjectsResult,
   error: FactoryReadError,
+});
+
+export const WsFactoryGetPodiumRootRpc = Rpc.make(WS_METHODS.factoryGetPodiumRoot, {
+  payload: Schema.Struct({}),
+  success: PodiumRootResult,
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
@@ -428,6 +435,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsFactoryRegenerateClaudeMdRpc,
   WsFactoryGetGitIdentityRpc,
   WsFactoryScanProjectsRpc,
+  WsFactoryGetPodiumRootRpc,
   WsShellOpenInEditorRpc,
   WsSubscribeGitStatusRpc,
   WsGitPullRpc,

@@ -27,6 +27,7 @@ import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuer
 import { ServerConfig } from "./config";
 import {
   getGitIdentityEffect,
+  getPodiumRootEffect,
   initializeFactoryEffect,
   listForgeSkillsEffect,
   readFactoryDirectoryEffect,
@@ -672,6 +673,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         }),
       [WS_METHODS.factoryScanProjects]: (input) =>
         observeRpcEffect(WS_METHODS.factoryScanProjects, scanProjectsEffect(input.rootDir), {
+          "rpc.aggregate": "factory",
+        }),
+      [WS_METHODS.factoryGetPodiumRoot]: (_input) =>
+        observeRpcEffect(WS_METHODS.factoryGetPodiumRoot, getPodiumRootEffect(), {
           "rpc.aggregate": "factory",
         }),
       [WS_METHODS.shellOpenInEditor]: (input) =>
