@@ -23,6 +23,10 @@ export const SidebarThreadSortOrder = Schema.Literals(["updated_at", "created_at
 export type SidebarThreadSortOrder = typeof SidebarThreadSortOrder.Type;
 export const DEFAULT_SIDEBAR_THREAD_SORT_ORDER: SidebarThreadSortOrder = "updated_at";
 
+export const AttaccaMode = Schema.Literals(["stand", "podium", "arco"]);
+export type AttaccaMode = typeof AttaccaMode.Type;
+export const DEFAULT_ATTACCA_MODE: AttaccaMode = "stand";
+
 export const ClientSettingsSchema = Schema.Struct({
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
@@ -41,6 +45,12 @@ export const ClientSettingsSchema = Schema.Struct({
    * "no banner, no session attribution" rather than erroring.
    */
   attaccaUser: Schema.String.pipe(Schema.withDecodingDefault(() => "")),
+  /**
+   * Which Attacca mode the app opens in. Settings-UI override lands with the
+   * Phase 2.5 settings work; today this only affects the mode switcher's
+   * idea of "home".
+   */
+  defaultMode: AttaccaMode.pipe(Schema.withDecodingDefault(() => DEFAULT_ATTACCA_MODE)),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
