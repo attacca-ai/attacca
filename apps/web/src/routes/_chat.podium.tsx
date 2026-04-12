@@ -1,4 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { scopeProjectRef, scopedProjectKey } from "@t3tools/client-runtime";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useShallow } from "zustand/react/shallow";
 import { memo, useCallback, useEffect, useState } from "react";
 import type { FactoryConfig, ScannedProject } from "@t3tools/contracts";
 import {
@@ -15,6 +17,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { SidebarTrigger } from "../components/ui/sidebar";
+import { selectProjectsAcrossEnvironments, useStore } from "../store";
 import { useFactoryStore } from "../stores/factory";
 import {
   selectDiscoveredProjects,
@@ -22,6 +25,7 @@ import {
   selectTrackedProjects,
   usePodiumStore,
 } from "../stores/podium";
+import { useUiStateStore } from "../uiStateStore";
 
 function defaultConfigFor(project: ScannedProject): FactoryConfig {
   const displayName = project.displayName || project.slug;
@@ -171,6 +175,9 @@ function PodiumRouteView() {
   const discovered = usePodiumStore(selectDiscoveredProjects);
   const stalled = usePodiumStore(selectStalledProjects);
   const initializeFactory = useFactoryStore((s) => s.initializeFactory);
+  const orchestrationProjects = useStore(useShallow(selectProjectsAcrossEnvironments));
+  const setProjectExpanded = useUiStateStore((s) => s.setProjectExpanded);
+  const navigate = useNavigate();
 
   const [initializingPath, setInitializingPath] = useState<string | null>(null);
 
@@ -180,12 +187,22 @@ function PodiumRouteView() {
     }
   }, [status, scan]);
 
-  const handleOpenProject = useCallback((project: ScannedProject) => {
-    // v0: navigation to Stand mode for a specific project is task 6 (mode
-    // switching). For now, the dashboard row click is a no-op placeholder.
-    // Surface the selection in the store so task 6 can read it.
-    usePodiumStore.getState().setSelectedProjectPath(project.path);
-  }, []);
+  const handleOpenProject = useCallback(
+    (project: ScannedProject) => {
+      usePodiumStore.getState().setSelectedProjectPath(project.path);
+      const match = orchestrationProjects.find(
+        (p) => p.cwd === project.path || p.cwd === project.path.replace(/\\/g, "/"),
+      );
+      if (match) {
+        setProjectExpanded(
+          scopedProjectKey(scopeProjectRef(match.environmentId, match.id)),
+          true,
+        );
+      }
+      void navigate({ to: "/" });
+    },
+    [navigate, orchestrationProjects, setProjectExpanded],
+  );
 
   const handleInitialize = useCallback(
     async (project: ScannedProject) => {
