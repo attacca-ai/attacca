@@ -120,9 +120,9 @@ These are the scenarios I'll build against. Each is a specific user-visible beha
 
 ### v0 Scenario 4 — Stalled detection
 
-**Given** a Tracked project whose most recent session log is dated > 7 days ago
+**Given** a Tracked project whose `.factory/status.json#last_activity` is dated > 7 days ago (or is missing a value and `gapCount > 0`)
 **When** the dashboard renders
-**Then** the project appears in both the Tracked section (normal row) and the Stalled section (with a visual emphasis). Client-side only; the stalled flag is not persisted.
+**Then** the project appears in both the Tracked section (normal row) and the Stalled section (with a visual emphasis). Client-side only; the stalled flag is not persisted. A missing or unparseable `last_activity` by itself is not stalled — we only know the project is stalled when we can actually measure the age.
 
 ### v0 Scenario 5 — Attribution banner for non-owner
 
