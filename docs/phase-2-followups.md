@@ -1,7 +1,7 @@
 # Phase 2 follow-ups
 
-**Status**: Group A + Group B shipped. Group C deferred.
-**Scope**: issues surfaced during `coderabbit:code-reviewer` review of commits `b96308fc..a883d92f`. Hotfixes (Group A) landed in `6486eed6..5a652278`. Group B landed in `ba31a30f..4c737cf3`.
+**Status**: Groups A + B fully shipped. Group C: C1, C2, C7 shipped (the "do before Phase 3" items); C3–C6 and C8–C10 deferred to Phase 2.5.
+**Scope**: issues surfaced during `coderabbit:code-reviewer` review of commits `b96308fc..a883d92f`. Hotfixes (Group A) landed in `6486eed6..5a652278`. Group B landed in `ba31a30f..4c737cf3`. Group C pre-Phase-3 items landed in `3c5f0d79..8b3c794d`.
 **Relates to**: `docs/phase-2-podium-spec.md`, `docs/factory-protocol.md`.
 
 ---
@@ -52,7 +52,7 @@ All five items landed. Summaries retained below for history.
 
 ## Group C — deferred to Phase 2.5 (design or larger scope)
 
-### C1. Draft chat in project `cwd` on Podium row click (spec scenario 3 gap)
+### C1. Draft chat in project `cwd` on Podium row click (spec scenario 3 gap) — ✅ shipped (`3c5f0d79`)
 
 **What**: Phase 2 spec scenario 3 says "clicking a Tracked row navigates to Stand mode [...] opens an empty draft chat whose `cwd` is the project's path". The current implementation in `apps/web/src/routes/_chat.podium.tsx#handleOpenProject` navigates to `/` and expands the matching project in the sidebar *if* a matching orchestration project exists — but it does not open a draft chat. **Spec violation, medium severity.**
 
@@ -63,7 +63,7 @@ All five items landed. Summaries retained below for history.
 2. If not → call a new `projects.addFromPath` RPC first (or piggyback on `projects.create` if it exists), wait for the event to land in the read model, then `handleNewThread`.
 3. Add a loading state on the Podium row so the user sees "Opening..." instead of a silent pause.
 
-### C2. Defense-in-depth path validation on write RPCs
+### C2. Defense-in-depth path validation on write RPCs — ✅ shipped (`bb1b3041`)
 
 **What**: `factory.initialize`, `factory.writeQueue`, `factory.writeSessionLog`, and `factory.regenerateClaudeMd` all accept an arbitrary absolute `projectPath` and write files there. The Phase 2 spec explicitly accepts "no auth" as the local-first model, but defense-in-depth says the writer RPCs should still refuse paths outside the configured scan root.
 
@@ -87,7 +87,7 @@ All five items landed. Summaries retained below for history.
 
 **What**: Spec defers this. Real need is unclear until v0 is tested against noisy roots — the existing `EXCLUDE` + `ATTACCA_PODIUM_EXCLUDE` may already be enough.
 
-### C7. Settings UI for `defaultMode`, `attaccaUser`, scan root override
+### C7. Settings UI for `defaultMode`, `attaccaUser`, scan root override — ✅ shipped (`8b3c794d`)
 
 **What**: Settings schema fields exist but no edit surface. Needed for the `defaultMode` setting to actually influence startup routing, for users to override `attaccaUser` after bootstrap, and for scan root override without editing env vars.
 
@@ -103,12 +103,10 @@ All five items landed. Summaries retained below for history.
 
 **What**: The schema has `version: Schema.optional(Schema.Number)` because legacy configs don't have it, but the reader always normalizes missing values to 1 before returning, so every in-memory `FactoryConfig` actually has a version. The type should reflect this. Either split into `FactoryConfigOnDisk` (optional version) and `FactoryConfig` (required version), or accept the mild inconsistency.
 
-## Triage recommendation (updated)
+## Triage recommendation (final)
 
-**Group A + Group B shipped.** Remaining open items are all in Group C.
+**Groups A, B, and the "do before Phase 3" slice of C (C1, C2, C7) all shipped.** Phase 2 is done — what remains is Phase 2.5 scope that wants its own design.
 
-**Do before Phase 3**: C1 (draft chat on row click — the one remaining spec scenario gap), C2 (path validation for write RPCs — defense-in-depth before Arco adds more write surfaces), C7 (settings UI for defaultMode / attaccaUser / scan root override — needed to actually *use* the `defaultMode` setting at startup).
+**Phase 2.5 sprint candidates**: C3 (external intake flow — clone/move a project from a URL or external path, run a Forge skill to generate a spec), C4 (gap analysis engine + work package dispatch), C5 (multi-root scanning), C6 (Discovered Dismiss UI — only if testing shows the scanner output is actually noisy). These each want their own spec doc following the `phase-2-podium-spec.md` pattern.
 
-**Can wait until the feature arrives**: C3 (external intake), C4 (gap analysis + work dispatch), C5 (multi-root), C6 (Dismiss UI) — Phase 2.5 sprint candidates with their own specs.
-
-**Nice-to-have but low priority**: C8 (pagination), C9 (real YAML lib), C10 (non-optional in-memory version) — none are user-visible failures, all trivial when touched.
+**Nice-to-have, touch when convenient**: C8 (scanner pagination / virtualization), C9 (real YAML library), C10 (non-optional in-memory `version`) — none are user-visible failures, all trivial when touched.
