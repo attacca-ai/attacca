@@ -1,8 +1,9 @@
 import { scopeProjectRef, scopedProjectKey } from "@t3tools/client-runtime";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 import { memo, useCallback, useEffect, useState } from "react";
 import type { FactoryConfig, ScannedProject } from "@t3tools/contracts";
+import { DEFAULT_MODEL_BY_PROVIDER } from "@t3tools/contracts";
 import {
   AlertTriangleIcon,
   FactoryIcon,
@@ -12,7 +13,11 @@ import {
 } from "lucide-react";
 
 import { isElectron } from "../env";
+import { readEnvironmentApi } from "../environmentApi";
+import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useSettings } from "../hooks/useSettings";
 import { cn } from "~/lib/utils";
+import { newCommandId, newProjectId } from "../lib/utils";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { ScrollArea } from "../components/ui/scroll-area";
@@ -91,19 +96,24 @@ interface TrackedRowProps {
   readonly project: ScannedProject;
   readonly onOpen: (project: ScannedProject) => void;
   readonly emphasized?: boolean;
+  readonly isOpening?: boolean;
+  readonly isDisabled?: boolean;
 }
 
 const TrackedRow = memo(function TrackedRow({
   project,
   onOpen,
   emphasized = false,
+  isOpening = false,
+  isDisabled = false,
 }: TrackedRowProps) {
   return (
     <button
       type="button"
       onClick={() => onOpen(project)}
+      disabled={isDisabled}
       className={cn(
-        "flex w-full flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-card/70",
+        "flex w-full flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-card/70 disabled:cursor-wait disabled:opacity-60",
         emphasized
           ? "border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60"
           : "border-border/50 bg-card/40 hover:border-border",
@@ -116,7 +126,8 @@ const TrackedRow = memo(function TrackedRow({
           </p>
           <p className="truncate font-mono text-[10px] text-muted-foreground/50">{project.path}</p>
         </div>
-        <span className="shrink-0 text-[10px] text-muted-foreground/60">
+        <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground/60">
+          {isOpening ? <LoaderIcon className="size-3 animate-spin" /> : null}
           {formatRelativeTime(project.lastActivity)}
         </span>
       </div>
@@ -166,6 +177,10 @@ const DiscoveredRow = memo(function DiscoveredRow({
   );
 });
 
+function normalizeCwd(value: string): string {
+  return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
 function PodiumRouteView() {
   const rootDir = usePodiumStore((s) => s.rootDir);
   const status = usePodiumStore((s) => s.status);
@@ -178,9 +193,12 @@ function PodiumRouteView() {
   const initializeFactory = useFactoryStore((s) => s.initializeFactory);
   const orchestrationProjects = useStore(useShallow(selectProjectsAcrossEnvironments));
   const setProjectExpanded = useUiStateStore((s) => s.setProjectExpanded);
-  const navigate = useNavigate();
+  const activeEnvironmentId = useStore((s) => s.activeEnvironmentId);
+  const defaultThreadEnvMode = useSettings((s) => s.defaultThreadEnvMode);
+  const { handleNewThread } = useHandleNewThread();
 
   const [initializingPath, setInitializingPath] = useState<string | null>(null);
+  const [openingPath, setOpeningPath] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "idle") {
@@ -189,20 +207,81 @@ function PodiumRouteView() {
   }, [status, scan]);
 
   const handleOpenProject = useCallback(
-    (project: ScannedProject) => {
+    async (project: ScannedProject) => {
+      if (openingPath) return;
+      setOpeningPath(project.path);
       usePodiumStore.getState().setSelectedProjectPath(project.path);
-      const match = orchestrationProjects.find(
-        (p) => p.cwd === project.path || p.cwd === project.path.replace(/\\/g, "/"),
-      );
-      if (match) {
-        setProjectExpanded(
-          scopedProjectKey(scopeProjectRef(match.environmentId, match.id)),
-          true,
-        );
+      try {
+        const wantedCwd = normalizeCwd(project.path);
+        const match = orchestrationProjects.find((p) => normalizeCwd(p.cwd) === wantedCwd);
+
+        // Already registered — expand the sidebar row and open a draft thread
+        // for it. handleNewThread will reuse an existing draft if one exists
+        // or create a new one.
+        if (match) {
+          const projectRef = scopeProjectRef(match.environmentId, match.id);
+          setProjectExpanded(scopedProjectKey(projectRef), true);
+          await handleNewThread(projectRef, { envMode: defaultThreadEnvMode });
+          return;
+        }
+
+        // Not registered. Dispatch project.create with a local id, then
+        // handleNewThread for a fresh draft. Mirrors Sidebar's addProjectFromPath
+        // fire-and-forget pattern — we don't wait for the server event to
+        // land in the read model; the local refs are authoritative for the
+        // draft flow.
+        if (!activeEnvironmentId) {
+          toastManager.add({
+            type: "error",
+            title: `Cannot open ${project.displayName || project.slug}`,
+            description: "No active environment.",
+          });
+          return;
+        }
+        const api = readEnvironmentApi(activeEnvironmentId);
+        if (!api) {
+          toastManager.add({
+            type: "error",
+            title: `Cannot open ${project.displayName || project.slug}`,
+            description: "Environment API unavailable.",
+          });
+          return;
+        }
+        const projectId = newProjectId();
+        const title = project.displayName || project.slug;
+        await api.orchestration.dispatchCommand({
+          type: "project.create",
+          commandId: newCommandId(),
+          projectId,
+          title,
+          workspaceRoot: project.path,
+          defaultModelSelection: {
+            provider: "codex",
+            model: DEFAULT_MODEL_BY_PROVIDER.codex,
+          },
+          createdAt: new Date().toISOString(),
+        });
+        const projectRef = scopeProjectRef(activeEnvironmentId, projectId);
+        setProjectExpanded(scopedProjectKey(projectRef), true);
+        await handleNewThread(projectRef, { envMode: defaultThreadEnvMode });
+      } catch (cause) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to open ${project.displayName || project.slug}`,
+          description: cause instanceof Error ? cause.message : "Unknown error",
+        });
+      } finally {
+        setOpeningPath(null);
       }
-      void navigate({ to: "/" });
     },
-    [navigate, orchestrationProjects, setProjectExpanded],
+    [
+      activeEnvironmentId,
+      defaultThreadEnvMode,
+      handleNewThread,
+      openingPath,
+      orchestrationProjects,
+      setProjectExpanded,
+    ],
   );
 
   const handleInitialize = useCallback(
@@ -307,6 +386,8 @@ function PodiumRouteView() {
                     project={project}
                     onOpen={handleOpenProject}
                     emphasized
+                    isOpening={openingPath === project.path}
+                    isDisabled={openingPath !== null && openingPath !== project.path}
                   />
                 ))}
               </div>
@@ -327,6 +408,8 @@ function PodiumRouteView() {
                     key={project.path}
                     project={project}
                     onOpen={handleOpenProject}
+                    isOpening={openingPath === project.path}
+                    isDisabled={openingPath !== null && openingPath !== project.path}
                   />
                 ))}
               </div>
