@@ -52,7 +52,10 @@ import {
 } from "../store";
 import { useUiStateStore } from "../uiStateStore";
 import { useTerminalStateStore } from "../terminalStateStore";
-import { migrateLocalSettingsToServer } from "../hooks/useSettings";
+import {
+  bootstrapAttaccaUserIfMissing,
+  migrateLocalSettingsToServer,
+} from "../hooks/useSettings";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 import { projectQueryKeys } from "../lib/projectReactQuery";
 import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
@@ -269,6 +272,7 @@ function EventRouter() {
     setActiveEnvironmentId(payload.environment.environmentId);
     schedulePendingDomainEventFlushRef.current();
     migrateLocalSettingsToServer();
+    void bootstrapAttaccaUserIfMissing();
     void (async () => {
       await bootstrapFromSnapshotRef.current(payload.environment.environmentId);
       if (disposedRef.current) {

@@ -27,6 +27,7 @@ import {
   UnifiedSettings,
 } from "@t3tools/contracts/settings";
 import { ensureLocalApi } from "~/localApi";
+import { getWsRpcClient } from "~/wsRpcClient";
 import { useLocalStorage } from "./useLocalStorage";
 import { normalizeCustomModelSlugs } from "~/modelSelection";
 import { Predicate, Schema, Struct } from "effect";
@@ -217,6 +218,37 @@ export function buildLegacyClientSettingsMigrationPatch(
   }
 
   return patch;
+}
+
+/**
+ * Bootstrap the attaccaUser client setting from git on first launch.
+ *
+ * Safe to call repeatedly: if the setting already has a non-empty value, it
+ * does nothing. Otherwise it calls factory.getGitIdentity via the primary ws
+ * client and persists the returned name (or empty string if git + OS both
+ * returned nothing) to localStorage.
+ *
+ * Failures are swallowed — the user can always edit attaccaUser manually
+ * in settings, so a missing git binary or an RPC hiccup shouldn't crash app
+ * startup.
+ */
+export async function bootstrapAttaccaUserIfMissing(): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem(CLIENT_SETTINGS_STORAGE_KEY);
+    const current = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    const existing = current.attaccaUser;
+    if (typeof existing === "string" && existing.trim().length > 0) return;
+
+    const identity = await getWsRpcClient().factory.getGitIdentity();
+    const next = identity.name ?? "";
+    localStorage.setItem(
+      CLIENT_SETTINGS_STORAGE_KEY,
+      JSON.stringify({ ...current, attaccaUser: next }),
+    );
+  } catch (error) {
+    console.warn("[identity] failed to bootstrap attaccaUser", error);
+  }
 }
 
 /**

@@ -40,6 +40,7 @@ import {
   FactoryWriteQueueInput,
   FactoryWriteSessionLogInput,
   ForgeSkillListResult,
+  GitIdentityResult,
 } from "./factory";
 import { KeybindingsConfigError } from "./keybindings";
 import {
@@ -102,6 +103,7 @@ export const WS_METHODS = {
   factoryWriteSessionLog: "factory.writeSessionLog",
   factoryListForgeSkills: "factory.listForgeSkills",
   factoryRegenerateClaudeMd: "factory.regenerateClaudeMd",
+  factoryGetGitIdentity: "factory.getGitIdentity",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -220,6 +222,11 @@ export const WsFactoryRegenerateClaudeMdRpc = Rpc.make(WS_METHODS.factoryRegener
   payload: FactoryProjectPathInput,
   success: FactoryRegenerateClaudeMdResult,
   error: Schema.Union([FactoryWriteError, FactoryProtocolVersionError]),
+});
+
+export const WsFactoryGetGitIdentityRpc = Rpc.make(WS_METHODS.factoryGetGitIdentity, {
+  payload: Schema.Struct({}),
+  success: GitIdentityResult,
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
@@ -410,6 +417,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsFactoryWriteSessionLogRpc,
   WsFactoryListForgeSkillsRpc,
   WsFactoryRegenerateClaudeMdRpc,
+  WsFactoryGetGitIdentityRpc,
   WsShellOpenInEditorRpc,
   WsSubscribeGitStatusRpc,
   WsGitPullRpc,

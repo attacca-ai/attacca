@@ -16,6 +16,7 @@ import {
   type FactoryRegenerateClaudeMdResult,
   FactoryWriteError,
   type ForgeSkillListResult,
+  type GitIdentityResult,
   type SessionLog,
   type WorkQueue,
 } from "@t3tools/contracts";
@@ -29,6 +30,7 @@ import {
   writeSessionLog,
 } from "./index";
 import { loadForgeSkills } from "./forgeSkills";
+import { resolveGitIdentity } from "./identity";
 
 const isProtocolVersionError = Schema.is(FactoryProtocolVersionError);
 
@@ -87,6 +89,9 @@ export const listForgeSkillsEffect = (): Effect.Effect<ForgeSkillListResult, Fac
     try: () => loadForgeSkills(),
     catch: (cause) => new FactoryReadError({ message: "Failed to load Forge skills", cause }),
   });
+
+export const getGitIdentityEffect = (): Effect.Effect<GitIdentityResult, never> =>
+  Effect.sync(() => resolveGitIdentity());
 
 export const regenerateClaudeMdEffect = (
   projectPath: string,

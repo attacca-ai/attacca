@@ -34,6 +34,13 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(() => DEFAULT_SIDEBAR_THREAD_SORT_ORDER),
   ),
   timestampFormat: TimestampFormat.pipe(Schema.withDecodingDefault(() => DEFAULT_TIMESTAMP_FORMAT)),
+  /**
+   * Attacca identity — single source of truth for "who is the current user".
+   * Bootstrapped from git config user.name on first launch, then user-editable.
+   * Empty string means identity is unknown; downstream consumers treat it as
+   * "no banner, no session attribution" rather than erroring.
+   */
+  attaccaUser: Schema.String.pipe(Schema.withDecodingDefault(() => "")),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 

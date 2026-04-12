@@ -26,6 +26,7 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery";
 import { ServerConfig } from "./config";
 import {
+  getGitIdentityEffect,
   initializeFactoryEffect,
   listForgeSkillsEffect,
   readFactoryDirectoryEffect,
@@ -664,6 +665,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           regenerateClaudeMdEffect(input.projectPath),
           { "rpc.aggregate": "factory" },
         ),
+      [WS_METHODS.factoryGetGitIdentity]: (_input) =>
+        observeRpcEffect(WS_METHODS.factoryGetGitIdentity, getGitIdentityEffect(), {
+          "rpc.aggregate": "factory",
+        }),
       [WS_METHODS.shellOpenInEditor]: (input) =>
         observeRpcEffect(WS_METHODS.shellOpenInEditor, open.openInEditor(input), {
           "rpc.aggregate": "workspace",

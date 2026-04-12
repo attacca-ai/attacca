@@ -14,12 +14,28 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { ScrollArea } from "./ui/scroll-area";
 import { Textarea } from "./ui/textarea";
+import { useSettings } from "../hooks/useSettings";
 import { useFactoryStore } from "../stores/factory";
 
 interface FactoryPanelProps {
   readonly projectPath: string | null;
   readonly onClose: () => void;
-  readonly dev: string;
+}
+
+function AttributionBanner({
+  assignedDev,
+  currentUser,
+}: {
+  readonly assignedDev: string;
+  readonly currentUser: string;
+}) {
+  if (!assignedDev || !currentUser) return null;
+  if (assignedDev === currentUser) return null;
+  return (
+    <p className="rounded-md border border-border/50 bg-muted/20 px-2 py-1.5 text-[11px] text-muted-foreground/80">
+      Owned by <span className="font-semibold text-foreground/90">@{assignedDev}</span>
+    </p>
+  );
 }
 
 function formatElapsed(startedAtIso: string, now: number): string {
@@ -182,7 +198,8 @@ interface ActiveSessionSectionProps {
   readonly dev: string;
 }
 
-function ActiveSessionSection({ projectPath, dev }: ActiveSessionSectionProps) {
+function ActiveSessionSection({ projectPath, dev: devProp }: ActiveSessionSectionProps) {
+  const dev = devProp && devProp.trim().length > 0 ? devProp : "unknown";
   const active = useFactoryStore(
     (state) => state.activeSessionsByProjectPath[projectPath] ?? null,
   );
@@ -296,7 +313,8 @@ function SessionInfoSection({ session }: { readonly session: SessionLog | null }
   );
 }
 
-const FactoryPanel = memo(function FactoryPanel({ projectPath, onClose, dev }: FactoryPanelProps) {
+const FactoryPanel = memo(function FactoryPanel({ projectPath, onClose }: FactoryPanelProps) {
+  const attaccaUser = useSettings((s) => s.attaccaUser);
   const entry = useFactoryStore((state) =>
     projectPath ? (state.entries[projectPath] ?? null) : null,
   );
@@ -396,10 +414,16 @@ const FactoryPanel = memo(function FactoryPanel({ projectPath, onClose, dev }: F
             </div>
           ) : (
             <>
+              {directory.config?.assigned_dev ? (
+                <AttributionBanner
+                  assignedDev={directory.config.assigned_dev}
+                  currentUser={attaccaUser}
+                />
+              ) : null}
               <ConfigSection directory={directory} />
               <WorkQueueSection directory={directory} />
               {projectPath ? (
-                <ActiveSessionSection projectPath={projectPath} dev={dev} />
+                <ActiveSessionSection projectPath={projectPath} dev={attaccaUser} />
               ) : null}
               <SessionInfoSection session={latestSession} />
               {claudeMdError ? (
