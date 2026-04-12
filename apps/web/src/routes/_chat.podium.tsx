@@ -17,6 +17,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { SidebarTrigger } from "../components/ui/sidebar";
+import { toastManager } from "../components/ui/toast";
 import { selectProjectsAcrossEnvironments, useStore } from "../store";
 import { useFactoryStore } from "../stores/factory";
 import {
@@ -210,6 +211,12 @@ function PodiumRouteView() {
       try {
         await initializeFactory(project.path, defaultConfigFor(project));
         await refresh();
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: `Failed to initialize ${project.displayName || project.slug}`,
+          description: error instanceof Error ? error.message : "Unknown error",
+        });
       } finally {
         setInitializingPath(null);
       }

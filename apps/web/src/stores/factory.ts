@@ -153,7 +153,9 @@ export const useFactoryStore = create<FactoryState>()(
           error: message,
         }),
       }));
-      return null;
+      // Re-throw so callers can surface the failure (e.g. via a toast)
+      // instead of seeing a silent null.
+      throw cause instanceof Error ? cause : new Error(message);
     }
     return get().loadFactory(projectPath);
   },
