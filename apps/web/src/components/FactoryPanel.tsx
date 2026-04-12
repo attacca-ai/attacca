@@ -29,11 +29,13 @@ function AttributionBanner({
   readonly assignedDev: string;
   readonly currentUser: string;
 }) {
-  if (!assignedDev || !currentUser) return null;
-  if (assignedDev === currentUser) return null;
+  const trimmedAssigned = assignedDev.trim();
+  const trimmedCurrent = currentUser.trim();
+  if (!trimmedAssigned || !trimmedCurrent) return null;
+  if (trimmedAssigned === trimmedCurrent) return null;
   return (
     <p className="rounded-md border border-border/50 bg-muted/20 px-2 py-1.5 text-[11px] text-muted-foreground/80">
-      Owned by <span className="font-semibold text-foreground/90">@{assignedDev}</span>
+      Owned by <span className="font-semibold text-foreground/90">@{trimmedAssigned}</span>
     </p>
   );
 }

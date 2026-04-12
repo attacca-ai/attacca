@@ -106,9 +106,12 @@ export function selectStalledProjects(state: PodiumState): ReadonlyArray<Scanned
   const now = Date.now();
   return selectTrackedProjects(state).filter((p) => {
     if (p.gapCount > 0) return true;
-    if (!p.lastActivity) return true;
+    // Missing or unparseable lastActivity is treated as "don't know" — not
+    // stalled. Otherwise freshly-initialized projects and legacy configs
+    // would appear permanently stalled, contradicting spec scenario 1.
+    if (!p.lastActivity) return false;
     const last = Date.parse(p.lastActivity);
-    if (!Number.isFinite(last)) return true;
+    if (!Number.isFinite(last)) return false;
     return now - last > STALLED_THRESHOLD_MS;
   });
 }
