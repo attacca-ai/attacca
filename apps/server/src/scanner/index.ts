@@ -96,7 +96,15 @@ export function scanProjects(rootDir: string): ScannedProject[] {
   if (!existsSync(rootDir)) return [];
 
   const exclude = buildExcludeSet();
-  const entries = readdirSync(rootDir);
+  let entries: string[];
+  try {
+    entries = readdirSync(rootDir);
+  } catch {
+    // Permission denied, race with a directory delete, or any other
+    // readdir failure — return empty rather than bubble up as an error.
+    // The empty state is the calm UX per scenario 7; an error modal is not.
+    return [];
+  }
   const projects: ScannedProject[] = [];
 
   for (const entry of entries) {
