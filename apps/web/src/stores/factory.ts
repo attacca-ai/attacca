@@ -16,8 +16,11 @@ import {
   type WorkQueue,
 } from "@t3tools/contracts";
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 import { getWsRpcClient } from "../wsRpcClient";
+
+const FACTORY_STORE_STORAGE_KEY = "attacca:factory-store:v1";
 
 interface FactoryProjectEntry {
   readonly projectPath: string;
@@ -100,7 +103,9 @@ function generateSessionId(): string {
   return `session-${iso}`;
 }
 
-export const useFactoryStore = create<FactoryState>((set, get) => ({
+export const useFactoryStore = create<FactoryState>()(
+  persist(
+    (set, get) => ({
   activeProjectPath: null,
   entries: {},
   forgeSkills: initialForgeSkillsState,
@@ -299,7 +304,19 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
       };
     });
   },
-}));
+    }),
+    {
+      name: FACTORY_STORE_STORAGE_KEY,
+      storage: createJSONStorage(() => localStorage),
+      // Only persist active sessions — entries and forge skills are reloaded
+      // from the server on mount, so caching them in localStorage would just
+      // show stale data on reload.
+      partialize: (state) => ({
+        activeSessionsByProjectPath: state.activeSessionsByProjectPath,
+      }),
+    },
+  ),
+);
 
 export const selectActiveFactoryEntry = (state: FactoryState): FactoryProjectEntry | null => {
   if (!state.activeProjectPath) return null;
