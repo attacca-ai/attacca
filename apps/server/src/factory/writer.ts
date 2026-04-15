@@ -7,6 +7,7 @@
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import YAML from "yaml";
 import {
   FACTORY_DIR,
   FACTORY_FILES,
@@ -21,51 +22,29 @@ import {
 import { readFactoryDirectory } from "./reader";
 
 // ---------------------------------------------------------------------------
-// YAML serializer (minimal, config.yaml only)
+// YAML serializer
 // ---------------------------------------------------------------------------
 
-/**
- * Escape a string for safe embedding inside a double-quoted YAML scalar.
- * Handles backslash, double quote, and control characters. Windows paths
- * (containing `\`) and directory names with `"` would otherwise corrupt
- * the config or inject forged fields.
- */
-function yamlQuote(value: string): string {
-  const escaped = value
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "\\r")
-    .replace(/\t/g, "\\t");
-  return `"${escaped}"`;
-}
+const CONFIG_FIELD_ORDER = [
+  "version", "name", "display_name", "type", "trust_tier", "phase", "track",
+  "stack", "repo", "assigned_dev", "created", "updated", "experience_level",
+  "completed_phases",
+];
 
 function configToYaml(config: FactoryConfig): string {
-  const lines: string[] = [];
-
-  lines.push(`version: ${FACTORY_PROTOCOL_VERSION}`);
-  lines.push(`name: ${yamlQuote(config.name)}`);
-  lines.push(`display_name: ${yamlQuote(config.display_name)}`);
-  lines.push(`type: ${yamlQuote(config.type)}`);
-  lines.push(`trust_tier: ${config.trust_tier}`);
-  lines.push(`phase: ${yamlQuote(config.phase)}`);
-  lines.push(`track: ${yamlQuote(config.track)}`);
-
-  if (config.stack?.length) {
-    lines.push("stack:");
-    for (const s of config.stack) lines.push(`  - ${yamlQuote(s)}`);
+  const obj: Record<string, unknown> = { version: FACTORY_PROTOCOL_VERSION };
+  for (const key of CONFIG_FIELD_ORDER) {
+    const value = (config as Record<string, unknown>)[key];
+    if (value !== undefined && value !== null && key !== "version") {
+      if (Array.isArray(value) && value.length === 0) continue;
+      obj[key] = value;
+    }
   }
-  if (config.repo) lines.push(`repo: ${yamlQuote(config.repo)}`);
-  if (config.assigned_dev) lines.push(`assigned_dev: ${yamlQuote(config.assigned_dev)}`);
-  if (config.created) lines.push(`created: ${yamlQuote(config.created)}`);
-  if (config.updated) lines.push(`updated: ${yamlQuote(config.updated)}`);
-  if (config.experience_level) lines.push(`experience_level: ${yamlQuote(config.experience_level)}`);
-  if (config.completed_phases?.length) {
-    lines.push("completed_phases:");
-    for (const p of config.completed_phases) lines.push(`  - ${yamlQuote(p)}`);
-  }
-
-  return lines.join("\n") + "\n";
+  return YAML.stringify(obj, {
+    lineWidth: 0,
+    defaultKeyType: "PLAIN",
+    defaultStringType: "QUOTE_DOUBLE",
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -333,11 +312,7 @@ export function initializeFactory(
 
   const claudeMdPath = join(factoryPath, FACTORY_FILES.CLAUDE_MD);
   if (!existsSync(claudeMdPath)) {
-    const readConfig = existsSync(configPath);
-    const usedConfig = readConfig
-      ? ({ ...config, version: FACTORY_PROTOCOL_VERSION } as FactoryConfig)
-      : config;
-    const claudeMd = generateClaudeMd({ config: usedConfig });
+    const claudeMd = generateClaudeMd({ config });
     writeClaudeMd(projectPath, claudeMd);
   }
 }

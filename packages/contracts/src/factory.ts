@@ -82,8 +82,9 @@ export const FactoryConfig = Schema.Struct({
   trust_tier: TrustTier,
   phase: Phase,
   track: ProjectTrack,
-  // Optional
-  version: Schema.optional(Schema.Number),
+  version: Schema.Number.pipe(
+    Schema.withDecodingDefault(() => FACTORY_PROTOCOL_VERSION),
+  ),
   stack: Schema.optional(Schema.Array(Schema.String)),
   repo: Schema.optional(Schema.String),
   assigned_dev: Schema.optional(Schema.String),
