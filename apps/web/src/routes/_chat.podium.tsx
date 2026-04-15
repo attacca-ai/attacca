@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 import { memo, useCallback, useEffect, useState } from "react";
 import type { FactoryConfig, ScannedProject } from "@t3tools/contracts";
-import { DEFAULT_MODEL_BY_PROVIDER } from "@t3tools/contracts";
+import { DEFAULT_MODEL_BY_PROVIDER, FACTORY_PROTOCOL_VERSION } from "@t3tools/contracts";
 import {
   AlertTriangleIcon,
   FactoryIcon,
@@ -14,28 +14,33 @@ import {
 
 import { isElectron } from "../env";
 import { readEnvironmentApi } from "../environmentApi";
+import { ensureLocalApi } from "../localApi";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
-import { useSettings } from "../hooks/useSettings";
+import { useSettings, useUpdateSettings } from "../hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { newCommandId, newProjectId } from "../lib/utils";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { PodiumIntakePopover } from "../components/PodiumIntakePopover";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { SidebarTrigger } from "../components/ui/sidebar";
 import { toastManager } from "../components/ui/toast";
 import { selectProjectsAcrossEnvironments, useStore } from "../store";
 import { useFactoryStore } from "../stores/factory";
 import {
+  normalizeCwd,
   selectDiscoveredProjects,
   selectStalledProjects,
   selectTrackedProjects,
   usePodiumStore,
+  type IntakeDeps,
 } from "../stores/podium";
 import { useUiStateStore } from "../uiStateStore";
 
 function defaultConfigFor(project: ScannedProject): FactoryConfig {
   const displayName = project.displayName || project.slug;
   return {
+    version: FACTORY_PROTOCOL_VERSION,
     name: project.slug,
     display_name: displayName,
     type: "greenfield",
@@ -177,10 +182,6 @@ const DiscoveredRow = memo(function DiscoveredRow({
   );
 });
 
-function normalizeCwd(value: string): string {
-  return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-}
-
 function PodiumRouteView() {
   const rootDir = usePodiumStore((s) => s.rootDir);
   const status = usePodiumStore((s) => s.status);
@@ -195,10 +196,95 @@ function PodiumRouteView() {
   const activeEnvironmentId = useStore((s) => s.activeEnvironmentId);
   const defaultThreadEnvMode = useSettings((s) => s.defaultThreadEnvMode);
   const podiumScanRootOverride = useSettings((s) => s.podiumScanRootOverride);
+  const externalIntakeRoots = useSettings((s) => s.externalIntakeRoots);
+  const { updateSettings } = useUpdateSettings();
   const { handleNewThread } = useHandleNewThread();
+  const intakeProjectFromPath = usePodiumStore((s) => s.intakeProjectFromPath);
+  const intakeStatus = usePodiumStore((s) => s.intakeStatus);
+  const intakeError = usePodiumStore((s) => s.intakeError);
 
   const [initializingPath, setInitializingPath] = useState<string | null>(null);
   const [openingPath, setOpeningPath] = useState<string | null>(null);
+
+  const handleIntake = useCallback(
+    async (rawPath: string) => {
+      if (!activeEnvironmentId) {
+        toastManager.add({
+          type: "error",
+          title: "Cannot intake project",
+          description: "No active environment.",
+        });
+        return;
+      }
+      const api = readEnvironmentApi(activeEnvironmentId);
+      if (!api) {
+        toastManager.add({
+          type: "error",
+          title: "Cannot intake project",
+          description: "Environment API unavailable.",
+        });
+        return;
+      }
+
+      const deps: IntakeDeps = {
+        orchestrationProjects,
+        activeEnvironmentId,
+        dispatchProjectCreate: async (input) => {
+          await api.orchestration.dispatchCommand({
+            type: "project.create",
+            commandId: newCommandId(),
+            projectId: input.projectId,
+            title: input.title,
+            workspaceRoot: input.workspaceRoot,
+            defaultModelSelection: {
+              provider: "codex",
+              model: DEFAULT_MODEL_BY_PROVIDER.codex,
+            },
+            createdAt: new Date().toISOString(),
+          });
+        },
+        handleNewThread: async (ref, options) => {
+          setProjectExpanded(scopedProjectKey(ref), true);
+          await handleNewThread(ref, options);
+        },
+        externalIntakeRoots,
+        podiumScanRoot: rootDir,
+        updateSettings,
+        defaultThreadEnvMode,
+        confirm: async (message) => {
+          try {
+            return await ensureLocalApi().dialogs.confirm(message);
+          } catch {
+            return window.confirm(message);
+          }
+        },
+        scopeProjectRef,
+        newProjectId,
+      };
+
+      await intakeProjectFromPath(rawPath, deps);
+
+      const state = usePodiumStore.getState();
+      if (state.intakeError) {
+        toastManager.add({
+          type: "error",
+          title: "Intake failed",
+          description: state.intakeError,
+        });
+      }
+    },
+    [
+      activeEnvironmentId,
+      defaultThreadEnvMode,
+      externalIntakeRoots,
+      handleNewThread,
+      intakeProjectFromPath,
+      orchestrationProjects,
+      rootDir,
+      setProjectExpanded,
+      updateSettings,
+    ],
+  );
 
   useEffect(() => {
     if (status === "idle") {
@@ -329,21 +415,27 @@ function PodiumRouteView() {
           <span className="text-sm font-medium text-foreground">Podium</span>
           <span className="text-[11px] text-muted-foreground/50">{rootDir}</span>
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => void refreshWithOverride()}
-          disabled={isLoading}
-          className="h-7 gap-1.5 text-[12px]"
-          aria-label="Refresh scan"
-        >
-          {isLoading ? (
-            <LoaderIcon className="size-3.5 animate-spin" />
-          ) : (
-            <RefreshCwIcon className="size-3.5" />
-          )}
-          Refresh
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <PodiumIntakePopover
+            onIntake={handleIntake}
+            isLoading={intakeStatus === "loading"}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void refreshWithOverride()}
+            disabled={isLoading}
+            className="h-7 gap-1.5 text-[12px]"
+            aria-label="Refresh scan"
+          >
+            {isLoading ? (
+              <LoaderIcon className="size-3.5 animate-spin" />
+            ) : (
+              <RefreshCwIcon className="size-3.5" />
+            )}
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">

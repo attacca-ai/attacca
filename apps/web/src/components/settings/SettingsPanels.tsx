@@ -1493,6 +1493,7 @@ export function StandSettingsPanel() {
   const attaccaUser = useSettings((s) => s.attaccaUser);
   const defaultMode = useSettings((s) => s.defaultMode);
   const podiumScanRootOverride = useSettings((s) => s.podiumScanRootOverride);
+  const externalIntakeRoots = useSettings((s) => s.externalIntakeRoots);
   const { updateSettings } = useUpdateSettings();
 
   return (
@@ -1550,6 +1551,37 @@ export function StandSettingsPanel() {
             />
           }
         />
+      </SettingsSection>
+
+      <SettingsSection title="Intake roots">
+        {externalIntakeRoots.length === 0 ? (
+          <div className="px-4 py-3 text-xs text-muted-foreground sm:px-5">
+            No external intake roots configured. Roots are added automatically when you intake a project from outside the Podium scan root.
+          </div>
+        ) : (
+          externalIntakeRoots.map((root) => (
+            <div
+              key={root}
+              className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 first:border-t-0 sm:px-5"
+            >
+              <code className="min-w-0 truncate text-xs text-foreground/80">{root}</code>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 shrink-0 p-0"
+                aria-label={`Remove ${root}`}
+                onClick={() => {
+                  updateSettings({
+                    externalIntakeRoots: externalIntakeRoots.filter((r) => r !== root),
+                  });
+                }}
+              >
+                <XIcon className="size-3" />
+              </Button>
+            </div>
+          ))
+        )}
       </SettingsSection>
     </SettingsPageContainer>
   );

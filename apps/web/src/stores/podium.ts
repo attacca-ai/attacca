@@ -10,10 +10,74 @@
  * override). The store just surfaces whatever the server reports.
  */
 
-import type { ScannedProject } from "@t3tools/contracts";
+import {
+  FACTORY_PROTOCOL_VERSION,
+  type EnvironmentId,
+  type FactoryConfig,
+  type ProjectId,
+  type ScannedProject,
+  type ScopedProjectRef,
+} from "@t3tools/contracts";
 import { create } from "zustand";
 
 import { getWsRpcClient } from "../wsRpcClient";
+
+// ---------------------------------------------------------------------------
+// Helpers shared with _chat.podium.tsx
+// ---------------------------------------------------------------------------
+
+export function normalizeCwd(value: string): string {
+  return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function getParentDir(rawPath: string): string {
+  const normalized = rawPath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const lastSlash = normalized.lastIndexOf("/");
+  return lastSlash > 0 ? normalized.substring(0, lastSlash) : normalized;
+}
+
+function isPathUnderRoots(
+  normalizedPath: string,
+  roots: ReadonlyArray<string>,
+): boolean {
+  return roots.some((root) => {
+    const nr = normalizeCwd(root);
+    return normalizedPath === nr || normalizedPath.startsWith(nr + "/");
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Intake deps — things only available in component context
+// ---------------------------------------------------------------------------
+
+export interface IntakeDeps {
+  readonly orchestrationProjects: ReadonlyArray<{
+    readonly environmentId: EnvironmentId;
+    readonly id: ProjectId;
+    readonly cwd: string;
+  }>;
+  readonly activeEnvironmentId: EnvironmentId;
+  readonly dispatchProjectCreate: (input: {
+    projectId: ProjectId;
+    title: string;
+    workspaceRoot: string;
+  }) => Promise<void>;
+  readonly handleNewThread: (
+    projectRef: ScopedProjectRef,
+    options?: { envMode?: "local" | "worktree" },
+  ) => Promise<void>;
+  readonly externalIntakeRoots: ReadonlyArray<string>;
+  readonly podiumScanRoot: string;
+  readonly updateSettings: (patch: { externalIntakeRoots: ReadonlyArray<string> }) => void;
+  readonly defaultThreadEnvMode: "local" | "worktree";
+  readonly confirm: (message: string) => Promise<boolean>;
+  readonly scopeProjectRef: (environmentId: EnvironmentId, projectId: ProjectId) => ScopedProjectRef;
+  readonly newProjectId: () => ProjectId;
+}
+
+// ---------------------------------------------------------------------------
+// Store
+// ---------------------------------------------------------------------------
 
 interface PodiumState {
   readonly rootDir: string;
@@ -23,9 +87,12 @@ interface PodiumState {
   readonly error: string | null;
   readonly loadedAt: number | null;
   readonly selectedProjectPath: string | null;
+  readonly intakeStatus: "idle" | "loading" | "error";
+  readonly intakeError: string | null;
   readonly scan: (rootDir?: string) => Promise<ReadonlyArray<ScannedProject>>;
   readonly refresh: () => Promise<ReadonlyArray<ScannedProject>>;
   readonly setSelectedProjectPath: (projectPath: string | null) => void;
+  readonly intakeProjectFromPath: (rawPath: string, deps: IntakeDeps) => Promise<void>;
 }
 
 export const usePodiumStore = create<PodiumState>((set, get) => ({
@@ -36,6 +103,8 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
   error: null,
   loadedAt: null,
   selectedProjectPath: null,
+  intakeStatus: "idle",
+  intakeError: null,
 
   scan: async (overrideRoot) => {
     const client = getWsRpcClient();
@@ -74,6 +143,92 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
 
   setSelectedProjectPath: (projectPath) => {
     set({ selectedProjectPath: projectPath });
+  },
+
+  intakeProjectFromPath: async (rawPath, deps) => {
+    const trimmed = rawPath.trim();
+    if (!trimmed) return;
+    if (get().intakeStatus === "loading") return;
+
+    set({ intakeStatus: "loading", intakeError: null });
+
+    try {
+      const wantedCwd = normalizeCwd(trimmed);
+
+      // ── Duplicate check ──────────────────────────────────────
+      const existing = deps.orchestrationProjects.find(
+        (p) => normalizeCwd(p.cwd) === wantedCwd,
+      );
+      if (existing) {
+        const ref = deps.scopeProjectRef(existing.environmentId, existing.id);
+        await deps.handleNewThread(ref, { envMode: deps.defaultThreadEnvMode });
+        set({ intakeStatus: "idle" });
+        return;
+      }
+
+      // ── Allowlist check ──────────────────────────────────────
+      const allRoots = deps.podiumScanRoot
+        ? [...deps.externalIntakeRoots, deps.podiumScanRoot]
+        : [...deps.externalIntakeRoots];
+
+      if (!isPathUnderRoots(wantedCwd, allRoots)) {
+        const parentDir = getParentDir(trimmed);
+        const confirmed = await deps.confirm(
+          `Add "${parentDir}" to intake roots? Attacca will be able to write .factory/ metadata in any project under this directory.`,
+        );
+        if (!confirmed) {
+          set({ intakeStatus: "idle", intakeError: "Intake cancelled" });
+          return;
+        }
+        const updatedRoots = [...deps.externalIntakeRoots, parentDir];
+        deps.updateSettings({ externalIntakeRoots: updatedRoots });
+      }
+
+      // ── project.create ───────────────────────────────────────
+      const projectId = deps.newProjectId();
+      const slug = trimmed.split(/[/\\]/).filter(Boolean).pop() ?? trimmed;
+      await deps.dispatchProjectCreate({
+        projectId,
+        title: slug,
+        workspaceRoot: trimmed,
+      });
+
+      // ── factory.initialize ───────────────────────────────────
+      const client = getWsRpcClient();
+      const currentRoots = deps.podiumScanRoot
+        ? [...deps.externalIntakeRoots, deps.podiumScanRoot]
+        : [...deps.externalIntakeRoots];
+      // Include the parent we may have just added
+      const parentDir = getParentDir(trimmed);
+      const rootsForRpc = isPathUnderRoots(normalizeCwd(trimmed), currentRoots)
+        ? currentRoots
+        : [...currentRoots, parentDir];
+
+      const config: FactoryConfig = {
+        version: FACTORY_PROTOCOL_VERSION,
+        name: slug,
+        display_name: slug,
+        type: "greenfield",
+        trust_tier: 2,
+        phase: "IDEA",
+        track: "software",
+      };
+      await client.factory.initialize({
+        projectPath: trimmed,
+        config,
+        allowedRoots: rootsForRpc,
+      });
+
+      // ── Open draft thread ────────────────────────────────────
+      const ref = deps.scopeProjectRef(deps.activeEnvironmentId, projectId);
+      await deps.handleNewThread(ref, { envMode: deps.defaultThreadEnvMode });
+
+      set({ intakeStatus: "idle", intakeError: null });
+    } catch (cause) {
+      const message =
+        cause instanceof Error ? cause.message : "Intake failed";
+      set({ intakeStatus: "error", intakeError: message });
+    }
   },
 }));
 
