@@ -2,14 +2,19 @@ import { scopeProjectRef, scopedProjectKey } from "@t3tools/client-runtime";
 import { createFileRoute } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 import { memo, useCallback, useEffect, useState } from "react";
-import type { FactoryConfig, ScannedProject } from "@t3tools/contracts";
+import type { FactoryConfig, Gap, ScannedProject } from "@t3tools/contracts";
 import { DEFAULT_MODEL_BY_PROVIDER, FACTORY_PROTOCOL_VERSION } from "@t3tools/contracts";
 import {
   AlertTriangleIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ExternalLinkIcon,
   FactoryIcon,
   FolderPlusIcon,
   LoaderIcon,
   RefreshCwIcon,
+  SendIcon,
+  XIcon,
 } from "lucide-react";
 
 import { isElectron } from "../env";
@@ -34,8 +39,10 @@ import {
   selectTrackedProjects,
   usePodiumStore,
   type IntakeDeps,
+  type ScanOptions,
 } from "../stores/podium";
 import { useUiStateStore } from "../uiStateStore";
+import { getWsRpcClient } from "../wsRpcClient";
 
 function defaultConfigFor(project: ScannedProject): FactoryConfig {
   const displayName = project.displayName || project.slug;
@@ -65,7 +72,15 @@ function formatRelativeTime(iso: string | null): string {
   return `${months}mo ago`;
 }
 
-function ProjectBadges({ project }: { readonly project: ScannedProject }) {
+function ProjectBadges({
+  project,
+  gapsExpanded,
+  onToggleGaps,
+}: {
+  readonly project: ScannedProject;
+  readonly gapsExpanded?: boolean;
+  readonly onToggleGaps?: () => void;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
@@ -86,9 +101,19 @@ function ProjectBadges({ project }: { readonly project: ScannedProject }) {
         {project.health}
       </Badge>
       {project.gapCount > 0 ? (
-        <Badge variant="secondary" className="bg-amber-500/10 px-1.5 py-0 text-[10px] text-amber-400">
-          {project.gapCount} gaps
-        </Badge>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleGaps?.();
+          }}
+          className="inline-flex items-center gap-0.5"
+        >
+          <Badge variant="secondary" className="bg-amber-500/10 px-1.5 py-0 text-[10px] text-amber-400 hover:bg-amber-500/20 transition-colors">
+            {gapsExpanded ? <ChevronDownIcon className="mr-0.5 size-2.5" /> : <ChevronRightIcon className="mr-0.5 size-2.5" />}
+            {project.gapCount} {project.gapCount === 1 ? "gap" : "gaps"}
+          </Badge>
+        </button>
       ) : null}
       {project.assignedDev ? (
         <span className="text-[10px] text-muted-foreground/50">@{project.assignedDev}</span>
@@ -97,9 +122,77 @@ function ProjectBadges({ project }: { readonly project: ScannedProject }) {
   );
 }
 
+const SEVERITY_COLORS: Record<string, string> = {
+  high: "bg-red-500/10 text-red-400",
+  medium: "bg-amber-500/10 text-amber-400",
+  low: "bg-muted/50 text-muted-foreground/60",
+};
+
+function GapRow({
+  gap,
+  onDispatch,
+  onDispatchAndOpen,
+  isDispatching,
+}: {
+  readonly gap: Gap;
+  readonly onDispatch: (gap: Gap) => void;
+  readonly onDispatchAndOpen: (gap: Gap) => void;
+  readonly isDispatching: boolean;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-2 rounded border border-border/30 bg-background/50 px-2.5 py-1.5">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <Badge variant="secondary" className={cn("px-1 py-0 text-[9px]", SEVERITY_COLORS[gap.severity])}>
+            {gap.severity}
+          </Badge>
+          <span className="text-[10px] font-medium text-foreground/70">{gap.category}</span>
+        </div>
+        <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground/60">{gap.message}</p>
+        {gap.suggestedSkill ? (
+          <p className="mt-0.5 text-[10px] text-muted-foreground/40">
+            Skill: <code className="rounded bg-muted/30 px-0.5">{gap.suggestedSkill}</code>
+          </p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDispatch(gap);
+          }}
+          disabled={isDispatching}
+          className="h-6 gap-1 px-1.5 text-[10px]"
+          title="Add to work queue"
+        >
+          {isDispatching ? <LoaderIcon className="size-3 animate-spin" /> : <SendIcon className="size-3" />}
+          Dispatch
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDispatchAndOpen(gap);
+          }}
+          disabled={isDispatching}
+          className="h-6 gap-1 px-1.5 text-[10px]"
+          title="Add to queue and open thread"
+        >
+          <ExternalLinkIcon className="size-3" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 interface TrackedRowProps {
   readonly project: ScannedProject;
   readonly onOpen: (project: ScannedProject) => void;
+  readonly onDispatchGap: (project: ScannedProject, gap: Gap) => Promise<boolean>;
+  readonly onDispatchGapAndOpen: (project: ScannedProject, gap: Gap) => Promise<void>;
   readonly emphasized?: boolean;
   readonly isOpening?: boolean;
   readonly isDisabled?: boolean;
@@ -108,42 +201,94 @@ interface TrackedRowProps {
 const TrackedRow = memo(function TrackedRow({
   project,
   onOpen,
+  onDispatchGap,
+  onDispatchGapAndOpen,
   emphasized = false,
   isOpening = false,
   isDisabled = false,
 }: TrackedRowProps) {
+  const [gapsExpanded, setGapsExpanded] = useState(false);
+  const [dispatchingGap, setDispatchingGap] = useState<string | null>(null);
+
+  const handleDispatch = useCallback(
+    async (gap: Gap) => {
+      setDispatchingGap(gap.category);
+      try {
+        await onDispatchGap(project, gap);
+      } finally {
+        setDispatchingGap(null);
+      }
+    },
+    [onDispatchGap, project],
+  );
+
+  const handleDispatchAndOpen = useCallback(
+    async (gap: Gap) => {
+      setDispatchingGap(gap.category);
+      try {
+        await onDispatchGapAndOpen(project, gap);
+      } finally {
+        setDispatchingGap(null);
+      }
+    },
+    [onDispatchGapAndOpen, project],
+  );
+
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(project)}
-      disabled={isDisabled}
+    <div
       className={cn(
-        "flex w-full flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-card/70 disabled:cursor-wait disabled:opacity-60",
+        "flex w-full flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-left transition-colors",
         emphasized
-          ? "border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60"
-          : "border-border/50 bg-card/40 hover:border-border",
+          ? "border-amber-500/40 bg-amber-500/5"
+          : "border-border/50 bg-card/40",
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-[13px] font-medium text-foreground/90">
-            {project.displayName}
-          </p>
-          <p className="truncate font-mono text-[10px] text-muted-foreground/50">{project.path}</p>
+      <button
+        type="button"
+        onClick={() => onOpen(project)}
+        disabled={isDisabled}
+        className={cn(
+          "flex w-full flex-col gap-1.5 text-left transition-colors hover:opacity-80 disabled:cursor-wait disabled:opacity-60",
+        )}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-medium text-foreground/90">
+              {project.displayName}
+            </p>
+            <p className="truncate font-mono text-[10px] text-muted-foreground/50">{project.path}</p>
+          </div>
+          <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground/60">
+            {isOpening ? <LoaderIcon className="size-3 animate-spin" /> : null}
+            {formatRelativeTime(project.lastActivity)}
+          </span>
         </div>
-        <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground/60">
-          {isOpening ? <LoaderIcon className="size-3 animate-spin" /> : null}
-          {formatRelativeTime(project.lastActivity)}
-        </span>
-      </div>
-      <ProjectBadges project={project} />
+      </button>
+      <ProjectBadges
+        project={project}
+        gapsExpanded={gapsExpanded}
+        onToggleGaps={() => setGapsExpanded((v) => !v)}
+      />
       {project.nextAction ? (
         <p className="text-[11px] leading-snug text-muted-foreground/70">
           <span className="text-muted-foreground/40">Next: </span>
           {project.nextAction}
         </p>
       ) : null}
-    </button>
+      {gapsExpanded && project.gaps.length > 0 ? (
+        <div className="mt-1 space-y-1">
+          {project.gaps.map((g) => (
+            <GapRow
+              key={g.category}
+              gap={g}
+              onDispatch={handleDispatch}
+              onDispatchAndOpen={handleDispatchAndOpen}
+              isDispatching={dispatchingGap === g.category}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 });
 
@@ -203,8 +348,12 @@ function PodiumRouteView() {
   const intakeStatus = usePodiumStore((s) => s.intakeStatus);
   const intakeError = usePodiumStore((s) => s.intakeError);
 
+  const scanWarnings = usePodiumStore(useShallow((s) => s.scanWarnings));
+  const scanRoots = usePodiumStore(useShallow((s) => s.scanRoots));
+
   const [initializingPath, setInitializingPath] = useState<string | null>(null);
   const [openingPath, setOpeningPath] = useState<string | null>(null);
+  const [dismissedWarnings, setDismissedWarnings] = useState(false);
 
   const handleIntake = useCallback(
     async (rawPath: string) => {
@@ -289,9 +438,12 @@ function PodiumRouteView() {
   useEffect(() => {
     if (status === "idle") {
       const override = podiumScanRootOverride.trim();
-      void scan(override.length > 0 ? override : undefined);
+      void scan({
+        overrideRoot: override.length > 0 ? override : undefined,
+        externalRoots: externalIntakeRoots,
+      });
     }
-  }, [status, scan, podiumScanRootOverride]);
+  }, [status, scan, podiumScanRootOverride, externalIntakeRoots]);
 
   const handleOpenProject = useCallback(
     async (project: ScannedProject) => {
@@ -372,9 +524,13 @@ function PodiumRouteView() {
   );
 
   const refreshWithOverride = useCallback(() => {
+    setDismissedWarnings(false);
     const override = podiumScanRootOverride.trim();
-    return scan(override.length > 0 ? override : undefined);
-  }, [podiumScanRootOverride, scan]);
+    return scan({
+      overrideRoot: override.length > 0 ? override : undefined,
+      externalRoots: externalIntakeRoots,
+    });
+  }, [podiumScanRootOverride, externalIntakeRoots, scan]);
 
   const handleInitialize = useCallback(
     async (project: ScannedProject) => {
@@ -393,6 +549,42 @@ function PodiumRouteView() {
       }
     },
     [initializeFactory, refreshWithOverride],
+  );
+
+  const handleDispatchGap = useCallback(
+    async (project: ScannedProject, gap: Gap): Promise<boolean> => {
+      try {
+        const allRoots = externalIntakeRoots.length > 0
+          ? [...externalIntakeRoots, rootDir].filter(Boolean)
+          : [rootDir].filter(Boolean);
+        const result = await getWsRpcClient().factory.dispatchWorkPackage({
+          projectPath: project.path,
+          gap,
+          allowedRoots: allRoots,
+        });
+        toastManager.add({
+          type: "success",
+          title: `Dispatched: ${result.workItem.title}`,
+        });
+        return true;
+      } catch (cause) {
+        toastManager.add({
+          type: "error",
+          title: "Dispatch failed",
+          description: cause instanceof Error ? cause.message : "Unknown error",
+        });
+        return false;
+      }
+    },
+    [externalIntakeRoots, rootDir],
+  );
+
+  const handleDispatchGapAndOpen = useCallback(
+    async (project: ScannedProject, gap: Gap) => {
+      const ok = await handleDispatchGap(project, gap);
+      if (ok) await handleOpenProject(project);
+    },
+    [handleDispatchGap, handleOpenProject],
   );
 
   const isLoading = status === "loading";
@@ -450,6 +642,25 @@ function PodiumRouteView() {
             </div>
           ) : null}
 
+          {scanWarnings.length > 0 && !dismissedWarnings ? (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-400">
+              <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
+              <div className="min-w-0 flex-1">
+                {scanWarnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setDismissedWarnings(true)}
+                className="shrink-0 rounded p-0.5 transition-colors hover:bg-amber-500/10"
+                aria-label="Dismiss scan warnings"
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            </div>
+          ) : null}
+
           {isLoading && !hasProjects ? (
             <div className="flex items-center justify-center py-16 text-muted-foreground/50">
               <LoaderIcon className="mr-2 size-4 animate-spin" />
@@ -461,10 +672,12 @@ function PodiumRouteView() {
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <FactoryIcon className="mb-2 size-6 text-muted-foreground/30" />
               <p className="text-[13px] text-muted-foreground/60">
-                No projects found at <code className="rounded bg-muted/30 px-1">{rootDir}</code>
+                No projects found{scanRoots.length > 1
+                  ? ` across ${scanRoots.length} scan roots`
+                  : <> at <code className="rounded bg-muted/30 px-1">{rootDir}</code></>}
               </p>
               <p className="mt-1 text-[11px] text-muted-foreground/40">
-                Check your scan root via the ATTACCA_PODIUM_ROOT env var.
+                Check your scan root via the ATTACCA_PODIUM_ROOT env var or add intake roots in Settings.
               </p>
             </div>
           ) : null}
@@ -483,6 +696,8 @@ function PodiumRouteView() {
                     key={`stalled-${project.path}`}
                     project={project}
                     onOpen={handleOpenProject}
+                    onDispatchGap={handleDispatchGap}
+                    onDispatchGapAndOpen={handleDispatchGapAndOpen}
                     emphasized
                     isOpening={openingPath === project.path}
                     isDisabled={openingPath !== null && openingPath !== project.path}
@@ -506,6 +721,8 @@ function PodiumRouteView() {
                     key={project.path}
                     project={project}
                     onOpen={handleOpenProject}
+                    onDispatchGap={handleDispatchGap}
+                    onDispatchGapAndOpen={handleDispatchGapAndOpen}
                     isOpening={openingPath === project.path}
                     isDisabled={openingPath !== null && openingPath !== project.path}
                   />

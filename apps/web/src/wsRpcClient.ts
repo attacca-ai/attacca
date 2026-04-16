@@ -74,6 +74,7 @@ export interface WsRpcClient {
     readonly listForgeSkills: RpcUnaryNoArgMethod<typeof WS_METHODS.factoryListForgeSkills>;
     readonly regenerateClaudeMd: RpcUnaryMethod<typeof WS_METHODS.factoryRegenerateClaudeMd>;
     readonly getGitIdentity: RpcUnaryNoArgMethod<typeof WS_METHODS.factoryGetGitIdentity>;
+    readonly dispatchWorkPackage: RpcUnaryMethod<typeof WS_METHODS.factoryDispatchWorkPackage>;
     readonly scanProjects: RpcUnaryMethod<typeof WS_METHODS.factoryScanProjects>;
     readonly getPodiumRoot: RpcUnaryNoArgMethod<typeof WS_METHODS.factoryGetPodiumRoot>;
   };
@@ -320,6 +321,8 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.factoryRegenerateClaudeMd](input)),
       getGitIdentity: () =>
         transport.request((client) => client[WS_METHODS.factoryGetGitIdentity]({})),
+      dispatchWorkPackage: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryDispatchWorkPackage](input)),
       scanProjects: (input) =>
         transport.request((client) => client[WS_METHODS.factoryScanProjects](input)),
       getPodiumRoot: () =>

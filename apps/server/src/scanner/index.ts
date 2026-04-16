@@ -6,17 +6,32 @@
  * Used by Podium for the project dashboard.
  */
 
-import { readdirSync, lstatSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, lstatSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { hasFactoryDir, readFactorySummary } from "../factory";
-import type {
-  FactoryConfig,
-  FactoryStatus,
-  Health,
-  Phase,
-  ProjectTrack,
-  ScannedProject,
+import { analyzeGaps } from "./gaps";
+import {
+  FACTORY_DIR,
+  FACTORY_FILES,
+  type FactoryConfig,
+  type FactoryStatus,
+  type Gap,
+  type Health,
+  type Phase,
+  type ProjectTrack,
+  type ScannedProject,
+  type WorkQueue,
 } from "@t3tools/contracts";
+
+function readQueueFile(projectPath: string): WorkQueue | null {
+  const queuePath = join(projectPath, FACTORY_DIR, FACTORY_FILES.QUEUE);
+  if (!existsSync(queuePath)) return null;
+  try {
+    return JSON.parse(readFileSync(queuePath, "utf-8")) as WorkQueue;
+  } catch {
+    return null;
+  }
+}
 
 const DEFAULT_EXCLUDE = [
   "node_modules",
@@ -66,8 +81,10 @@ function fromFactory(
   slug: string,
   config: FactoryConfig | null,
   status: FactoryStatus | null,
+  queue: WorkQueue | null,
 ): ScannedProject {
   const inferred = inferState(projectPath);
+  const gaps: Gap[] = analyzeGaps(projectPath, config, status, queue);
 
   return {
     slug,
@@ -79,7 +96,8 @@ function fromFactory(
     track: config?.track ?? status?.track ?? inferred.track,
     trustTier: config?.trust_tier ?? 2,
     completionPct: status?.completion_pct ?? 0,
-    gapCount: status?.gap_count ?? 0,
+    gapCount: gaps.length,
+    gaps,
     assignedDev: config?.assigned_dev ?? status?.assigned_dev ?? null,
     nextAction: status?.next_action ?? null,
     lastActivity: status?.last_activity ?? null,
@@ -123,7 +141,8 @@ export function scanProjects(rootDir: string): ScannedProject[] {
 
     if (hasFactoryDir(fullPath)) {
       const { config, status } = readFactorySummary(fullPath);
-      projects.push(fromFactory(fullPath, slug, config, status));
+      const queue = readQueueFile(fullPath);
+      projects.push(fromFactory(fullPath, slug, config, status, queue));
     } else {
       // Include non-factory projects with inferred state
       const inferred = inferState(fullPath);
@@ -138,6 +157,7 @@ export function scanProjects(rootDir: string): ScannedProject[] {
         trustTier: 2,
         completionPct: 0,
         gapCount: 0,
+        gaps: [],
         assignedDev: null,
         nextAction: null,
         lastActivity: null,

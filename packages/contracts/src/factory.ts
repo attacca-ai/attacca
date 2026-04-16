@@ -25,6 +25,9 @@ import { Schema } from "effect";
  */
 export const FACTORY_PROTOCOL_VERSION = 1 as const;
 
+/** 7 days in milliseconds — used by both gap analyzer and client selectors. */
+export const STALLED_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
+
 // ---------------------------------------------------------------------------
 // Enums & Literals
 // ---------------------------------------------------------------------------
@@ -61,6 +64,39 @@ export type WorkItemStatus = typeof WorkItemStatus.Type;
 
 export const WorkItemPriority = Schema.Literals(["high", "medium", "low"]);
 export type WorkItemPriority = typeof WorkItemPriority.Type;
+
+// ---------------------------------------------------------------------------
+// Gap analysis (Podium mode)
+// ---------------------------------------------------------------------------
+
+export const GapCategory = Schema.Literals([
+  "missing_config",
+  "missing_status",
+  "missing_spec",
+  "missing_context",
+  "empty_queue",
+  "no_session_logs",
+  "stale_activity",
+  "missing_intent_contract",
+  "missing_scenarios",
+  "incomplete_config",
+]);
+export type GapCategory = typeof GapCategory.Type;
+
+export const GapSeverity = Schema.Literals(["high", "medium", "low"]);
+export type GapSeverity = typeof GapSeverity.Type;
+
+export const Gap = Schema.Struct({
+  category: GapCategory,
+  severity: GapSeverity,
+  message: Schema.String,
+  suggestedSkill: Schema.optional(Schema.String),
+});
+export type Gap = typeof Gap.Type;
+
+// ---------------------------------------------------------------------------
+// Sync status
+// ---------------------------------------------------------------------------
 
 export const SyncState = Schema.Literals(["in_sync", "drift_detected", "update_pending", "missing"]);
 export type SyncState = typeof SyncState.Type;
@@ -329,6 +365,22 @@ export const FactoryWriteSessionLogInput = Schema.Struct({
 export type FactoryWriteSessionLogInput = typeof FactoryWriteSessionLogInput.Type;
 
 // ---------------------------------------------------------------------------
+// Gap dispatch (Podium mode)
+// ---------------------------------------------------------------------------
+
+export const DispatchWorkPackageInput = Schema.Struct({
+  projectPath: Schema.String,
+  gap: Gap,
+  allowedRoots: AllowedRoots,
+});
+export type DispatchWorkPackageInput = typeof DispatchWorkPackageInput.Type;
+
+export const DispatchWorkPackageResult = Schema.Struct({
+  workItem: WorkItem,
+});
+export type DispatchWorkPackageResult = typeof DispatchWorkPackageResult.Type;
+
+// ---------------------------------------------------------------------------
 // Scanner (Podium mode)
 // ---------------------------------------------------------------------------
 
@@ -343,6 +395,7 @@ export const ScannedProject = Schema.Struct({
   trustTier: Schema.Number,
   completionPct: Schema.Number,
   gapCount: Schema.Number,
+  gaps: Schema.Array(Gap),
   assignedDev: Schema.NullOr(Schema.String),
   nextAction: Schema.NullOr(Schema.String),
   lastActivity: Schema.NullOr(Schema.String),

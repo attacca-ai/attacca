@@ -10,6 +10,7 @@ import { Effect, Schema } from "effect";
 import { homedir, platform as osPlatform } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import {
+  type DispatchWorkPackageResult,
   type FactoryConfig,
   type FactoryDirectory,
   FactoryPathError,
@@ -19,10 +20,12 @@ import {
   type FactoryRegenerateClaudeMdResult,
   FactoryWriteError,
   type ForgeSkillListResult,
+  type Gap,
   type GitIdentityResult,
   type PodiumRootResult,
   type ScanProjectsResult,
   type SessionLog,
+  type WorkItem,
   type WorkQueue,
 } from "@t3tools/contracts";
 
@@ -119,6 +122,96 @@ export const writeSessionLogEffect = (
         cause,
         `Failed to write .factory/progress session log at ${projectPath}`,
       ),
+  });
+
+// ---------------------------------------------------------------------------
+// Gap dispatch helpers
+// ---------------------------------------------------------------------------
+
+const GAP_TO_WORK_ITEM_TITLE: Record<string, string> = {
+  missing_config: "Initialize .factory/config.yaml",
+  missing_status: "Create .factory/status.json",
+  missing_spec: "Write project specification",
+  missing_context: "Write project context document",
+  empty_queue: "Populate work queue",
+  no_session_logs: "Start first work session",
+  stale_activity: "Resume stalled project",
+  missing_intent_contract: "Write intent contract",
+  missing_scenarios: "Write behavioral scenarios",
+  incomplete_config: "Complete project configuration",
+};
+
+const GAP_TO_WORK_ITEM_TYPE: Record<string, WorkItem["type"]> = {
+  missing_config: "spec_gap",
+  missing_status: "spec_gap",
+  missing_spec: "spec_gap",
+  missing_context: "spec_gap",
+  empty_queue: "enhancement",
+  no_session_logs: "enhancement",
+  stale_activity: "enhancement",
+  missing_intent_contract: "spec_gap",
+  missing_scenarios: "spec_gap",
+  incomplete_config: "enhancement",
+};
+
+function gapToWorkItem(gap: Gap): WorkItem {
+  return {
+    id: crypto.randomUUID(),
+    priority: gap.severity,
+    title: GAP_TO_WORK_ITEM_TITLE[gap.category] ?? `Address ${gap.category}`,
+    description: gap.message,
+    type: GAP_TO_WORK_ITEM_TYPE[gap.category] ?? "enhancement",
+    status: "pending",
+  };
+}
+
+export const dispatchWorkPackageEffect = (
+  projectPath: string,
+  gap: Gap,
+  allowedRoots?: ReadonlyArray<string>,
+): Effect.Effect<
+  DispatchWorkPackageResult,
+  FactoryWriteError | FactoryPathError | FactoryProtocolVersionError
+> =>
+  Effect.try({
+    try: (): DispatchWorkPackageResult => {
+      assertPathInsideAllowedRoot(projectPath, allowedRoots);
+
+      // Read existing queue (or create a fresh one)
+      const directory = readFactoryDirectory(projectPath);
+      const existingQueue: WorkQueue = directory.queue ?? {
+        version: 1,
+        generated: new Date().toISOString(),
+        generated_by: "podium-dispatch",
+        items: [],
+      };
+
+      // Idempotency: if a pending item for this gap category already exists,
+      // return it instead of creating a duplicate.
+      const expectedTitle = GAP_TO_WORK_ITEM_TITLE[gap.category];
+      const existing = existingQueue.items.find(
+        (item) => item.status === "pending" && item.title === expectedTitle,
+      );
+      if (existing) {
+        return { workItem: existing };
+      }
+
+      const workItem = gapToWorkItem(gap);
+      const updatedQueue: WorkQueue = {
+        ...existingQueue,
+        generated: new Date().toISOString(),
+        generated_by: "podium-dispatch",
+        items: [...existingQueue.items, workItem],
+      };
+
+      writeQueue(projectPath, updatedQueue);
+      return { workItem };
+    },
+    catch: (cause) => {
+      if (isProtocolVersionError(cause)) return cause;
+      if (isFactoryPathError(cause)) return cause;
+      return toWriteError(cause, `Failed to dispatch work package at ${projectPath}`);
+    },
   });
 
 export const listForgeSkillsEffect = (): Effect.Effect<ForgeSkillListResult, FactoryReadError> =>

@@ -29,6 +29,8 @@ import {
   GitStatusStreamEvent,
 } from "./git";
 import {
+  DispatchWorkPackageInput,
+  DispatchWorkPackageResult,
   FactoryDirectory,
   FactoryInitializeInput,
   FactoryPathError,
@@ -108,6 +110,7 @@ export const WS_METHODS = {
   factoryListForgeSkills: "factory.listForgeSkills",
   factoryRegenerateClaudeMd: "factory.regenerateClaudeMd",
   factoryGetGitIdentity: "factory.getGitIdentity",
+  factoryDispatchWorkPackage: "factory.dispatchWorkPackage",
   factoryScanProjects: "factory.scanProjects",
   factoryGetPodiumRoot: "factory.getPodiumRoot",
 
@@ -237,6 +240,12 @@ export const WsFactoryRegenerateClaudeMdRpc = Rpc.make(WS_METHODS.factoryRegener
 export const WsFactoryGetGitIdentityRpc = Rpc.make(WS_METHODS.factoryGetGitIdentity, {
   payload: Schema.Struct({}),
   success: GitIdentityResult,
+});
+
+export const WsFactoryDispatchWorkPackageRpc = Rpc.make(WS_METHODS.factoryDispatchWorkPackage, {
+  payload: DispatchWorkPackageInput,
+  success: DispatchWorkPackageResult,
+  error: Schema.Union([FactoryWriteError, FactoryPathError, FactoryProtocolVersionError]),
 });
 
 export const WsFactoryScanProjectsRpc = Rpc.make(WS_METHODS.factoryScanProjects, {
@@ -439,6 +448,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsFactoryListForgeSkillsRpc,
   WsFactoryRegenerateClaudeMdRpc,
   WsFactoryGetGitIdentityRpc,
+  WsFactoryDispatchWorkPackageRpc,
   WsFactoryScanProjectsRpc,
   WsFactoryGetPodiumRootRpc,
   WsShellOpenInEditorRpc,

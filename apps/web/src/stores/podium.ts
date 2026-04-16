@@ -12,6 +12,7 @@
 
 import {
   FACTORY_PROTOCOL_VERSION,
+  STALLED_THRESHOLD_MS,
   type EnvironmentId,
   type FactoryConfig,
   type ProjectId,
@@ -79,6 +80,14 @@ export interface IntakeDeps {
 // Store
 // ---------------------------------------------------------------------------
 
+export interface ScanOptions {
+  readonly overrideRoot?: string | undefined;
+  readonly externalRoots?: ReadonlyArray<string> | undefined;
+}
+
+/** Retained across calls so `refresh()` can replay the last scan config. */
+let _lastScanOptions: ScanOptions | null = null;
+
 interface PodiumState {
   readonly rootDir: string;
   readonly rootSource: "env" | "default" | "override" | null;
@@ -87,9 +96,11 @@ interface PodiumState {
   readonly error: string | null;
   readonly loadedAt: number | null;
   readonly selectedProjectPath: string | null;
+  readonly scanRoots: ReadonlyArray<string>;
+  readonly scanWarnings: ReadonlyArray<string>;
   readonly intakeStatus: "idle" | "loading" | "error";
   readonly intakeError: string | null;
-  readonly scan: (rootDir?: string) => Promise<ReadonlyArray<ScannedProject>>;
+  readonly scan: (options?: ScanOptions) => Promise<ReadonlyArray<ScannedProject>>;
   readonly refresh: () => Promise<ReadonlyArray<ScannedProject>>;
   readonly setSelectedProjectPath: (projectPath: string | null) => void;
   readonly intakeProjectFromPath: (rawPath: string, deps: IntakeDeps) => Promise<void>;
@@ -103,12 +114,18 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
   error: null,
   loadedAt: null,
   selectedProjectPath: null,
+  scanRoots: [],
+  scanWarnings: [],
   intakeStatus: "idle",
   intakeError: null,
 
-  scan: async (overrideRoot) => {
+  scan: async (options) => {
     const client = getWsRpcClient();
-    set({ status: "loading", error: null });
+    const overrideRoot = options?.overrideRoot;
+    const externalRoots = options?.externalRoots ?? [];
+    _lastScanOptions = options ?? null;
+
+    set({ status: "loading", error: null, scanWarnings: [] });
     try {
       // Resolve the root source tag from the server on the first call so the
       // UI can show "from env var" vs "default" without a second round-trip.
@@ -120,18 +137,67 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
         rootSource = "override";
       }
 
-      const result = await client.factory.scanProjects(
+      // ── Primary scan ────────────────────────────────────────────
+      const primaryResult = await client.factory.scanProjects(
         overrideRoot !== undefined ? { rootDir: overrideRoot } : {},
       );
+
+      const primaryRootDir = primaryResult.rootDir;
+      const scanRoots: string[] = [primaryRootDir];
+      const warnings: string[] = [];
+
+      // Dedup map — primary projects get first-writer advantage
+      const seen = new Map<string, ScannedProject>();
+      for (const p of primaryResult.projects) {
+        seen.set(normalizeCwd(p.path), p);
+      }
+
+      // ── External root scans (parallel) ──────────────────────────
+      const normalizedPrimary = normalizeCwd(primaryRootDir);
+      const uniqueExternalRoots = externalRoots.filter(
+        (root) => normalizeCwd(root) !== normalizedPrimary,
+      );
+
+      if (uniqueExternalRoots.length > 0) {
+        const results = await Promise.allSettled(
+          uniqueExternalRoots.map((root) =>
+            client.factory.scanProjects({ rootDir: root }),
+          ),
+        );
+
+        for (let i = 0; i < results.length; i++) {
+          const root = uniqueExternalRoots[i]!;
+          scanRoots.push(root);
+          const result = results[i]!;
+
+          if (result.status === "rejected") {
+            warnings.push(`Could not scan ${root}`);
+            continue;
+          }
+
+          for (const p of result.value.projects) {
+            const key = normalizeCwd(p.path);
+            if (!seen.has(key)) {
+              seen.set(key, p);
+            }
+            // Already seen from primary or earlier root — skip (first-writer wins)
+          }
+        }
+      }
+
+      const mergedProjects = Array.from(seen.values());
+
       set({
-        rootDir: result.rootDir,
+        rootDir: primaryRootDir,
         rootSource,
         status: "ready",
-        projects: result.projects,
+        projects: mergedProjects,
         error: null,
         loadedAt: Date.now(),
+        scanRoots,
+        scanWarnings: warnings,
       });
-      return result.projects;
+      return mergedProjects;
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Failed to scan projects";
       set({ status: "error", error: message });
@@ -139,7 +205,7 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
     }
   },
 
-  refresh: async () => get().scan(),
+  refresh: async () => get().scan(_lastScanOptions ?? undefined),
 
   setSelectedProjectPath: (projectPath) => {
     set({ selectedProjectPath: projectPath });
@@ -236,7 +302,7 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
 // Selectors
 // ---------------------------------------------------------------------------
 
-const STALLED_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
+// STALLED_THRESHOLD_MS imported from contracts
 
 export function selectTrackedProjects(state: PodiumState): ReadonlyArray<ScannedProject> {
   return [...state.projects]
@@ -260,7 +326,7 @@ export function selectDiscoveredProjects(
 export function selectStalledProjects(state: PodiumState): ReadonlyArray<ScannedProject> {
   const now = Date.now();
   return selectTrackedProjects(state).filter((p) => {
-    if (p.gapCount > 0) return true;
+    if (p.gaps.length > 0) return true;
     // Missing or unparseable lastActivity is treated as "don't know" — not
     // stalled. Otherwise freshly-initialized projects and legacy configs
     // would appear permanently stalled, contradicting spec scenario 1.
@@ -269,4 +335,19 @@ export function selectStalledProjects(state: PodiumState): ReadonlyArray<Scanned
     if (!Number.isFinite(last)) return false;
     return now - last > STALLED_THRESHOLD_MS;
   });
+}
+
+const GAP_SEVERITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+/** Sort projects by their highest-severity gap (worst first). */
+export function selectProjectsByGapSeverity(state: PodiumState): ReadonlyArray<ScannedProject> {
+  return selectTrackedProjects(state)
+    .filter((p) => p.gaps.length > 0)
+    .slice()
+    .sort((a, b) => {
+      const aMax = Math.min(...a.gaps.map((g) => GAP_SEVERITY_ORDER[g.severity] ?? 3));
+      const bMax = Math.min(...b.gaps.map((g) => GAP_SEVERITY_ORDER[g.severity] ?? 3));
+      if (aMax !== bMax) return aMax - bMax;
+      return b.gaps.length - a.gaps.length;
+    });
 }

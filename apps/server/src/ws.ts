@@ -26,6 +26,7 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery";
 import { ServerConfig } from "./config";
 import {
+  dispatchWorkPackageEffect,
   getGitIdentityEffect,
   getPodiumRootEffect,
   initializeFactoryEffect,
@@ -671,6 +672,12 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcEffect(WS_METHODS.factoryGetGitIdentity, getGitIdentityEffect(), {
           "rpc.aggregate": "factory",
         }),
+      [WS_METHODS.factoryDispatchWorkPackage]: (input) =>
+        observeRpcEffect(
+          WS_METHODS.factoryDispatchWorkPackage,
+          dispatchWorkPackageEffect(input.projectPath, input.gap, input.allowedRoots),
+          { "rpc.aggregate": "factory" },
+        ),
       [WS_METHODS.factoryScanProjects]: (input) =>
         observeRpcEffect(WS_METHODS.factoryScanProjects, scanProjectsEffect(input.rootDir), {
           "rpc.aggregate": "factory",
