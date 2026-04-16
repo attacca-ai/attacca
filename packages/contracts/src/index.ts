@@ -1,4 +1,5 @@
 export * from "./baseSchemas";
+export * from "./auth";
 export * from "./environment";
 export * from "./ipc";
 export * from "./terminal";
@@ -12,5 +13,6 @@ export * from "./git";
 export * from "./orchestration";
 export * from "./editor";
 export * from "./project";
+export * from "./filesystem";
 export * from "./rpc";
 export * from "./factory";

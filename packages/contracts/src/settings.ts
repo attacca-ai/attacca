@@ -28,35 +28,37 @@ export type AttaccaMode = typeof AttaccaMode.Type;
 export const DEFAULT_ATTACCA_MODE: AttaccaMode = "stand";
 
 export const ClientSettingsSchema = Schema.Struct({
-  confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
-  confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
-  diffWordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  diffWordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   sidebarProjectSortOrder: SidebarProjectSortOrder.pipe(
-    Schema.withDecodingDefault(() => DEFAULT_SIDEBAR_PROJECT_SORT_ORDER),
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_PROJECT_SORT_ORDER)),
   ),
   sidebarThreadSortOrder: SidebarThreadSortOrder.pipe(
-    Schema.withDecodingDefault(() => DEFAULT_SIDEBAR_THREAD_SORT_ORDER),
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_THREAD_SORT_ORDER)),
   ),
-  timestampFormat: TimestampFormat.pipe(Schema.withDecodingDefault(() => DEFAULT_TIMESTAMP_FORMAT)),
+  timestampFormat: TimestampFormat.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_TIMESTAMP_FORMAT)),
+  ),
   /**
    * Attacca identity — single source of truth for "who is the current user".
    * Bootstrapped from git config user.name on first launch, then user-editable.
    * Empty string means identity is unknown; downstream consumers treat it as
    * "no banner, no session attribution" rather than erroring.
    */
-  attaccaUser: Schema.String.pipe(Schema.withDecodingDefault(() => "")),
+  attaccaUser: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   /**
    * Which Attacca mode the app opens in. The __root.tsx bootstrap redirects
    * from "/" to the matching route on first load.
    */
-  defaultMode: AttaccaMode.pipe(Schema.withDecodingDefault(() => DEFAULT_ATTACCA_MODE)),
+  defaultMode: AttaccaMode.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_ATTACCA_MODE))),
   /**
    * Client-side override for the Podium scan root. When non-empty, Podium
    * passes this value to factory.scanProjects instead of letting the server
    * resolve via ATTACCA_PODIUM_ROOT or the default ~/projects. Empty string
    * means "use whatever the server reports".
    */
-  podiumScanRootOverride: Schema.String.pipe(Schema.withDecodingDefault(() => "")),
+  podiumScanRootOverride: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   /**
    * Parent directories the user has allowed Attacca to write `.factory/`
    * metadata into during external intake (C3). The server extends its
@@ -65,7 +67,7 @@ export const ClientSettingsSchema = Schema.Struct({
    * the defense-in-depth guard entirely. Entries are absolute paths.
    */
   externalIntakeRoots: Schema.Array(Schema.String).pipe(
-    Schema.withDecodingDefault(() => [] as ReadonlyArray<string>),
+    Schema.withDecodingDefault(Effect.succeed([] as ReadonlyArray<string>)),
   ),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
@@ -86,48 +88,51 @@ const makeBinaryPathSetting = (fallback: string) =>
         encode: (value) => Effect.succeed(value),
       }),
     ),
-    Schema.withDecodingDefault(() => fallback),
+    Schema.withDecodingDefault(Effect.succeed(fallback)),
   );
 
 export const CodexSettings = Schema.Struct({
-  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   binaryPath: makeBinaryPathSetting("codex"),
-  homePath: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
-  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
+  homePath: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
 });
 export type CodexSettings = typeof CodexSettings.Type;
 
 export const ClaudeSettings = Schema.Struct({
-  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   binaryPath: makeBinaryPathSetting("claude"),
-  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
+  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
 });
 export type ClaudeSettings = typeof ClaudeSettings.Type;
 
 export const ObservabilitySettings = Schema.Struct({
-  otlpTracesUrl: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
-  otlpMetricsUrl: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
+  otlpTracesUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  otlpMetricsUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
 });
 export type ObservabilitySettings = typeof ObservabilitySettings.Type;
 
 export const ServerSettings = Schema.Struct({
-  enableAssistantStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  enableAssistantStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   defaultThreadEnvMode: ThreadEnvMode.pipe(
-    Schema.withDecodingDefault(() => "local" as const satisfies ThreadEnvMode),
+    Schema.withDecodingDefault(Effect.succeed("local" as const satisfies ThreadEnvMode)),
   ),
+  addProjectBaseDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   textGenerationModelSelection: ModelSelection.pipe(
-    Schema.withDecodingDefault(() => ({
-      provider: "codex" as const,
-      model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
-    })),
+    Schema.withDecodingDefault(
+      Effect.succeed({
+        provider: "codex" as const,
+        model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
+      }),
+    ),
   ),
 
   // Provider specific settings
   providers: Schema.Struct({
-    codex: CodexSettings.pipe(Schema.withDecodingDefault(() => ({}))),
-    claudeAgent: ClaudeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
-  }).pipe(Schema.withDecodingDefault(() => ({}))),
-  observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    codex: CodexSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+    claudeAgent: ClaudeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  }).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
@@ -197,6 +202,7 @@ const ClaudeSettingsPatch = Schema.Struct({
 export const ServerSettingsPatch = Schema.Struct({
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
+  addProjectBaseDirectory: Schema.optionalKey(Schema.String),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   observability: Schema.optionalKey(
     Schema.Struct({

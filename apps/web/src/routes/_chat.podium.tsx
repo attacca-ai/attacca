@@ -42,7 +42,7 @@ import {
   type ScanOptions,
 } from "../stores/podium";
 import { useUiStateStore } from "../uiStateStore";
-import { getWsRpcClient } from "../wsRpcClient";
+import { getWsRpcClient } from "../rpc/wsRpcClient";
 
 function defaultConfigFor(project: ScannedProject): FactoryConfig {
   const displayName = project.displayName || project.slug;

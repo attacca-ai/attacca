@@ -11,11 +11,12 @@ import {
   deriveComposerSendState,
   hasServerAcknowledgedLocalDispatch,
   reconcileMountedTerminalThreadIds,
+  resolveSendEnvMode,
   shouldWriteThreadErrorToCurrentServerThread,
   waitForStartedServerThread,
 } from "./ChatView.logic";
 
-const localEnvironmentId = EnvironmentId.makeUnsafe("environment-local");
+const localEnvironmentId = EnvironmentId.make("environment-local");
 
 describe("deriveComposerSendState", () => {
   it("treats expired terminal pills as non-sendable content", () => {
@@ -25,7 +26,7 @@ describe("deriveComposerSendState", () => {
       terminalContexts: [
         {
           id: "ctx-expired",
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          threadId: ThreadId.make("thread-1"),
           terminalId: "default",
           terminalLabel: "Terminal 1",
           lineStart: 4,
@@ -49,7 +50,7 @@ describe("deriveComposerSendState", () => {
       terminalContexts: [
         {
           id: "ctx-expired",
-          threadId: ThreadId.makeUnsafe("thread-1"),
+          threadId: ThreadId.make("thread-1"),
           terminalId: "default",
           terminalLabel: "Terminal 1",
           lineStart: 4,
@@ -82,27 +83,35 @@ describe("buildExpiredTerminalContextToastCopy", () => {
   });
 });
 
+describe("resolveSendEnvMode", () => {
+  it("keeps worktree mode for git repositories", () => {
+    expect(resolveSendEnvMode({ requestedEnvMode: "worktree", isGitRepo: true })).toBe("worktree");
+  });
+
+  it("forces local mode for non-git repositories", () => {
+    expect(resolveSendEnvMode({ requestedEnvMode: "worktree", isGitRepo: false })).toBe("local");
+    expect(resolveSendEnvMode({ requestedEnvMode: "local", isGitRepo: false })).toBe("local");
+  });
+});
+
 describe("reconcileMountedTerminalThreadIds", () => {
   it("keeps previously mounted open threads and adds the active open thread", () => {
     expect(
       reconcileMountedTerminalThreadIds({
-        currentThreadIds: [
-          ThreadId.makeUnsafe("thread-hidden"),
-          ThreadId.makeUnsafe("thread-stale"),
-        ],
-        openThreadIds: [ThreadId.makeUnsafe("thread-hidden"), ThreadId.makeUnsafe("thread-active")],
-        activeThreadId: ThreadId.makeUnsafe("thread-active"),
+        currentThreadIds: [ThreadId.make("thread-hidden"), ThreadId.make("thread-stale")],
+        openThreadIds: [ThreadId.make("thread-hidden"), ThreadId.make("thread-active")],
+        activeThreadId: ThreadId.make("thread-active"),
         activeThreadTerminalOpen: true,
       }),
-    ).toEqual([ThreadId.makeUnsafe("thread-hidden"), ThreadId.makeUnsafe("thread-active")]);
+    ).toEqual([ThreadId.make("thread-hidden"), ThreadId.make("thread-active")]);
   });
 
   it("drops mounted threads once their terminal drawer is no longer open", () => {
     expect(
       reconcileMountedTerminalThreadIds({
-        currentThreadIds: [ThreadId.makeUnsafe("thread-closed")],
+        currentThreadIds: [ThreadId.make("thread-closed")],
         openThreadIds: [],
-        activeThreadId: ThreadId.makeUnsafe("thread-closed"),
+        activeThreadId: ThreadId.make("thread-closed"),
         activeThreadTerminalOpen: false,
       }),
     ).toEqual([]);
@@ -112,55 +121,47 @@ describe("reconcileMountedTerminalThreadIds", () => {
     expect(
       reconcileMountedTerminalThreadIds({
         currentThreadIds: [
-          ThreadId.makeUnsafe("thread-1"),
-          ThreadId.makeUnsafe("thread-2"),
-          ThreadId.makeUnsafe("thread-3"),
+          ThreadId.make("thread-1"),
+          ThreadId.make("thread-2"),
+          ThreadId.make("thread-3"),
         ],
         openThreadIds: [
-          ThreadId.makeUnsafe("thread-1"),
-          ThreadId.makeUnsafe("thread-2"),
-          ThreadId.makeUnsafe("thread-3"),
-          ThreadId.makeUnsafe("thread-4"),
+          ThreadId.make("thread-1"),
+          ThreadId.make("thread-2"),
+          ThreadId.make("thread-3"),
+          ThreadId.make("thread-4"),
         ],
-        activeThreadId: ThreadId.makeUnsafe("thread-4"),
+        activeThreadId: ThreadId.make("thread-4"),
         activeThreadTerminalOpen: true,
         maxHiddenThreadCount: 2,
       }),
-    ).toEqual([
-      ThreadId.makeUnsafe("thread-2"),
-      ThreadId.makeUnsafe("thread-3"),
-      ThreadId.makeUnsafe("thread-4"),
-    ]);
+    ).toEqual([ThreadId.make("thread-2"), ThreadId.make("thread-3"), ThreadId.make("thread-4")]);
   });
 
   it("moves the active thread to the end so it is treated as most recently used", () => {
     expect(
       reconcileMountedTerminalThreadIds({
         currentThreadIds: [
-          ThreadId.makeUnsafe("thread-a"),
-          ThreadId.makeUnsafe("thread-b"),
-          ThreadId.makeUnsafe("thread-c"),
+          ThreadId.make("thread-a"),
+          ThreadId.make("thread-b"),
+          ThreadId.make("thread-c"),
         ],
         openThreadIds: [
-          ThreadId.makeUnsafe("thread-a"),
-          ThreadId.makeUnsafe("thread-b"),
-          ThreadId.makeUnsafe("thread-c"),
+          ThreadId.make("thread-a"),
+          ThreadId.make("thread-b"),
+          ThreadId.make("thread-c"),
         ],
-        activeThreadId: ThreadId.makeUnsafe("thread-a"),
+        activeThreadId: ThreadId.make("thread-a"),
         activeThreadTerminalOpen: true,
         maxHiddenThreadCount: 2,
       }),
-    ).toEqual([
-      ThreadId.makeUnsafe("thread-b"),
-      ThreadId.makeUnsafe("thread-c"),
-      ThreadId.makeUnsafe("thread-a"),
-    ]);
+    ).toEqual([ThreadId.make("thread-b"), ThreadId.make("thread-c"), ThreadId.make("thread-a")]);
   });
 
   it("defaults to the hidden mounted terminal cap", () => {
     const currentThreadIds = Array.from(
       { length: MAX_HIDDEN_MOUNTED_TERMINAL_THREADS + 2 },
-      (_, index) => ThreadId.makeUnsafe(`thread-${index + 1}`),
+      (_, index) => ThreadId.make(`thread-${index + 1}`),
     );
 
     expect(
@@ -176,7 +177,7 @@ describe("reconcileMountedTerminalThreadIds", () => {
 
 describe("shouldWriteThreadErrorToCurrentServerThread", () => {
   it("routes errors to the active server thread when route and target match", () => {
-    const threadId = ThreadId.makeUnsafe("thread-1");
+    const threadId = ThreadId.make("thread-1");
     const routeThreadRef = scopeThreadRef(localEnvironmentId, threadId);
 
     expect(
@@ -192,7 +193,7 @@ describe("shouldWriteThreadErrorToCurrentServerThread", () => {
   });
 
   it("does not route draft-thread errors into server-backed state", () => {
-    const threadId = ThreadId.makeUnsafe("thread-1");
+    const threadId = ThreadId.make("thread-1");
 
     expect(
       shouldWriteThreadErrorToCurrentServerThread({
@@ -214,10 +215,10 @@ const makeThread = (input?: {
     completedAt: string | null;
   } | null;
 }): Thread => ({
-  id: input?.id ?? ThreadId.makeUnsafe("thread-1"),
+  id: input?.id ?? ThreadId.make("thread-1"),
   environmentId: localEnvironmentId,
   codexThreadId: null,
-  projectId: ProjectId.makeUnsafe("project-1"),
+  projectId: ProjectId.make("project-1"),
   title: "Thread",
   modelSelection: { provider: "codex" as const, model: "gpt-5.4" },
   runtimeMode: "full-access" as const,
@@ -242,7 +243,7 @@ const makeThread = (input?: {
 });
 
 function setStoreThreads(threads: ReadonlyArray<ReturnType<typeof makeThread>>) {
-  const projectId = ProjectId.makeUnsafe("project-1");
+  const projectId = ProjectId.make("project-1");
   const environmentState: EnvironmentState = {
     projectIds: [projectId],
     projectById: {
@@ -355,12 +356,12 @@ afterEach(() => {
 
 describe("waitForStartedServerThread", () => {
   it("resolves immediately when the thread is already started", async () => {
-    const threadId = ThreadId.makeUnsafe("thread-started");
+    const threadId = ThreadId.make("thread-started");
     setStoreThreads([
       makeThread({
         id: threadId,
         latestTurn: {
-          turnId: TurnId.makeUnsafe("turn-started"),
+          turnId: TurnId.make("turn-started"),
           state: "running",
           requestedAt: "2026-03-29T00:00:01.000Z",
           startedAt: "2026-03-29T00:00:01.000Z",
@@ -375,7 +376,7 @@ describe("waitForStartedServerThread", () => {
   });
 
   it("waits for the thread to start via subscription updates", async () => {
-    const threadId = ThreadId.makeUnsafe("thread-wait");
+    const threadId = ThreadId.make("thread-wait");
     setStoreThreads([makeThread({ id: threadId })]);
 
     const promise = waitForStartedServerThread(scopeThreadRef(localEnvironmentId, threadId), 500);
@@ -384,7 +385,7 @@ describe("waitForStartedServerThread", () => {
       makeThread({
         id: threadId,
         latestTurn: {
-          turnId: TurnId.makeUnsafe("turn-started"),
+          turnId: TurnId.make("turn-started"),
           state: "running",
           requestedAt: "2026-03-29T00:00:01.000Z",
           startedAt: "2026-03-29T00:00:01.000Z",
@@ -397,7 +398,7 @@ describe("waitForStartedServerThread", () => {
   });
 
   it("handles the thread starting between the initial read and subscription setup", async () => {
-    const threadId = ThreadId.makeUnsafe("thread-race");
+    const threadId = ThreadId.make("thread-race");
     setStoreThreads([makeThread({ id: threadId })]);
 
     const originalSubscribe = useStore.subscribe.bind(useStore);
@@ -409,7 +410,7 @@ describe("waitForStartedServerThread", () => {
           makeThread({
             id: threadId,
             latestTurn: {
-              turnId: TurnId.makeUnsafe("turn-race"),
+              turnId: TurnId.make("turn-race"),
               state: "running",
               requestedAt: "2026-03-29T00:00:01.000Z",
               startedAt: "2026-03-29T00:00:01.000Z",
@@ -429,7 +430,7 @@ describe("waitForStartedServerThread", () => {
   it("returns false after the timeout when the thread never starts", async () => {
     vi.useFakeTimers();
 
-    const threadId = ThreadId.makeUnsafe("thread-timeout");
+    const threadId = ThreadId.make("thread-timeout");
     setStoreThreads([makeThread({ id: threadId })]);
     const promise = waitForStartedServerThread(scopeThreadRef(localEnvironmentId, threadId), 500);
 
@@ -440,9 +441,9 @@ describe("waitForStartedServerThread", () => {
 });
 
 describe("hasServerAcknowledgedLocalDispatch", () => {
-  const projectId = ProjectId.makeUnsafe("project-1");
+  const projectId = ProjectId.make("project-1");
   const previousLatestTurn = {
-    turnId: TurnId.makeUnsafe("turn-1"),
+    turnId: TurnId.make("turn-1"),
     state: "completed" as const,
     requestedAt: "2026-03-29T00:00:00.000Z",
     startedAt: "2026-03-29T00:00:01.000Z",
@@ -460,7 +461,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
 
   it("does not clear local dispatch before server state changes", () => {
     const localDispatch = createLocalDispatchSnapshot({
-      id: ThreadId.makeUnsafe("thread-1"),
+      id: ThreadId.make("thread-1"),
       environmentId: localEnvironmentId,
       codexThreadId: null,
       projectId,
@@ -497,7 +498,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
 
   it("clears local dispatch when a new turn is already settled", () => {
     const localDispatch = createLocalDispatchSnapshot({
-      id: ThreadId.makeUnsafe("thread-1"),
+      id: ThreadId.make("thread-1"),
       environmentId: localEnvironmentId,
       codexThreadId: null,
       projectId,
@@ -525,7 +526,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
         phase: "ready",
         latestTurn: {
           ...previousLatestTurn,
-          turnId: TurnId.makeUnsafe("turn-2"),
+          turnId: TurnId.make("turn-2"),
           requestedAt: "2026-03-29T00:01:00.000Z",
           startedAt: "2026-03-29T00:01:01.000Z",
           completedAt: "2026-03-29T00:01:30.000Z",
@@ -541,9 +542,145 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
     ).toBe(true);
   });
 
+  it("does not clear local dispatch while the session is running a newer turn than latestTurn", () => {
+    const localDispatch = createLocalDispatchSnapshot({
+      id: ThreadId.make("thread-1"),
+      environmentId: localEnvironmentId,
+      codexThreadId: null,
+      projectId,
+      title: "Thread",
+      modelSelection: { provider: "codex", model: "gpt-5.4" },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      session: previousSession,
+      messages: [],
+      proposedPlans: [],
+      error: null,
+      createdAt: "2026-03-29T00:00:00.000Z",
+      archivedAt: null,
+      updatedAt: "2026-03-29T00:00:10.000Z",
+      latestTurn: previousLatestTurn,
+      branch: null,
+      worktreePath: null,
+      turnDiffSummaries: [],
+      activities: [],
+    });
+
+    expect(
+      hasServerAcknowledgedLocalDispatch({
+        localDispatch,
+        phase: "running",
+        latestTurn: previousLatestTurn,
+        session: {
+          ...previousSession,
+          status: "running",
+          orchestrationStatus: "running",
+          activeTurnId: TurnId.make("turn-2"),
+          updatedAt: "2026-03-29T00:01:00.000Z",
+        },
+        hasPendingApproval: false,
+        hasPendingUserInput: false,
+        threadError: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("does not clear local dispatch while the session is running but latestTurn has not advanced yet", () => {
+    const localDispatch = createLocalDispatchSnapshot({
+      id: ThreadId.make("thread-1"),
+      environmentId: localEnvironmentId,
+      codexThreadId: null,
+      projectId,
+      title: "Thread",
+      modelSelection: { provider: "codex", model: "gpt-5.4" },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      session: previousSession,
+      messages: [],
+      proposedPlans: [],
+      error: null,
+      createdAt: "2026-03-29T00:00:00.000Z",
+      archivedAt: null,
+      updatedAt: "2026-03-29T00:00:10.000Z",
+      latestTurn: previousLatestTurn,
+      branch: null,
+      worktreePath: null,
+      turnDiffSummaries: [],
+      activities: [],
+    });
+
+    expect(
+      hasServerAcknowledgedLocalDispatch({
+        localDispatch,
+        phase: "running",
+        latestTurn: previousLatestTurn,
+        session: {
+          ...previousSession,
+          status: "running",
+          orchestrationStatus: "running",
+          activeTurnId: undefined,
+          updatedAt: "2026-03-29T00:01:00.000Z",
+        },
+        hasPendingApproval: false,
+        hasPendingUserInput: false,
+        threadError: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("clears local dispatch once the running latestTurn matches the active session turn", () => {
+    const localDispatch = createLocalDispatchSnapshot({
+      id: ThreadId.make("thread-1"),
+      environmentId: localEnvironmentId,
+      codexThreadId: null,
+      projectId,
+      title: "Thread",
+      modelSelection: { provider: "codex", model: "gpt-5.4" },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      session: previousSession,
+      messages: [],
+      proposedPlans: [],
+      error: null,
+      createdAt: "2026-03-29T00:00:00.000Z",
+      archivedAt: null,
+      updatedAt: "2026-03-29T00:00:10.000Z",
+      latestTurn: previousLatestTurn,
+      branch: null,
+      worktreePath: null,
+      turnDiffSummaries: [],
+      activities: [],
+    });
+
+    expect(
+      hasServerAcknowledgedLocalDispatch({
+        localDispatch,
+        phase: "running",
+        latestTurn: {
+          ...previousLatestTurn,
+          turnId: TurnId.make("turn-2"),
+          state: "running",
+          requestedAt: "2026-03-29T00:01:00.000Z",
+          startedAt: "2026-03-29T00:01:01.000Z",
+          completedAt: null,
+        },
+        session: {
+          ...previousSession,
+          status: "running",
+          orchestrationStatus: "running",
+          activeTurnId: TurnId.make("turn-2"),
+          updatedAt: "2026-03-29T00:01:01.000Z",
+        },
+        hasPendingApproval: false,
+        hasPendingUserInput: false,
+        threadError: null,
+      }),
+    ).toBe(true);
+  });
+
   it("clears local dispatch when the session changes without an observed running phase", () => {
     const localDispatch = createLocalDispatchSnapshot({
-      id: ThreadId.makeUnsafe("thread-1"),
+      id: ThreadId.make("thread-1"),
       environmentId: localEnvironmentId,
       codexThreadId: null,
       projectId,

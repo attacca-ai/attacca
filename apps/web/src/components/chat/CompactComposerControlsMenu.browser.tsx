@@ -15,10 +15,10 @@ import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { TraitsMenuContent } from "./TraitsPicker";
 import { useComposerDraftStore } from "../../composerDraftStore";
 
-const LOCAL_ENVIRONMENT_ID = EnvironmentId.makeUnsafe("environment-local");
+const LOCAL_ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 
 async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: string }) {
-  const threadId = ThreadId.makeUnsafe("thread-compact-menu");
+  const threadId = ThreadId.make("thread-compact-menu");
   const threadRef = scopeThreadRef(LOCAL_ENVIRONMENT_ID, threadId);
   const threadKey = scopedThreadKey(threadRef);
   const provider = props?.modelSelection?.provider ?? "claudeAgent";
@@ -123,6 +123,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
     <CompactComposerControlsMenu
       activePlan={false}
       interactionMode="default"
+      planSidebarLabel="Plan"
       planSidebarOpen={false}
       runtimeMode="approval-required"
       traitsMenuContent={
@@ -138,7 +139,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
       }
       onToggleInteractionMode={vi.fn()}
       onTogglePlanSidebar={vi.fn()}
-      onToggleRuntimeMode={vi.fn()}
+      onRuntimeModeChange={vi.fn()}
     />,
     { container: host },
   );

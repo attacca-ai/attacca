@@ -21,7 +21,7 @@ import {
 } from "@t3tools/contracts";
 import { create } from "zustand";
 
-import { getWsRpcClient } from "../wsRpcClient";
+import { getWsRpcClient } from "../rpc/wsRpcClient";
 
 // ---------------------------------------------------------------------------
 // Helpers shared with _chat.podium.tsx

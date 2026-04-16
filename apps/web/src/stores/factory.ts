@@ -18,7 +18,7 @@ import {
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-import { getWsRpcClient } from "../wsRpcClient";
+import { getWsRpcClient } from "../rpc/wsRpcClient";
 
 const FACTORY_STORE_STORAGE_KEY = "attacca:factory-store:v1";
 

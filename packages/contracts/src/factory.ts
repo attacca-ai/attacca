@@ -7,7 +7,7 @@
  * See: docs/factory-protocol.md
  */
 
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 // ---------------------------------------------------------------------------
 // Protocol version
@@ -119,7 +119,7 @@ export const FactoryConfig = Schema.Struct({
   phase: Phase,
   track: ProjectTrack,
   version: Schema.Number.pipe(
-    Schema.withDecodingDefault(() => FACTORY_PROTOCOL_VERSION),
+    Schema.withDecodingDefault(Effect.succeed(FACTORY_PROTOCOL_VERSION)),
   ),
   stack: Schema.optional(Schema.Array(Schema.String)),
   repo: Schema.optional(Schema.String),
