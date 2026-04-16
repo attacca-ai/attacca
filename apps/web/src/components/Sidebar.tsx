@@ -11,6 +11,7 @@ import {
   TerminalIcon,
   TriangleAlertIcon,
 } from "lucide-react";
+import ModeSwitcher from "./ModeSwitcher";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { autoAnimate } from "@formkit/auto-animate";
 import React, { useCallback, useEffect, memo, useMemo, useRef, useState } from "react";
@@ -2965,6 +2966,7 @@ export default function Sidebar() {
   return (
     <>
       <SidebarChromeHeader isElectron={isElectron} />
+      {!isOnSettings ? <ModeSwitcher /> : null}
 
       {isOnSettings ? (
         <SettingsSidebarNav pathname={pathname} />

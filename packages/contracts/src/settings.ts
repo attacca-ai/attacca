@@ -23,6 +23,10 @@ export const SidebarThreadSortOrder = Schema.Literals(["updated_at", "created_at
 export type SidebarThreadSortOrder = typeof SidebarThreadSortOrder.Type;
 export const DEFAULT_SIDEBAR_THREAD_SORT_ORDER: SidebarThreadSortOrder = "updated_at";
 
+export const AttaccaMode = Schema.Literals(["stand", "podium", "arco"]);
+export type AttaccaMode = typeof AttaccaMode.Type;
+export const DEFAULT_ATTACCA_MODE: AttaccaMode = "stand";
+
 export const ClientSettingsSchema = Schema.Struct({
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -35,6 +39,35 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   timestampFormat: TimestampFormat.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_TIMESTAMP_FORMAT)),
+  ),
+  /**
+   * Attacca identity — single source of truth for "who is the current user".
+   * Bootstrapped from git config user.name on first launch, then user-editable.
+   * Empty string means identity is unknown; downstream consumers treat it as
+   * "no banner, no session attribution" rather than erroring.
+   */
+  attaccaUser: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /**
+   * Which Attacca mode the app opens in. The __root.tsx bootstrap redirects
+   * from "/" to the matching route on first load.
+   */
+  defaultMode: AttaccaMode.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_ATTACCA_MODE))),
+  /**
+   * Client-side override for the Podium scan root. When non-empty, Podium
+   * passes this value to factory.scanProjects instead of letting the server
+   * resolve via ATTACCA_PODIUM_ROOT or the default ~/projects. Empty string
+   * means "use whatever the server reports".
+   */
+  podiumScanRootOverride: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /**
+   * Parent directories the user has allowed Attacca to write `.factory/`
+   * metadata into during external intake (C3). The server extends its
+   * scan-root path-containment check with this list on every write RPC
+   * so intake can land outside the Podium scan root without bypassing
+   * the defense-in-depth guard entirely. Entries are absolute paths.
+   */
+  externalIntakeRoots: Schema.Array(Schema.String).pipe(
+    Schema.withDecodingDefault(Effect.succeed([] as ReadonlyArray<string>)),
   ),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;

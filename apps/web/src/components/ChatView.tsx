@@ -94,9 +94,24 @@ import { useCommandPaletteStore } from "../commandPaletteStore";
 import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import { BranchToolbar } from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
+import FactoryPanel from "./FactoryPanel";
+import ForgeSkillMenu from "./ForgeSkillMenu";
 import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
-import { ChevronDownIcon } from "lucide-react";
+import {
+  BotIcon,
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CircleAlertIcon,
+  FactoryIcon,
+  ListTodoIcon,
+  LockIcon,
+  LockOpenIcon,
+  XIcon,
+} from "lucide-react";
+import { Button } from "./ui/button";
+import { Separator } from "./ui/separator";
 import { cn, randomUUID } from "~/lib/utils";
 import { toastManager } from "./ui/toast";
 import { decodeProjectScriptKeybindingRule } from "~/lib/projectScriptKeybindings";
@@ -675,6 +690,9 @@ export default function ChatView(props: ChatViewProps) {
   const [pendingUserInputQuestionIndexByRequestId, setPendingUserInputQuestionIndexByRequestId] =
     useState<Record<string, number>>({});
   const [planSidebarOpen, setPlanSidebarOpen] = useState(false);
+  const [factoryPanelOpen, setFactoryPanelOpen] = useState(false);
+  const [isComposerFooterCompact, setIsComposerFooterCompact] = useState(false);
+  const [isComposerPrimaryActionsCompact, setIsComposerPrimaryActionsCompact] = useState(false);
   // Tracks whether the user explicitly dismissed the sidebar for the active turn.
   const planSidebarDismissedForTurnRef = useRef<string | null>(null);
   // When set, the thread-change reset effect will open the sidebar instead of closing it.
@@ -1893,10 +1911,19 @@ export default function ChatView(props: ChatViewProps) {
           activePlan?.turnId ?? sidebarProposedPlan?.turnId ?? "__dismissed__";
       } else {
         planSidebarDismissedForTurnRef.current = null;
+        setFactoryPanelOpen(false);
       }
       return !open;
     });
   }, [activePlan?.turnId, sidebarProposedPlan?.turnId]);
+  const toggleFactoryPanel = useCallback(() => {
+    setFactoryPanelOpen((open) => {
+      if (!open) {
+        setPlanSidebarOpen(false);
+      }
+      return !open;
+    });
+  }, []);
 
   const persistThreadSettingsForNextTurn = useCallback(
     async (input: {
@@ -3409,6 +3436,14 @@ export default function ChatView(props: ChatViewProps) {
               planSidebarDismissedForTurnRef.current =
                 activePlan?.turnId ?? sidebarProposedPlan?.turnId ?? "__dismissed__";
             }}
+          />
+        ) : null}
+
+        {/* Factory panel */}
+        {factoryPanelOpen ? (
+          <FactoryPanel
+            projectPath={activeProject?.cwd ?? null}
+            onClose={() => setFactoryPanelOpen(false)}
           />
         ) : null}
       </div>

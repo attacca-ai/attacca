@@ -33,6 +33,18 @@ import {
 import { useStore } from "../store";
 import { useUiStateStore } from "../uiStateStore";
 import { syncBrowserChromeTheme } from "../hooks/useTheme";
+import { useTerminalStateStore } from "../terminalStateStore";
+import {
+  bootstrapAttaccaUserIfMissing,
+  migrateLocalSettingsToServer,
+} from "../hooks/useSettings";
+import { providerQueryKeys } from "../lib/providerReactQuery";
+import { projectQueryKeys } from "../lib/projectReactQuery";
+import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
+import { deriveOrchestrationBatchEffects } from "../orchestrationEventEffects";
+import { createOrchestrationRecoveryCoordinator } from "../orchestrationRecovery";
+import { deriveReplayRetryDecision } from "../orchestrationRecovery";
+import { selectThreadByRef } from "../store";
 import {
   ensureEnvironmentConnectionBootstrapped,
   getPrimaryEnvironmentConnection,
@@ -215,6 +227,8 @@ function EventRouter() {
 
     updatePrimaryEnvironmentDescriptor(payload.environment);
     setActiveEnvironmentId(payload.environment.environmentId);
+    migrateLocalSettingsToServer();
+    void bootstrapAttaccaUserIfMissing();
     void (async () => {
       await ensureEnvironmentConnectionBootstrapped(payload.environment.environmentId);
       if (disposedRef.current) {

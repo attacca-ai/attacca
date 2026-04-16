@@ -61,7 +61,7 @@ import {
 import { useTerminalStateStore } from "~/terminalStateStore";
 import { useUiStateStore } from "~/uiStateStore";
 import { WsTransport } from "../../rpc/wsTransport";
-import { createWsRpcClient, type WsRpcClient } from "../../rpc/wsRpcClient";
+import { createWsRpcClient, setGlobalWsRpcClient, type WsRpcClient } from "../../rpc/wsRpcClient";
 
 type EnvironmentServiceState = {
   readonly queryClient: QueryClient;
@@ -666,7 +666,10 @@ function createPrimaryEnvironmentClient(
     );
   }
 
-  return createWsRpcClient(new WsTransport(wsBaseUrl));
+  const client = createWsRpcClient(new WsTransport(wsBaseUrl));
+  // Expose to Attacca stores (factory, podium) that need direct RPC access.
+  setGlobalWsRpcClient(client);
+  return client;
 }
 
 function createSavedEnvironmentClient(

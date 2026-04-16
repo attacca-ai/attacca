@@ -563,6 +563,10 @@ describe("wsApi", () => {
       sidebarProjectSortOrder: "manual",
       sidebarThreadSortOrder: "created_at",
       timestampFormat: "24-hour",
+      attaccaUser: "",
+      defaultMode: "stand",
+      podiumScanRootOverride: "",
+      externalIntakeRoots: [],
     });
     await api.persistence.getSavedEnvironmentRegistry();
     await api.persistence.setSavedEnvironmentRegistry([]);
@@ -600,6 +604,10 @@ describe("wsApi", () => {
       sidebarProjectSortOrder: "manual",
       sidebarThreadSortOrder: "created_at",
       timestampFormat: "24-hour",
+      attaccaUser: "",
+      defaultMode: "stand",
+      podiumScanRootOverride: "",
+      externalIntakeRoots: [],
     });
     await api.persistence.setSavedEnvironmentRegistry([
       {

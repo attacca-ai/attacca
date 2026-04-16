@@ -1483,6 +1483,110 @@ export function GeneralSettingsPanel() {
   );
 }
 
+const ATTACCA_MODE_LABELS = {
+  stand: "Stand",
+  podium: "Podium",
+  arco: "Arco (coming soon)",
+} as const;
+
+export function StandSettingsPanel() {
+  const attaccaUser = useSettings((s) => s.attaccaUser);
+  const defaultMode = useSettings((s) => s.defaultMode);
+  const podiumScanRootOverride = useSettings((s) => s.podiumScanRootOverride);
+  const externalIntakeRoots = useSettings((s) => s.externalIntakeRoots);
+  const { updateSettings } = useUpdateSettings();
+
+  return (
+    <SettingsPageContainer>
+      <SettingsSection title="Identity">
+        <SettingsRow
+          title="Your Attacca identity"
+          description="Single source of truth for who you are, used as the session log author and compared against each project's assigned_dev. Bootstrapped from git config on first launch; override any time."
+          control={
+            <Input
+              value={attaccaUser}
+              onChange={(event) => updateSettings({ attaccaUser: event.target.value })}
+              placeholder="your-name"
+              className="w-56"
+            />
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Mode">
+        <SettingsRow
+          title="Default mode on startup"
+          description="Which Attacca mode the app opens in when you launch it at the root URL. The mode switcher in the sidebar still lets you move between modes at any time."
+          control={
+            <Select
+              value={defaultMode}
+              onValueChange={(value) => {
+                if (value === "stand" || value === "podium" || value === "arco") {
+                  updateSettings({ defaultMode: value });
+                }
+              }}
+            >
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectPopup>
+                <SelectItem value="stand">{ATTACCA_MODE_LABELS.stand}</SelectItem>
+                <SelectItem value="podium">{ATTACCA_MODE_LABELS.podium}</SelectItem>
+                <SelectItem value="arco" disabled>
+                  {ATTACCA_MODE_LABELS.arco}
+                </SelectItem>
+              </SelectPopup>
+            </Select>
+          }
+        />
+        <SettingsRow
+          title="Podium scan root override"
+          description="Absolute path Podium should scan for projects. Leave blank to use the server-resolved default (ATTACCA_PODIUM_ROOT env var, or ~/projects)."
+          control={
+            <Input
+              value={podiumScanRootOverride}
+              onChange={(event) => updateSettings({ podiumScanRootOverride: event.target.value })}
+              placeholder="(server default)"
+              className="w-72"
+            />
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Intake roots">
+        {externalIntakeRoots.length === 0 ? (
+          <div className="px-4 py-3 text-xs text-muted-foreground sm:px-5">
+            No external intake roots configured. Roots are added automatically when you intake a project from outside the Podium scan root.
+          </div>
+        ) : (
+          externalIntakeRoots.map((root) => (
+            <div
+              key={root}
+              className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 first:border-t-0 sm:px-5"
+            >
+              <code className="min-w-0 truncate text-xs text-foreground/80">{root}</code>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 shrink-0 p-0"
+                aria-label={`Remove ${root}`}
+                onClick={() => {
+                  updateSettings({
+                    externalIntakeRoots: externalIntakeRoots.filter((r) => r !== root),
+                  });
+                }}
+              >
+                <XIcon className="size-3" />
+              </Button>
+            </div>
+          ))
+        )}
+      </SettingsSection>
+    </SettingsPageContainer>
+  );
+}
+
 export function ArchivedThreadsPanel() {
   const projects = useStore(useShallow(selectProjectsAcrossEnvironments));
   const threads = useStore(useShallow(selectThreadShellsAcrossEnvironments));

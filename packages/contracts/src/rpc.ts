@@ -30,6 +30,26 @@ import {
   GitStatusResult,
   GitStatusStreamEvent,
 } from "./git";
+import {
+  DispatchWorkPackageInput,
+  DispatchWorkPackageResult,
+  FactoryDirectory,
+  FactoryInitializeInput,
+  FactoryPathError,
+  FactoryProjectPathInput,
+  FactoryProtocolVersionError,
+  FactoryReadError,
+  FactoryReadSummaryResult,
+  FactoryRegenerateClaudeMdResult,
+  FactoryWriteError,
+  FactoryWriteQueueInput,
+  FactoryWriteSessionLogInput,
+  ForgeSkillListResult,
+  GitIdentityResult,
+  PodiumRootResult,
+  ScanProjectsInput,
+  ScanProjectsResult,
+} from "./factory";
 import { KeybindingsConfigError } from "./keybindings";
 import {
   ClientOrchestrationCommand,
@@ -80,6 +100,19 @@ export const WS_METHODS = {
   projectsRemove: "projects.remove",
   projectsSearchEntries: "projects.searchEntries",
   projectsWriteFile: "projects.writeFile",
+
+  // .factory/ protocol (Stand mode)
+  factoryRead: "factory.read",
+  factoryReadSummary: "factory.readSummary",
+  factoryInitialize: "factory.initialize",
+  factoryWriteQueue: "factory.writeQueue",
+  factoryWriteSessionLog: "factory.writeSessionLog",
+  factoryListForgeSkills: "factory.listForgeSkills",
+  factoryRegenerateClaudeMd: "factory.regenerateClaudeMd",
+  factoryGetGitIdentity: "factory.getGitIdentity",
+  factoryDispatchWorkPackage: "factory.dispatchWorkPackage",
+  factoryScanProjects: "factory.scanProjects",
+  factoryGetPodiumRoot: "factory.getPodiumRoot",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -162,6 +195,71 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
   payload: ProjectWriteFileInput,
   success: ProjectWriteFileResult,
   error: ProjectWriteFileError,
+});
+
+export const WsFactoryReadRpc = Rpc.make(WS_METHODS.factoryRead, {
+  payload: FactoryProjectPathInput,
+  success: FactoryDirectory,
+  error: Schema.Union([FactoryReadError, FactoryProtocolVersionError]),
+});
+
+export const WsFactoryReadSummaryRpc = Rpc.make(WS_METHODS.factoryReadSummary, {
+  payload: FactoryProjectPathInput,
+  success: FactoryReadSummaryResult,
+  error: Schema.Union([FactoryReadError, FactoryProtocolVersionError]),
+});
+
+export const WsFactoryInitializeRpc = Rpc.make(WS_METHODS.factoryInitialize, {
+  payload: FactoryInitializeInput,
+  error: Schema.Union([FactoryWriteError, FactoryPathError]),
+});
+
+export const WsFactoryWriteQueueRpc = Rpc.make(WS_METHODS.factoryWriteQueue, {
+  payload: FactoryWriteQueueInput,
+  error: Schema.Union([FactoryWriteError, FactoryPathError]),
+});
+
+export const WsFactoryWriteSessionLogRpc = Rpc.make(WS_METHODS.factoryWriteSessionLog, {
+  payload: FactoryWriteSessionLogInput,
+  error: Schema.Union([FactoryWriteError, FactoryPathError]),
+});
+
+export const WsFactoryListForgeSkillsRpc = Rpc.make(WS_METHODS.factoryListForgeSkills, {
+  payload: Schema.Struct({}),
+  success: ForgeSkillListResult,
+  error: FactoryReadError,
+});
+
+export const WsFactoryRegenerateClaudeMdRpc = Rpc.make(WS_METHODS.factoryRegenerateClaudeMd, {
+  payload: FactoryProjectPathInput,
+  success: FactoryRegenerateClaudeMdResult,
+  error: Schema.Union([
+    FactoryWriteError,
+    FactoryProtocolVersionError,
+    FactoryPathError,
+  ]),
+});
+
+export const WsFactoryGetGitIdentityRpc = Rpc.make(WS_METHODS.factoryGetGitIdentity, {
+  payload: Schema.Struct({}),
+  success: GitIdentityResult,
+});
+
+export const WsFactoryDispatchWorkPackageRpc = Rpc.make(WS_METHODS.factoryDispatchWorkPackage, {
+  payload: DispatchWorkPackageInput,
+  success: DispatchWorkPackageResult,
+  error: Schema.Union([FactoryWriteError, FactoryPathError, FactoryProtocolVersionError]),
+});
+
+export const WsFactoryScanProjectsRpc = Rpc.make(WS_METHODS.factoryScanProjects, {
+  payload: ScanProjectsInput,
+  success: ScanProjectsResult,
+  error: FactoryReadError,
+});
+
+export const WsFactoryGetPodiumRootRpc = Rpc.make(WS_METHODS.factoryGetPodiumRoot, {
+  payload: Schema.Struct({}),
+  success: PodiumRootResult,
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
@@ -359,6 +457,17 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsWriteFileRpc,
+  WsFactoryReadRpc,
+  WsFactoryReadSummaryRpc,
+  WsFactoryInitializeRpc,
+  WsFactoryWriteQueueRpc,
+  WsFactoryWriteSessionLogRpc,
+  WsFactoryListForgeSkillsRpc,
+  WsFactoryRegenerateClaudeMdRpc,
+  WsFactoryGetGitIdentityRpc,
+  WsFactoryDispatchWorkPackageRpc,
+  WsFactoryScanProjectsRpc,
+  WsFactoryGetPodiumRootRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsSubscribeGitStatusRpc,

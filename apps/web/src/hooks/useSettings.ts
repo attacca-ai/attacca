@@ -15,10 +15,18 @@ import {
   type ClientSettings,
   DEFAULT_CLIENT_SETTINGS,
   DEFAULT_UNIFIED_SETTINGS,
+  SidebarProjectSortOrder,
+  SidebarThreadSortOrder,
+  ThreadEnvMode,
+  TimestampFormat,
   UnifiedSettings,
 } from "@t3tools/contracts/settings";
+import { ModelSelection } from "@t3tools/contracts";
 import { ensureLocalApi } from "~/localApi";
-import { Struct } from "effect";
+import { getWsRpcClient } from "~/rpc/wsRpcClient";
+import { normalizeCustomModelSlugs } from "~/modelSelection";
+import { Predicate, Schema, Struct } from "effect";
+import { DeepMutable } from "effect/Types";
 import { deepMerge } from "@t3tools/shared/Struct";
 import { applySettingsUpdated, getServerConfig, useServerSettings } from "~/rpc/serverState";
 
@@ -176,6 +184,171 @@ export function useUpdateSettings() {
     updateSettings,
     resetSettings,
   };
+}
+
+// ── One-time migration from localStorage ─────────────────────────────
+
+export function buildLegacyServerSettingsMigrationPatch(legacySettings: Record<string, unknown>) {
+  const patch: DeepMutable<ServerSettingsPatch> = {};
+
+  if (Predicate.isBoolean(legacySettings.enableAssistantStreaming)) {
+    patch.enableAssistantStreaming = legacySettings.enableAssistantStreaming;
+  }
+
+  if (Schema.is(ThreadEnvMode)(legacySettings.defaultThreadEnvMode)) {
+    patch.defaultThreadEnvMode = legacySettings.defaultThreadEnvMode;
+  }
+
+  if (Schema.is(ModelSelection)(legacySettings.textGenerationModelSelection)) {
+    patch.textGenerationModelSelection = legacySettings.textGenerationModelSelection;
+  }
+
+  if (typeof legacySettings.codexBinaryPath === "string") {
+    patch.providers ??= {};
+    patch.providers.codex ??= {};
+    patch.providers.codex.binaryPath = legacySettings.codexBinaryPath;
+  }
+
+  if (typeof legacySettings.codexHomePath === "string") {
+    patch.providers ??= {};
+    patch.providers.codex ??= {};
+    patch.providers.codex.homePath = legacySettings.codexHomePath;
+  }
+
+  if (Array.isArray(legacySettings.customCodexModels)) {
+    patch.providers ??= {};
+    patch.providers.codex ??= {};
+    patch.providers.codex.customModels = normalizeCustomModelSlugs(
+      legacySettings.customCodexModels,
+      new Set<string>(),
+      "codex",
+    );
+  }
+
+  if (Predicate.isString(legacySettings.claudeBinaryPath)) {
+    patch.providers ??= {};
+    patch.providers.claudeAgent ??= {};
+    patch.providers.claudeAgent.binaryPath = legacySettings.claudeBinaryPath;
+  }
+
+  if (Array.isArray(legacySettings.customClaudeModels)) {
+    patch.providers ??= {};
+    patch.providers.claudeAgent ??= {};
+    patch.providers.claudeAgent.customModels = normalizeCustomModelSlugs(
+      legacySettings.customClaudeModels,
+      new Set<string>(),
+      "claudeAgent",
+    );
+  }
+
+  return patch;
+}
+
+export function buildLegacyClientSettingsMigrationPatch(
+  legacySettings: Record<string, unknown>,
+): Partial<DeepMutable<ClientSettings>> {
+  const patch: Partial<DeepMutable<ClientSettings>> = {};
+
+  if (Predicate.isBoolean(legacySettings.confirmThreadArchive)) {
+    patch.confirmThreadArchive = legacySettings.confirmThreadArchive;
+  }
+
+  if (Predicate.isBoolean(legacySettings.confirmThreadDelete)) {
+    patch.confirmThreadDelete = legacySettings.confirmThreadDelete;
+  }
+
+  if (Predicate.isBoolean(legacySettings.diffWordWrap)) {
+    patch.diffWordWrap = legacySettings.diffWordWrap;
+  }
+
+  if (Schema.is(SidebarProjectSortOrder)(legacySettings.sidebarProjectSortOrder)) {
+    patch.sidebarProjectSortOrder = legacySettings.sidebarProjectSortOrder;
+  }
+
+  if (Schema.is(SidebarThreadSortOrder)(legacySettings.sidebarThreadSortOrder)) {
+    patch.sidebarThreadSortOrder = legacySettings.sidebarThreadSortOrder;
+  }
+
+  if (Schema.is(TimestampFormat)(legacySettings.timestampFormat)) {
+    patch.timestampFormat = legacySettings.timestampFormat;
+  }
+
+  return patch;
+}
+
+/**
+ * Bootstrap the attaccaUser client setting from git on first launch.
+ *
+ * Safe to call repeatedly: if the setting already has a non-empty value, it
+ * does nothing. Otherwise it calls factory.getGitIdentity via the primary ws
+ * client and persists the returned name (or empty string if git + OS both
+ * returned nothing) to localStorage.
+ *
+ * Failures are swallowed — the user can always edit attaccaUser manually
+ * in settings, so a missing git binary or an RPC hiccup shouldn't crash app
+ * startup.
+ */
+export async function bootstrapAttaccaUserIfMissing(): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    const current = getClientSettingsSnapshot();
+    const existing = (current as Record<string, unknown>).attaccaUser;
+    if (typeof existing === "string" && existing.trim().length > 0) return;
+
+    const identity = await getWsRpcClient().factory.getGitIdentity();
+    const next = identity.name ?? "";
+
+    // Re-check right before the write — another tab may have set attaccaUser
+    // while the RPC was in flight.
+    const currentAfter = getClientSettingsSnapshot();
+    const existingAfter = (currentAfter as Record<string, unknown>).attaccaUser;
+    if (typeof existingAfter === "string" && existingAfter.trim().length > 0) return;
+
+    persistClientSettings({
+      ...currentAfter,
+      attaccaUser: next,
+    } as ClientSettings);
+  } catch (error) {
+    console.warn("[identity] failed to bootstrap attaccaUser", error);
+  }
+}
+
+/**
+ * Call once on app startup.
+ * If the legacy localStorage key exists, migrate its values to the new server
+ * and client storage formats, then remove the legacy key so this only runs once.
+ */
+export function migrateLocalSettingsToServer(): void {
+  if (typeof window === "undefined") return;
+
+  const OLD_SETTINGS_KEY = "t3-settings";
+  const raw = localStorage.getItem(OLD_SETTINGS_KEY);
+  if (!raw) return;
+
+  try {
+    const old = JSON.parse(raw);
+    if (!Predicate.isObject(old)) return;
+
+    // Migrate server-relevant keys via RPC
+    const serverPatch = buildLegacyServerSettingsMigrationPatch(old);
+    if (Object.keys(serverPatch).length > 0) {
+      const api = ensureLocalApi();
+      void api.server.updateSettings(serverPatch);
+    }
+
+    // Migrate client-only keys to the new persistence layer
+    const clientPatch = buildLegacyClientSettingsMigrationPatch(old);
+    if (Object.keys(clientPatch).length > 0) {
+      persistClientSettings({
+        ...getClientSettingsSnapshot(),
+        ...clientPatch,
+      });
+    }
+  } catch (error) {
+    console.error("[MIGRATION] Error migrating local settings:", error);
+  } finally {
+    localStorage.removeItem(OLD_SETTINGS_KEY);
+  }
 }
 
 export function __resetClientSettingsPersistenceForTests(): void {

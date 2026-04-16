@@ -68,6 +68,19 @@ export interface WsRpcClient {
     readonly searchEntries: RpcUnaryMethod<typeof WS_METHODS.projectsSearchEntries>;
     readonly writeFile: RpcUnaryMethod<typeof WS_METHODS.projectsWriteFile>;
   };
+  readonly factory: {
+    readonly read: RpcUnaryMethod<typeof WS_METHODS.factoryRead>;
+    readonly readSummary: RpcUnaryMethod<typeof WS_METHODS.factoryReadSummary>;
+    readonly initialize: RpcUnaryMethod<typeof WS_METHODS.factoryInitialize>;
+    readonly writeQueue: RpcUnaryMethod<typeof WS_METHODS.factoryWriteQueue>;
+    readonly writeSessionLog: RpcUnaryMethod<typeof WS_METHODS.factoryWriteSessionLog>;
+    readonly listForgeSkills: RpcUnaryNoArgMethod<typeof WS_METHODS.factoryListForgeSkills>;
+    readonly regenerateClaudeMd: RpcUnaryMethod<typeof WS_METHODS.factoryRegenerateClaudeMd>;
+    readonly getGitIdentity: RpcUnaryNoArgMethod<typeof WS_METHODS.factoryGetGitIdentity>;
+    readonly dispatchWorkPackage: RpcUnaryMethod<typeof WS_METHODS.factoryDispatchWorkPackage>;
+    readonly scanProjects: RpcUnaryMethod<typeof WS_METHODS.factoryScanProjects>;
+    readonly getPodiumRoot: RpcUnaryNoArgMethod<typeof WS_METHODS.factoryGetPodiumRoot>;
+  };
   readonly filesystem: {
     readonly browse: RpcUnaryMethod<typeof WS_METHODS.filesystemBrowse>;
   };
@@ -147,6 +160,29 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.projectsSearchEntries](input)),
       writeFile: (input) =>
         transport.request((client) => client[WS_METHODS.projectsWriteFile](input)),
+    },
+    factory: {
+      read: (input) => transport.request((client) => client[WS_METHODS.factoryRead](input)),
+      readSummary: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryReadSummary](input)),
+      initialize: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryInitialize](input)),
+      writeQueue: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryWriteQueue](input)),
+      writeSessionLog: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryWriteSessionLog](input)),
+      listForgeSkills: () =>
+        transport.request((client) => client[WS_METHODS.factoryListForgeSkills]({})),
+      regenerateClaudeMd: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryRegenerateClaudeMd](input)),
+      getGitIdentity: () =>
+        transport.request((client) => client[WS_METHODS.factoryGetGitIdentity]({})),
+      dispatchWorkPackage: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryDispatchWorkPackage](input)),
+      scanProjects: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryScanProjects](input)),
+      getPodiumRoot: () =>
+        transport.request((client) => client[WS_METHODS.factoryGetPodiumRoot]({})),
     },
     filesystem: {
       browse: (input) => transport.request((client) => client[WS_METHODS.filesystemBrowse](input)),
@@ -253,4 +289,23 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         ),
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Global singleton for Attacca stores (factory, podium) that need direct
+// RPC access outside a React context. Set by the environment service on
+// connect; consumers call getWsRpcClient() to read.
+// ---------------------------------------------------------------------------
+
+let _globalWsRpcClient: WsRpcClient | null = null;
+
+export function setGlobalWsRpcClient(client: WsRpcClient): void {
+  _globalWsRpcClient = client;
+}
+
+export function getWsRpcClient(): WsRpcClient {
+  if (!_globalWsRpcClient) {
+    throw new Error("WsRpcClient not initialized — call setGlobalWsRpcClient first.");
+  }
+  return _globalWsRpcClient;
 }

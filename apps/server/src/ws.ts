@@ -29,6 +29,19 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery";
 import { ServerConfig } from "./config";
+import {
+  dispatchWorkPackageEffect,
+  getGitIdentityEffect,
+  getPodiumRootEffect,
+  initializeFactoryEffect,
+  listForgeSkillsEffect,
+  readFactoryDirectoryEffect,
+  readFactorySummaryEffect,
+  regenerateClaudeMdEffect,
+  scanProjectsEffect,
+  writeQueueEffect,
+  writeSessionLogEffect,
+} from "./factory/FactoryRpc";
 import { GitCore } from "./git/Services/GitCore";
 import { GitManager } from "./git/Services/GitManager";
 import { GitStatusBroadcaster } from "./git/Services/GitStatusBroadcaster";
@@ -765,6 +778,64 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             ),
             { "rpc.aggregate": "workspace" },
           ),
+        [WS_METHODS.factoryRead]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.factoryRead,
+            readFactoryDirectoryEffect(input.projectPath),
+            { "rpc.aggregate": "factory" },
+          ),
+        [WS_METHODS.factoryReadSummary]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.factoryReadSummary,
+            readFactorySummaryEffect(input.projectPath),
+            { "rpc.aggregate": "factory" },
+          ),
+        [WS_METHODS.factoryInitialize]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.factoryInitialize,
+            initializeFactoryEffect(input.projectPath, input.config, input.allowedRoots),
+            { "rpc.aggregate": "factory" },
+          ),
+        [WS_METHODS.factoryWriteQueue]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.factoryWriteQueue,
+            writeQueueEffect(input.projectPath, input.queue, input.allowedRoots),
+            { "rpc.aggregate": "factory" },
+          ),
+        [WS_METHODS.factoryWriteSessionLog]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.factoryWriteSessionLog,
+            writeSessionLogEffect(input.projectPath, input.session, input.allowedRoots),
+            { "rpc.aggregate": "factory" },
+          ),
+        [WS_METHODS.factoryListForgeSkills]: (_input) =>
+          observeRpcEffect(WS_METHODS.factoryListForgeSkills, listForgeSkillsEffect(), {
+            "rpc.aggregate": "factory",
+          }),
+        [WS_METHODS.factoryRegenerateClaudeMd]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.factoryRegenerateClaudeMd,
+            regenerateClaudeMdEffect(input.projectPath, input.allowedRoots),
+            { "rpc.aggregate": "factory" },
+          ),
+        [WS_METHODS.factoryGetGitIdentity]: (_input) =>
+          observeRpcEffect(WS_METHODS.factoryGetGitIdentity, getGitIdentityEffect(), {
+            "rpc.aggregate": "factory",
+          }),
+        [WS_METHODS.factoryDispatchWorkPackage]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.factoryDispatchWorkPackage,
+            dispatchWorkPackageEffect(input.projectPath, input.gap, input.allowedRoots),
+            { "rpc.aggregate": "factory" },
+          ),
+        [WS_METHODS.factoryScanProjects]: (input) =>
+          observeRpcEffect(WS_METHODS.factoryScanProjects, scanProjectsEffect(input.rootDir), {
+            "rpc.aggregate": "factory",
+          }),
+        [WS_METHODS.factoryGetPodiumRoot]: (_input) =>
+          observeRpcEffect(WS_METHODS.factoryGetPodiumRoot, getPodiumRootEffect(), {
+            "rpc.aggregate": "factory",
+          }),
         [WS_METHODS.shellOpenInEditor]: (input) =>
           observeRpcEffect(WS_METHODS.shellOpenInEditor, open.openInEditor(input), {
             "rpc.aggregate": "workspace",
