@@ -98,7 +98,12 @@ export type Gap = typeof Gap.Type;
 // Sync status
 // ---------------------------------------------------------------------------
 
-export const SyncState = Schema.Literals(["in_sync", "drift_detected", "update_pending", "missing"]);
+export const SyncState = Schema.Literals([
+  "in_sync",
+  "drift_detected",
+  "update_pending",
+  "missing",
+]);
 export type SyncState = typeof SyncState.Type;
 
 export const SyncSeverity = Schema.Literals(["minor", "major", "critical"]);
@@ -118,9 +123,7 @@ export const FactoryConfig = Schema.Struct({
   trust_tier: TrustTier,
   phase: Phase,
   track: ProjectTrack,
-  version: Schema.Number.pipe(
-    Schema.withDecodingDefault(Effect.succeed(FACTORY_PROTOCOL_VERSION)),
-  ),
+  version: Schema.Number.pipe(Schema.withDecodingDefault(Effect.succeed(FACTORY_PROTOCOL_VERSION))),
   stack: Schema.optional(Schema.Array(Schema.String)),
   repo: Schema.optional(Schema.String),
   assigned_dev: Schema.optional(Schema.String),
@@ -412,6 +415,7 @@ export type ScanProjectsInput = typeof ScanProjectsInput.Type;
 export const ScanProjectsResult = Schema.Struct({
   rootDir: Schema.String,
   projects: Schema.Array(ScannedProject),
+  warning: Schema.NullOr(Schema.String),
 });
 export type ScanProjectsResult = typeof ScanProjectsResult.Type;
 

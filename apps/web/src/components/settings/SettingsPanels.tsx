@@ -1556,7 +1556,8 @@ export function StandSettingsPanel() {
       <SettingsSection title="Intake roots">
         {externalIntakeRoots.length === 0 ? (
           <div className="px-4 py-3 text-xs text-muted-foreground sm:px-5">
-            No external intake roots configured. Roots are added automatically when you intake a project from outside the Podium scan root.
+            No external intake roots configured. Roots are added automatically when you intake a
+            project from outside the Podium scan root.
           </div>
         ) : (
           externalIntakeRoots.map((root) => (

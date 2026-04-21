@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Podium is the cross-project view of the factory. Where Stand pairs one developer with one project's agent, Podium pairs one operator (or developer wearing the operator hat) with *every* project they're responsible for. It exists to answer three questions:
+Podium is the cross-project view of the factory. Where Stand pairs one developer with one project's agent, Podium pairs one operator (or developer wearing the operator hat) with _every_ project they're responsible for. It exists to answer three questions:
 
 1. **What's here?** — show me everything with a `.factory/`, plus anything in my project root that could become one.
 2. **What needs me?** — surface projects that are stalled, blocked, or have work queued up.
@@ -19,11 +19,11 @@ Phase 2 v0 answers #1 and #3 with code we already shipped in Phase 1. It answers
 
 ## Mode enforcement (decision)
 
-**All three modes (Stand / Podium / Arco) are always available to every user.** Modes are *views*, not permissions.
+**All three modes (Stand / Podium / Arco) are always available to every user.** Modes are _views_, not permissions.
 
 - A `defaultMode: "stand" | "podium" | "arco"` preference lives in the client-side settings JSON and determines which mode the app opens in.
-- Per-project `.factory/config.yaml` has an optional `assigned_dev` field, *displayed* in the Podium dashboard and Stand panel but *not enforced*. `assigned_dev` is interpreted as **the single accountable owner**, not a team list.
-- When the current user's Attacca identity differs from `assigned_dev`, a neutral attribution banner reads "**Owned by @{dev}**". It's not framed as "guest" or "wrong user" — just accurate attribution that's invisible when you *are* the owner. Team collaborators see the banner when contributing to someone else's project, which is correct.
+- Per-project `.factory/config.yaml` has an optional `assigned_dev` field, _displayed_ in the Podium dashboard and Stand panel but _not enforced_. `assigned_dev` is interpreted as **the single accountable owner**, not a team list.
+- When the current user's Attacca identity differs from `assigned_dev`, a neutral attribution banner reads "**Owned by @{dev}**". It's not framed as "guest" or "wrong user" — just accurate attribution that's invisible when you _are_ the owner. Team collaborators see the banner when contributing to someone else's project, which is correct.
 - Identity comes from the `attacca.user` client setting, bootstrapped from `git config user.name` on first launch but user-overridable thereafter (see "Identity" section below).
 - No auth, no server-side identity, no role table.
 
@@ -62,7 +62,7 @@ Eight items. Five from `attacca.md` minus #3 and #4, plus intake, protocol versi
    - `Stand` → the currently active chat route (current behavior).
    - `Podium` → `/podium`.
    - `Arco` → **disabled for v0**, tooltip "Coming in Phase 3".
-   Toggle state drives the route; it doesn't filter the UI.
+     Toggle state drives the route; it doesn't filter the UI.
 5. **Project intake via Initialize** — the "Initialize" button on Discovered rows closes the loop for flavors 1 (project I just cloned) and 2 (project I created and forgot to factory-ify). Uses the server writer we already shipped in Phase 0; no new code required beyond the button.
 6. **Settings: `defaultMode`** — add a `defaultMode` field to client settings, default `"stand"`. On app startup, the router uses it to pick the initial route.
 7. **Settings: `attacca.user` + identity bootstrap** — add `attacca.user: string` to client settings. On first launch, bootstrap from `git config --global user.name` (server-side RPC call), fall back to OS username, then blank. Settings UI exposes it as an editable field. The Phase 1 session log `dev` field and the new "Owned by @{dev}" attribution banner both read from this setting. Retroactively replaces the `dev="developer"` hardcoding from Phase 1 task #6.
@@ -102,6 +102,7 @@ These are the scenarios I'll build against. Each is a specific user-visible beha
 **Given** a fresh install and a root directory containing 3 projects (2 with `.factory/`, 1 without)
 **When** the user clicks the Podium tab in the sidebar for the first time
 **Then** the `/podium` route loads, triggers a scan automatically, and renders:
+
 - 2 rows in Tracked (sorted by `lastActivity DESC`)
 - 1 row in Discovered with an Initialize button
 - An empty Stalled section (the 2 tracked projects are recent)
@@ -134,7 +135,7 @@ These are the scenarios I'll build against. Each is a specific user-visible beha
 
 **Given** a Tracked project with `assigned_dev: "alice"`
 **When** the user opens that project in Stand mode and either (a) `attacca.user === "alice"` or (b) `attacca.user` is blank
-**Then** no attribution banner renders. Case (a) because you *are* the owner; case (b) because we can't compare identities.
+**Then** no attribution banner renders. Case (a) because you _are_ the owner; case (b) because we can't compare identities.
 
 ### v0 Scenario 7 — Scanner handles missing root
 
@@ -162,7 +163,7 @@ These are the scenarios I'll build against. Each is a specific user-visible beha
 
 ## Resolved decisions
 
-The four open questions from the initial draft were resolved before locking this spec. Decisions recorded here so future readers can see *why* not just *what*.
+The four open questions from the initial draft were resolved before locking this spec. Decisions recorded here so future readers can see _why_ not just _what_.
 
 1. **`assigned_dev` stays as a single optional string** interpreted as the accountable owner. The UX fix for team projects is framing, not schema: the banner says "Owned by @{dev}" (neutral attribution), not "Viewing as guest" (accusatory). Team collaborators see an accurate banner when contributing to someone else's project; the owner never sees it. If a real multi-user membership concept is needed, it lands as a separate `contributors: string[]` field — never a widening of `assigned_dev`.
 

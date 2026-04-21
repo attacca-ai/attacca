@@ -233,11 +233,7 @@ export const WsFactoryListForgeSkillsRpc = Rpc.make(WS_METHODS.factoryListForgeS
 export const WsFactoryRegenerateClaudeMdRpc = Rpc.make(WS_METHODS.factoryRegenerateClaudeMd, {
   payload: FactoryProjectPathInput,
   success: FactoryRegenerateClaudeMdResult,
-  error: Schema.Union([
-    FactoryWriteError,
-    FactoryProtocolVersionError,
-    FactoryPathError,
-  ]),
+  error: Schema.Union([FactoryWriteError, FactoryProtocolVersionError, FactoryPathError]),
 });
 
 export const WsFactoryGetGitIdentityRpc = Rpc.make(WS_METHODS.factoryGetGitIdentity, {

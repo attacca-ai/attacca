@@ -40,11 +40,11 @@ Concretely:
 
 - New setting `externalIntakeRoots: string[]` in `ClientSettingsSchema` (default `[]`).
 - `assertPathInsideScanRoot` on the server grows to `assertPathInsideAllowedRoot`, accepting an additional list of roots passed per-RPC from the client.
-- The intake flow UI confirms with the user *once per new parent directory*: "Add `$parentDir` to intake roots?" (Yes / No / Ask every time). Yes persists, No is one-shot.
+- The intake flow UI confirms with the user _once per new parent directory_: "Add `$parentDir` to intake roots?" (Yes / No / Ask every time). Yes persists, No is one-shot.
 
 **Why**: preserves the C2 defense-in-depth for the common case (Podium writes only touch the scan root) while letting the user opt into specific external directories with explicit consent. Feels like how macOS/Windows file system permissions prompt users for access the first time an app reaches outside its sandbox.
 
-**Open**: whether the allowlist stores *parent directories* (so all siblings under `D:\repos` become valid once the user says yes once) or *exact project directories* (each one prompts). Lean **parent directories** — matches user expectation that "I said D:\repos is OK" means all siblings are OK.
+**Open**: whether the allowlist stores _parent directories_ (so all siblings under `D:\repos` become valid once the user says yes once) or _exact project directories_ (each one prompts). Lean **parent directories** — matches user expectation that "I said D:\repos is OK" means all siblings are OK.
 
 ### D3. UX surface: new "Add project" button in the Podium header
 
@@ -55,7 +55,7 @@ Not a modal, not a settings page, not a slash command. A `<Button variant="outli
 
 Pressing Enter or clicking "Add" triggers the intake flow.
 
-**Why not a modal**: modals are heavyweight for what is essentially a two-field form. **Why not Sidebar**: Sidebar already has an "add project" button that creates an orchestration project from a path but does *not* initialize `.factory/`. These are different semantics. Podium = "add + factory-init", Sidebar = "add only". Different button, different location, matches how users think about the modes.
+**Why not a modal**: modals are heavyweight for what is essentially a two-field form. **Why not Sidebar**: Sidebar already has an "add project" button that creates an orchestration project from a path but does _not_ initialize `.factory/`. These are different semantics. Podium = "add + factory-init", Sidebar = "add only". Different button, different location, matches how users think about the modes.
 
 **Why not a slash command**: discoverability. Users new to Attacca won't type `/attacca:intake` in their composer.
 
@@ -127,6 +127,7 @@ Explicitly not building:
 **Given** the user is in Podium mode, has `externalIntakeRoots: []`, and has a project directory at `D:\repos\acme-api` with no existing `.factory/`
 **When** the user clicks "Add project", pastes `D:\repos\acme-api`, clicks "Add"
 **Then**:
+
 1. A confirm dialog appears: "Add `D:\repos` to intake roots? Attacca will be able to write `.factory/` metadata in any project under this directory."
 2. The user clicks Yes.
 3. `externalIntakeRoots` persists `D:\repos`.
@@ -140,6 +141,7 @@ Explicitly not building:
 **Given** the user previously intake'd `D:\repos\acme-api` and has `externalIntakeRoots: ["D:\\repos"]`, and now has another project at `D:\repos\widget-service`
 **When** the user clicks "Add project", pastes `D:\repos\widget-service`, clicks "Add"
 **Then**:
+
 1. **No confirm dialog** — `D:\repos` is already an allowed root.
 2. Server dispatches `project.create` + `factory.initialize` immediately.
 3. Draft thread opens.
@@ -149,6 +151,7 @@ Explicitly not building:
 **Given** the user has a tracked project at `D:\repos\acme-api` (registered in orchestration, has `.factory/`)
 **When** the user clicks "Add project", pastes `D:\repos\acme-api`, clicks "Add"
 **Then** the intake flow:
+
 1. Recognizes the path matches an existing registered project (via normalized absolute path comparison — same as C1's `normalizeCwd`).
 2. Skips both `project.create` and `factory.initialize`.
 3. Calls `handleNewThread` on the existing project ref, which opens a new draft (or reuses an existing one).
@@ -160,6 +163,7 @@ Explicitly not building:
 **Given** the user has `D:\repos` allowlisted
 **When** the user pastes `D:\repos\does-not-exist` and clicks "Add"
 **Then**:
+
 1. Client calls `factory.initialize` → server detects the path doesn't exist via `existsSync`.
 2. Server returns a `FactoryWriteError` with a specific message.
 3. UI renders a toast: "Directory `D:\repos\does-not-exist` does not exist."
@@ -172,6 +176,7 @@ Explicitly not building:
 **Given** no directories are allowlisted yet
 **When** the user clicks "Add project", pastes `/home/user/work/foo`, clicks "Add", and clicks **No** on the "Add `/home/user/work` to intake roots?" prompt
 **Then**:
+
 1. No server RPC is called.
 2. Toast: "Intake cancelled".
 3. Popover stays open. Input keeps its value so the user can try a different path or reconsider.
@@ -181,6 +186,7 @@ Explicitly not building:
 **Given** the Podium scan root is `C:\Users\jhon1\projects` and the user pastes `C:\Users\jhon1\projects\brand-new-thing` (which happens to exist but wasn't in the last scan, or is a sibling they want to fast-track)
 **When** they click "Add"
 **Then**:
+
 1. Path is already under the scan root, no allowlist prompt needed.
 2. Server `project.create` + `factory.initialize` run.
 3. Thread opens.
@@ -191,6 +197,7 @@ Explicitly not building:
 **Given** the user is running the desktop build
 **When** they click "Add project" and then the "Browse..." button
 **Then**:
+
 1. `window.desktopBridge.pickFolder()` opens the native OS folder picker.
 2. The picked path populates the text input.
 3. The user can edit the path or click "Add" to proceed.
@@ -201,6 +208,7 @@ Explicitly not building:
 **Given** the user is running the web build (`bun run dev:web` without the desktop shell)
 **When** they click "Add project"
 **Then**:
+
 1. The "Browse..." button is hidden.
 2. Only the text input is shown, with placeholder "Paste an absolute path".
 3. The user must paste or type the path manually.
@@ -211,7 +219,7 @@ Explicitly not building:
 1. **Idempotent `initializeFactory`?** The writer currently overwrites existing `.factory/config.yaml` each call. For intake of a path that already has a `.factory/`, overwriting is destructive. Fix: check `existsSync(configPath)` before writing and skip if present. Or add a `force: boolean` param. The safer default is skip-if-exists.
 2. **Allowlist granularity**: parent directory (as proposed) vs exact project directory vs single global "allow any external path" bypass. Parent directory is the current pick, but if users end up allowlisting many siblings and the consent prompt spam becomes annoying, we might add a bypass.
 3. **Server-side existence check vs client-side**: see scenario 4 open note. Lean server-side for now.
-4. **Pre-scan intake candidates**: once a parent directory is allowlisted, should Podium offer to scan *it* in a second section? That's basically C5 multi-root scanning. Out of scope for C3.
+4. **Pre-scan intake candidates**: once a parent directory is allowlisted, should Podium offer to scan _it_ in a second section? That's basically C5 multi-root scanning. Out of scope for C3.
 
 ## Dependencies
 

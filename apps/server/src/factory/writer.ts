@@ -26,8 +26,19 @@ import { readFactoryDirectory } from "./reader";
 // ---------------------------------------------------------------------------
 
 const CONFIG_FIELD_ORDER = [
-  "version", "name", "display_name", "type", "trust_tier", "phase", "track",
-  "stack", "repo", "assigned_dev", "created", "updated", "experience_level",
+  "version",
+  "name",
+  "display_name",
+  "type",
+  "trust_tier",
+  "phase",
+  "track",
+  "stack",
+  "repo",
+  "assigned_dev",
+  "created",
+  "updated",
+  "experience_level",
   "completed_phases",
 ];
 
@@ -165,7 +176,8 @@ export function generateClaudeMd(ctx: ClaudeMdContext): string {
   if (ctx.queueItems?.length) {
     lines.push("## Work Queue (This Session)");
     for (const item of ctx.queueItems) {
-      const prefix = item.priority === "high" ? "[HIGH]" : item.priority === "medium" ? "[MED]" : "[LOW]";
+      const prefix =
+        item.priority === "high" ? "[HIGH]" : item.priority === "medium" ? "[MED]" : "[LOW]";
       lines.push(`- ${prefix} ${item.title}`);
       if (item.description) lines.push(`  ${item.description}`);
     }
@@ -239,9 +251,7 @@ function getEscalationRules(tier: number): string {
 export function regenerateClaudeMd(projectPath: string): string {
   const directory = readFactoryDirectory(projectPath);
   if (!directory.exists || !directory.config) {
-    throw new Error(
-      `Cannot regenerate CLAUDE.md: no .factory/config.yaml at ${projectPath}`,
-    );
+    throw new Error(`Cannot regenerate CLAUDE.md: no .factory/config.yaml at ${projectPath}`);
   }
 
   const queueItems = directory.queue?.items
@@ -278,10 +288,7 @@ export function regenerateClaudeMd(projectPath: string): string {
  * another Attacca instance, or the CLI) does not clobber user edits.
  * Only creates files that are *missing*.
  */
-export function initializeFactory(
-  projectPath: string,
-  config: FactoryConfig,
-): void {
+export function initializeFactory(projectPath: string, config: FactoryConfig): void {
   const factoryPath = ensureFactoryDir(projectPath);
 
   const configPath = join(factoryPath, FACTORY_FILES.CONFIG);

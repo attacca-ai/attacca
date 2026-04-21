@@ -182,9 +182,7 @@ function WorkQueueSection({ directory }: { readonly directory: FactoryDirectory 
                   {item.status.replace("_", " ")}
                 </span>
                 {item.spec_section ? (
-                  <span className="text-[10px] text-muted-foreground/40">
-                    {item.spec_section}
-                  </span>
+                  <span className="text-[10px] text-muted-foreground/40">{item.spec_section}</span>
                 ) : null}
               </div>
             </li>
@@ -202,13 +200,9 @@ interface ActiveSessionSectionProps {
 
 function ActiveSessionSection({ projectPath, dev: devProp }: ActiveSessionSectionProps) {
   const dev = devProp && devProp.trim().length > 0 ? devProp : "unknown";
-  const active = useFactoryStore(
-    (state) => state.activeSessionsByProjectPath[projectPath] ?? null,
-  );
+  const active = useFactoryStore((state) => state.activeSessionsByProjectPath[projectPath] ?? null);
   const startSession = useFactoryStore((state) => state.startSession);
-  const updateActiveSessionNotes = useFactoryStore(
-    (state) => state.updateActiveSessionNotes,
-  );
+  const updateActiveSessionNotes = useFactoryStore((state) => state.updateActiveSessionNotes);
   const endSession = useFactoryStore((state) => state.endSession);
   const [isEnding, setIsEnding] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -301,9 +295,7 @@ function SessionInfoSection({ session }: { readonly session: SessionLog | null }
         <p className="text-[12px] leading-snug text-muted-foreground/80">{session.notes}</p>
       ) : null}
       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground/60">
-        {session.duration_minutes != null ? (
-          <span>{session.duration_minutes} min</span>
-        ) : null}
+        {session.duration_minutes != null ? <span>{session.duration_minutes} min</span> : null}
         {session.files_changed != null ? <span>{session.files_changed} files</span> : null}
         {session.tests_passed != null && session.tests_run != null ? (
           <span>
@@ -363,7 +355,9 @@ const FactoryPanel = memo(function FactoryPanel({ projectPath, onClose }: Factor
           >
             Factory
           </Badge>
-          {isLoading ? <LoaderIcon className="size-3 animate-spin text-muted-foreground/50" /> : null}
+          {isLoading ? (
+            <LoaderIcon className="size-3 animate-spin text-muted-foreground/50" />
+          ) : null}
         </div>
         <div className="flex items-center gap-1">
           <Button
@@ -398,7 +392,9 @@ const FactoryPanel = memo(function FactoryPanel({ projectPath, onClose }: Factor
             </div>
           ) : entry?.status === "error" ? (
             <div className="space-y-2">
-              <p className="text-[12px] text-red-400">{entry.error ?? "Failed to load .factory/"}</p>
+              <p className="text-[12px] text-red-400">
+                {entry.error ?? "Failed to load .factory/"}
+              </p>
               <Button size="sm" variant="outline" onClick={handleRefresh}>
                 Retry
               </Button>
@@ -429,9 +425,7 @@ const FactoryPanel = memo(function FactoryPanel({ projectPath, onClose }: Factor
               ) : null}
               <SessionInfoSection session={latestSession} />
               {claudeMdError ? (
-                <p className="text-[11px] text-red-400/80">
-                  CLAUDE.md: {claudeMdError}
-                </p>
+                <p className="text-[11px] text-red-400/80">CLAUDE.md: {claudeMdError}</p>
               ) : claudeMdGeneratedAt ? (
                 <p className="text-[10px] text-muted-foreground/40">
                   CLAUDE.md regenerated {new Date(claudeMdGeneratedAt).toLocaleTimeString()}

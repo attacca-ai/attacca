@@ -54,17 +54,13 @@ export const PodiumIntakePopover = memo(function PodiumIntakePopover({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-input bg-background px-2.5 text-[12px] font-medium text-foreground shadow-xs/5 transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
-      >
+      <PopoverTrigger className="inline-flex h-7 items-center gap-1.5 rounded-md border border-input bg-background px-2.5 text-[12px] font-medium text-foreground shadow-xs/5 transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50">
         <FolderPlusIcon className="size-3.5" />
         Add project
       </PopoverTrigger>
       <PopoverPopup side="bottom" align="end" sideOffset={8} className="w-80">
         <div className="space-y-3">
-          <p className="text-[13px] font-medium text-foreground">
-            Add project from path
-          </p>
+          <p className="text-[13px] font-medium text-foreground">Add project from path</p>
           <div className="flex gap-2">
             <Input
               ref={inputRef}

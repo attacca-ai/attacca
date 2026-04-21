@@ -39,7 +39,7 @@ import {
 } from "./index";
 import { loadForgeSkills } from "./forgeSkills";
 import { resolveGitIdentity } from "./identity";
-import { scanProjects } from "../scanner";
+import { scanProjectsDetailed } from "../scanner";
 
 const isProtocolVersionError = Schema.is(FactoryProtocolVersionError);
 
@@ -69,10 +69,7 @@ export const readFactoryDirectoryEffect = (
 
 export const readFactorySummaryEffect = (
   projectPath: string,
-): Effect.Effect<
-  FactoryReadSummaryResult,
-  FactoryReadError | FactoryProtocolVersionError
-> =>
+): Effect.Effect<FactoryReadSummaryResult, FactoryReadError | FactoryProtocolVersionError> =>
   Effect.try({
     try: () => readFactorySummary(projectPath),
     catch: (cause) =>
@@ -89,8 +86,7 @@ export const initializeFactoryEffect = (
       assertPathInsideAllowedRoot(projectPath, allowedRoots);
       initializeFactory(projectPath, config);
     },
-    catch: (cause) =>
-      toWriteOrPathError(cause, `Failed to initialize .factory/ at ${projectPath}`),
+    catch: (cause) => toWriteOrPathError(cause, `Failed to initialize .factory/ at ${projectPath}`),
   });
 
 export const writeQueueEffect = (
@@ -118,10 +114,7 @@ export const writeSessionLogEffect = (
       writeSessionLog(projectPath, session);
     },
     catch: (cause) =>
-      toWriteOrPathError(
-        cause,
-        `Failed to write .factory/progress session log at ${projectPath}`,
-      ),
+      toWriteOrPathError(cause, `Failed to write .factory/progress session log at ${projectPath}`),
   });
 
 // ---------------------------------------------------------------------------
@@ -297,9 +290,11 @@ export const scanProjectsEffect = (
   Effect.try({
     try: (): ScanProjectsResult => {
       const effectiveRoot = rootDir?.trim() || resolvePodiumRoot().rootDir;
+      const result = scanProjectsDetailed(effectiveRoot);
       return {
         rootDir: effectiveRoot,
-        projects: scanProjects(effectiveRoot),
+        projects: [...result.projects],
+        warning: result.warning,
       };
     },
     catch: (cause) =>
