@@ -258,7 +258,7 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
 
       // ── project.create ───────────────────────────────────────
       const projectId = deps.newProjectId();
-      const slug = trimmed.split(/[/\\]/).filter(Boolean).pop() ?? trimmed;
+      const slug = trimmed.split(/[/\\]/).findLast((part) => part.length > 0) ?? trimmed;
       await deps.dispatchProjectCreate({
         projectId,
         title: slug,
@@ -310,9 +310,9 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
 // STALLED_THRESHOLD_MS imported from contracts
 
 export function selectTrackedProjects(state: PodiumState): ReadonlyArray<ScannedProject> {
-  return [...state.projects]
+  return state.projects
     .filter((p) => p.hasFactory)
-    .sort((a, b) => {
+    .toSorted((a, b) => {
       const aTime = a.lastActivity ? Date.parse(a.lastActivity) : 0;
       const bTime = b.lastActivity ? Date.parse(b.lastActivity) : 0;
       return bTime - aTime;
@@ -322,8 +322,7 @@ export function selectTrackedProjects(state: PodiumState): ReadonlyArray<Scanned
 export function selectDiscoveredProjects(state: PodiumState): ReadonlyArray<ScannedProject> {
   return state.projects
     .filter((p) => !p.hasFactory)
-    .slice()
-    .sort((a, b) => a.slug.localeCompare(b.slug));
+    .toSorted((a, b) => a.slug.localeCompare(b.slug));
 }
 
 export function selectStalledProjects(state: PodiumState): ReadonlyArray<ScannedProject> {
@@ -346,8 +345,7 @@ const GAP_SEVERITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 
 export function selectProjectsByGapSeverity(state: PodiumState): ReadonlyArray<ScannedProject> {
   return selectTrackedProjects(state)
     .filter((p) => p.gaps.length > 0)
-    .slice()
-    .sort((a, b) => {
+    .toSorted((a, b) => {
       const aMax = Math.min(...a.gaps.map((g) => GAP_SEVERITY_ORDER[g.severity] ?? 3));
       const bMax = Math.min(...b.gaps.map((g) => GAP_SEVERITY_ORDER[g.severity] ?? 3));
       if (aMax !== bMax) return aMax - bMax;

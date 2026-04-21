@@ -206,7 +206,7 @@ export function scanProjects(rootDir: string): ScannedProject[] {
   }
 
   // Sort: factory projects first, then by name
-  return projects.sort((a, b) => {
+  return projects.toSorted((a, b) => {
     if (a.hasFactory && !b.hasFactory) return -1;
     if (!a.hasFactory && b.hasFactory) return 1;
     return a.slug.localeCompare(b.slug);
