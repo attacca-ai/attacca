@@ -1,10 +1,11 @@
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { scanProjectsEffect } from "./FactoryRpc";
+import { initializeFactoryEffect, scanProjectsEffect } from "./FactoryRpc";
+import { readFactoryDirectory } from "./index";
 
 describe("FactoryRpc scanProjectsEffect", () => {
   const tempDirs: string[] = [];
@@ -34,5 +35,40 @@ describe("FactoryRpc scanProjectsEffect", () => {
     expect(result.rootDir).toBe(existingRoot);
     expect(result.projects).toEqual([]);
     expect(result.warning).toBeNull();
+  });
+});
+
+describe("FactoryRpc initializeFactoryEffect", () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("auto-detects brownfield type from project markers when requested", async () => {
+    const projectDir = mkdtempSync(join(tmpdir(), "attacca-init-brownfield-"));
+    tempDirs.push(projectDir);
+    writeFileSync(join(projectDir, "package.json"), '{ "name": "acme-api" }\n', "utf-8");
+
+    await Effect.runPromise(
+      initializeFactoryEffect(
+        projectDir,
+        {
+          version: 1,
+          name: "acme-api",
+          display_name: "acme-api",
+          type: "greenfield",
+          trust_tier: 2,
+          phase: "IDEA",
+          track: "software",
+        },
+        [projectDir],
+        true,
+      ),
+    );
+
+    expect(readFactoryDirectory(projectDir).config?.type).toBe("brownfield");
   });
 });

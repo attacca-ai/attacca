@@ -4,6 +4,12 @@
 **Scope**: issues surfaced during `coderabbit:code-reviewer` review of commits `b96308fc..a883d92f`. Hotfixes (Group A) landed in `6486eed6..5a652278`. Group B landed in `ba31a30f..4c737cf3`. Group C pre-Phase-3 items landed in `3c5f0d79..8b3c794d`.
 **Relates to**: `docs/phase-2-podium-spec.md`, `docs/factory-protocol.md`.
 
+## Status update - 2026-04-21
+
+- C3 path intake is shipped: Podium can intake an existing local directory, persist intake roots, initialize `.factory/` safely, and open a draft thread in that project.
+- The remaining deferred C3 work is the larger clone/URL + Forge handoff slice that belongs in C3.5/C3.6, not the shipped path-intake flow.
+- Group C status is now effectively: C1-C5 and C7 shipped; C6 and C8-C10 deferred.
+
 ---
 
 ## Group B — shipped (`ba31a30f..4c737cf3`)

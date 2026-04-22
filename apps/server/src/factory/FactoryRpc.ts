@@ -80,11 +80,12 @@ export const initializeFactoryEffect = (
   projectPath: string,
   config: FactoryConfig,
   allowedRoots?: ReadonlyArray<string>,
+  autoDetectType = false,
 ): Effect.Effect<void, FactoryWriteError | FactoryPathError> =>
   Effect.try({
     try: () => {
       assertPathInsideAllowedRoot(projectPath, allowedRoots);
-      initializeFactory(projectPath, config);
+      initializeFactory(projectPath, config, { autoDetectType });
     },
     catch: (cause) => toWriteOrPathError(cause, `Failed to initialize .factory/ at ${projectPath}`),
   });

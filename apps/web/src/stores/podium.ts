@@ -288,6 +288,7 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
       await client.factory.initialize({
         projectPath: trimmed,
         config,
+        autoDetectType: true,
         allowedRoots: rootsForRpc,
       });
 

@@ -566,7 +566,9 @@ function PodiumRouteView() {
     async (project: ScannedProject) => {
       setInitializingPath(project.path);
       try {
-        await initializeFactory(project.path, defaultConfigFor(project));
+        await initializeFactory(project.path, defaultConfigFor(project), undefined, {
+          autoDetectType: true,
+        });
         await refreshWithOverride();
       } catch (error) {
         toastManager.add({

@@ -58,6 +58,7 @@ interface FactoryState {
     projectPath: string,
     config: FactoryConfig,
     allowedRoots?: ReadonlyArray<string>,
+    options?: { autoDetectType?: boolean },
   ) => Promise<FactoryDirectory | null>;
   readonly writeQueue: (projectPath: string, queue: WorkQueue) => Promise<void>;
   readonly writeSessionLog: (projectPath: string, session: SessionLog) => Promise<void>;
@@ -143,9 +144,14 @@ export const useFactoryStore = create<FactoryState>()(
         }
       },
 
-      initializeFactory: async (projectPath, config, allowedRoots) => {
+      initializeFactory: async (projectPath, config, allowedRoots, options) => {
         try {
-          await getWsRpcClient().factory.initialize({ projectPath, config, allowedRoots });
+          await getWsRpcClient().factory.initialize({
+            projectPath,
+            config,
+            allowedRoots,
+            autoDetectType: options?.autoDetectType,
+          });
         } catch (cause) {
           const message = cause instanceof Error ? cause.message : "Failed to initialize .factory/";
           set((state) => ({

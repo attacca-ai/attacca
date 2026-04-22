@@ -791,7 +791,12 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
         [WS_METHODS.factoryInitialize]: (input) =>
           observeRpcEffect(
             WS_METHODS.factoryInitialize,
-            initializeFactoryEffect(input.projectPath, input.config, input.allowedRoots),
+            initializeFactoryEffect(
+              input.projectPath,
+              input.config,
+              input.allowedRoots,
+              input.autoDetectType,
+            ),
             { "rpc.aggregate": "factory" },
           ),
         [WS_METHODS.factoryWriteQueue]: (input) =>

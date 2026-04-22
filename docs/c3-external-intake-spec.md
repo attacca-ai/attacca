@@ -1,9 +1,11 @@
 # C3 — External intake flow (spec v0)
 
-**Status**: draft for review
+**Status**: shipped for local path intake (F1 + F2); clone/Forge follow-ons deferred
 **Date**: 2026-04-11
 **Supersedes**: the C3 line item in `docs/phase-2-followups.md`.
 **Relates to**: `docs/phase-2-podium-spec.md`, `docs/factory-protocol.md`, the `C2` path-validation work in `bb1b3041`.
+
+**Implementation status note**: the shipped slice covers existing-directory intake, intake-root consent/persistence, idempotent `.factory/` initialization, draft-thread open, and server-side brownfield auto-detection during init. Git URL clone and Forge handoff remain future C3.5/C3.6 work.
 
 ---
 

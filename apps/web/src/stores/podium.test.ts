@@ -1,10 +1,16 @@
-import type { ScannedProject } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProjectId,
+  type ScannedProject,
+  type ScopedProjectRef,
+} from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockClient = vi.hoisted(() => ({
   factory: {
     getPodiumRoot: vi.fn(),
     scanProjects: vi.fn(),
+    initialize: vi.fn(),
   },
 }));
 
@@ -61,6 +67,7 @@ describe("podium store scan warnings", () => {
     resetPodiumStore();
     mockClient.factory.getPodiumRoot.mockReset();
     mockClient.factory.scanProjects.mockReset();
+    mockClient.factory.initialize.mockReset();
   });
 
   afterEach(() => {
@@ -97,5 +104,43 @@ describe("podium store scan warnings", () => {
       "Could not scan E:/offline (offline).",
     ]);
     expect(state.scanRoots).toEqual(["C:/primary", "D:/external", "E:/offline"]);
+  });
+
+  it("requests server-side type auto-detection during external intake", async () => {
+    mockClient.factory.initialize.mockResolvedValue(undefined);
+    const handleNewThread = vi.fn().mockResolvedValue(undefined);
+    const dispatchProjectCreate = vi.fn().mockResolvedValue(undefined);
+    const updateSettings = vi.fn();
+    const confirm = vi.fn().mockResolvedValue(true);
+    const fakeProjectRef = {} as ScopedProjectRef;
+
+    await usePodiumStore.getState().intakeProjectFromPath("D:/repos/acme-api", {
+      orchestrationProjects: [],
+      activeEnvironmentId: EnvironmentId.make("environment-local"),
+      dispatchProjectCreate,
+      handleNewThread,
+      externalIntakeRoots: ["D:/repos"],
+      podiumScanRoot: "C:/primary",
+      updateSettings,
+      defaultThreadEnvMode: "local",
+      confirm,
+      scopeProjectRef: () => fakeProjectRef,
+      newProjectId: () => ProjectId.make("project-acme-api"),
+    });
+
+    expect(dispatchProjectCreate).toHaveBeenCalledWith({
+      projectId: "project-acme-api",
+      title: "acme-api",
+      workspaceRoot: "D:/repos/acme-api",
+    });
+    expect(mockClient.factory.initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectPath: "D:/repos/acme-api",
+        autoDetectType: true,
+      }),
+    );
+    expect(handleNewThread).toHaveBeenCalledWith(fakeProjectRef, { envMode: "local" });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(updateSettings).not.toHaveBeenCalled();
   });
 });

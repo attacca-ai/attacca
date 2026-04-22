@@ -349,6 +349,7 @@ export type FactoryReadSummaryResult = typeof FactoryReadSummaryResult.Type;
 export const FactoryInitializeInput = Schema.Struct({
   projectPath: Schema.String,
   config: FactoryConfig,
+  autoDetectType: Schema.optional(Schema.Boolean),
   allowedRoots: AllowedRoots,
 });
 export type FactoryInitializeInput = typeof FactoryInitializeInput.Type;
