@@ -55,6 +55,14 @@ export const ProviderSessionStartInput = Schema.Struct({
   approvalPolicy: Schema.optional(ProviderApprovalPolicy),
   sandboxMode: Schema.optional(ProviderSandboxMode),
   runtimeMode: RuntimeMode,
+  /**
+   * Per-session override for Codex `collaborationMode.settings.developer_instructions`.
+   * When set, the provider re-applies this string at every `turn/start`
+   * instead of the built-in per-interactionMode defaults. Used by Arco
+   * (Phase 3) to inject `~/.attacca/arco-system.md`. Ignored by the
+   * Claude adapter — Arco is Codex-only in v0.
+   */
+  customDeveloperInstructions: Schema.optional(Schema.String),
 });
 export type ProviderSessionStartInput = typeof ProviderSessionStartInput.Type;
 

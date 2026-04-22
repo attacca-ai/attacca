@@ -81,6 +81,14 @@ interface CodexSessionContext {
   collabReceiverTurns: Map<string, TurnId>;
   nextRequestId: number;
   stopping: boolean;
+  /**
+   * Per-session developer-instructions override set at startSession time
+   * (currently only by the Arco bootstrap — see
+   * `apps/server/src/arco/session.ts`). When present, every `turn/start`
+   * re-applies this string into `collaborationMode.settings.developer_instructions`
+   * instead of the built-in per-interactionMode defaults.
+   */
+  customDeveloperInstructions?: string;
 }
 
 interface JsonRpcError {
@@ -125,6 +133,11 @@ export interface CodexAppServerStartSessionInput {
   readonly binaryPath: string;
   readonly homePath?: string;
   readonly runtimeMode: RuntimeMode;
+  /**
+   * Per-session override for Codex developer instructions. Propagated
+   * from {@link ProviderSessionStartInput.customDeveloperInstructions}.
+   */
+  readonly customDeveloperInstructions?: string;
 }
 
 export interface CodexThreadTurnSnapshot {
@@ -342,10 +355,17 @@ export function normalizeCodexModelSlug(
   return normalized;
 }
 
-function buildCodexCollaborationMode(input: {
+export function buildCodexCollaborationMode(input: {
   readonly interactionMode?: "default" | "plan";
   readonly model?: string;
   readonly effort?: string;
+  /**
+   * Session-level override for `developer_instructions`. When present,
+   * it replaces the built-in per-interactionMode defaults entirely —
+   * callers that set this are responsible for any collaboration-mode
+   * semantics their prompt relies on (Arco, Phase 3).
+   */
+  readonly customDeveloperInstructions?: string;
 }):
   | {
       mode: "default" | "plan";
@@ -360,15 +380,18 @@ function buildCodexCollaborationMode(input: {
     return undefined;
   }
   const model = normalizeCodexModelSlug(input.model) ?? "gpt-5.3-codex";
+  const developerInstructions =
+    input.customDeveloperInstructions !== undefined
+      ? input.customDeveloperInstructions
+      : input.interactionMode === "plan"
+        ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
+        : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS;
   return {
     mode: input.interactionMode,
     settings: {
       model,
       reasoning_effort: input.effort ?? "medium",
-      developer_instructions:
-        input.interactionMode === "plan"
-          ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
-          : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
+      developer_instructions: developerInstructions,
     },
   };
 }
@@ -501,6 +524,9 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
         collabReceiverTurns: new Map(),
         nextRequestId: 1,
         stopping: false,
+        ...(input.customDeveloperInstructions !== undefined
+          ? { customDeveloperInstructions: input.customDeveloperInstructions }
+          : {}),
       };
 
       this.sessions.set(threadId, context);
@@ -729,6 +755,9 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
       ...(normalizedModel !== undefined ? { model: normalizedModel } : {}),
       ...(input.effort !== undefined ? { effort: input.effort } : {}),
+      ...(context.customDeveloperInstructions !== undefined
+        ? { customDeveloperInstructions: context.customDeveloperInstructions }
+        : {}),
     });
     if (collaborationMode) {
       if (!turnStartParams.model) {
