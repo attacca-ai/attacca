@@ -1,11 +1,11 @@
 # C3 — External intake flow (spec v0)
 
-**Status**: shipped for local path intake (F1 + F2); clone/Forge follow-ons deferred
+**Status**: shipped for local path intake, Git URL clone/import, and preset Forge handoff
 **Date**: 2026-04-11
 **Supersedes**: the C3 line item in `docs/phase-2-followups.md`.
 **Relates to**: `docs/phase-2-podium-spec.md`, `docs/factory-protocol.md`, the `C2` path-validation work in `bb1b3041`.
 
-**Implementation status note**: the shipped slice covers existing-directory intake, intake-root consent/persistence, idempotent `.factory/` initialization, draft-thread open, and server-side brownfield auto-detection during init. Git URL clone and Forge handoff remain future C3.5/C3.6 work.
+**Implementation status note**: the shipped slice covers existing-directory intake, Git URL clone/import into the active Podium root, intake-root consent/persistence, idempotent `.factory/` initialization, draft-thread open, server-side brownfield auto-detection during init, and intake handoff via a preset Forge prompt (`spec-writer` for greenfield, `codebase-discovery` for brownfield). Automatic server-side Forge skill execution still remains deferred beyond the preset-prompt handoff.
 
 ---
 
@@ -30,7 +30,7 @@ These were the open questions the spec had to answer before code could start. De
 - **F1** — file picker (desktop `window.desktopBridge.pickFolder`, falls back to text input on web mode).
 - **F2** — paste an absolute path into a text input.
 - **F3** (git URL clone) — **deferred to C3.5**. Touches git binary, clone auth, hooks that run arbitrary code at clone time, disk quota, partial-clone cleanup. Needs its own spec with a threat model.
-- **F4** (Forge skill chain after init) — **deferred to C3.6**. Touches skill invocation from the server side and the draft-thread preset-message pattern. Needs a design for "intake handoff to the first agent turn" that works for both greenfield (`spec-writer`) and brownfield (`codebase-discovery`).
+- **F4** (Forge skill chain after init) — shipped in the narrower preset-prompt form; full server-side skill execution remains deferred. The current behavior opens the draft with the right Forge invocation seeded based on greenfield vs brownfield detection.
 
 **Why defer**: F1 + F2 are cheap. They close the most common gap (my project is at `D:\repos\foo`, let me track it) without introducing a new attack surface or server-side git dependency. F3/F4 are each their own sprint with their own threat models.
 
@@ -108,7 +108,7 @@ Five implementation tasks, in build order:
 Explicitly not building:
 
 - **Git URL clone** (F3). Deferred to C3.5. This includes no `git` subprocess on the server, no clone auth prompting, no handling of `git clone` hook execution.
-- **Forge skill chaining after init** (F4). Deferred to C3.6. The intake flow opens a blank draft thread. The user can type `/attacca-forge:spec-writer` manually in the composer if they want.
+- **Server-side Forge skill execution after init**. Still deferred. The intake flow now opens a draft thread with the appropriate Forge handoff prompt prefilled, but it does not execute the skill automatically on the server.
 - **Auto-scan intake roots**. The Podium dashboard still only scans the single podium root. Intake adds individual projects, not a second scan path. Multi-root scanning is separate (C5).
 - **Project deletion or rollback** on intake failure. If init fails mid-flow, the user sees an error and has to clean up via Stand mode (or by deleting the registered project through existing UI).
 - **Bulk intake**. One project at a time in v0. A future "import all projects from `$dir`" flow is out of scope.
@@ -234,7 +234,7 @@ All three dependencies are shipped.
 ## Out of scope (future work)
 
 - **C3.5 — git URL clone** (F3)
-- **C3.6 — Forge skill chain after init** (F4)
+- **C3.6 — server-side Forge skill execution after intake** (beyond the shipped preset-prompt handoff)
 - **Bulk intake** from a parent directory
 - **Project rollback** on mid-flow failure
 - **Worktree-specific intake** handling

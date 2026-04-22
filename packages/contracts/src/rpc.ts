@@ -7,6 +7,9 @@ import { AuthAccessStreamEvent } from "./auth";
 import { FilesystemBrowseInput, FilesystemBrowseResult, FilesystemBrowseError } from "./filesystem";
 import {
   GitActionProgressEvent,
+  GitCloneRepositoryError,
+  GitCloneRepositoryInput,
+  GitCloneRepositoryResult,
   GitCheckoutInput,
   GitCheckoutResult,
   GitCommandError,
@@ -130,6 +133,7 @@ export const WS_METHODS = {
   gitCreateBranch: "git.createBranch",
   gitCheckout: "git.checkout",
   gitInit: "git.init",
+  gitCloneRepository: "git.cloneRepository",
   gitResolvePullRequest: "git.resolvePullRequest",
   gitPreparePullRequestThread: "git.preparePullRequestThread",
 
@@ -341,6 +345,12 @@ export const WsGitInitRpc = Rpc.make(WS_METHODS.gitInit, {
   error: GitCommandError,
 });
 
+export const WsGitCloneRepositoryRpc = Rpc.make(WS_METHODS.gitCloneRepository, {
+  payload: GitCloneRepositoryInput,
+  success: GitCloneRepositoryResult,
+  error: GitCloneRepositoryError,
+});
+
 export const WsTerminalOpenRpc = Rpc.make(WS_METHODS.terminalOpen, {
   payload: TerminalOpenInput,
   success: TerminalSessionSnapshot,
@@ -478,6 +488,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitCreateBranchRpc,
   WsGitCheckoutRpc,
   WsGitInitRpc,
+  WsGitCloneRepositoryRpc,
   WsTerminalOpenRpc,
   WsTerminalWriteRpc,
   WsTerminalResizeRpc,

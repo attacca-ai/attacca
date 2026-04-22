@@ -1,7 +1,7 @@
 import { scopeProjectRef, scopedProjectKey } from "@t3tools/client-runtime";
 import { createFileRoute } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import type { FactoryConfig, Gap, ScannedProject } from "@t3tools/contracts";
 import { DEFAULT_MODEL_BY_PROVIDER, FACTORY_PROTOCOL_VERSION } from "@t3tools/contracts";
 import {
@@ -33,10 +33,16 @@ import { toastManager } from "../components/ui/toast";
 import { selectProjectsAcrossEnvironments, useStore } from "../store";
 import { useFactoryStore } from "../stores/factory";
 import {
+  DISCOVERED_PROJECTS_PREVIEW_LIMIT,
+  resolveProjectListPreview,
+} from "./-_chat.podium.logic";
+import {
   normalizeCwd,
+  partitionDiscoveredProjects,
   selectDiscoveredProjects,
   selectStalledProjects,
   selectTrackedProjects,
+  type PodiumIntakeRequest,
   usePodiumStore,
   type IntakeDeps,
 } from "../stores/podium";
@@ -320,13 +326,19 @@ const TrackedRow = memo(function TrackedRow({
 interface DiscoveredRowProps {
   readonly project: ScannedProject;
   readonly onInitialize: (project: ScannedProject) => void;
+  readonly onDismiss?: (project: ScannedProject) => void;
+  readonly onRestore?: (project: ScannedProject) => void;
   readonly isInitializing: boolean;
+  readonly isDismissed?: boolean;
 }
 
 const DiscoveredRow = memo(function DiscoveredRow({
   project,
   onInitialize,
+  onDismiss,
+  onRestore,
   isInitializing,
+  isDismissed = false,
 }: DiscoveredRowProps) {
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-border/40 px-3 py-2">
@@ -334,20 +346,43 @@ const DiscoveredRow = memo(function DiscoveredRow({
         <p className="truncate text-[13px] font-medium text-foreground/80">{project.slug}</p>
         <p className="truncate font-mono text-[10px] text-muted-foreground/40">{project.path}</p>
       </div>
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => onInitialize(project)}
-        disabled={isInitializing}
-        className="h-7 shrink-0 gap-1.5 text-[11px]"
-      >
-        {isInitializing ? (
-          <LoaderIcon className="size-3 animate-spin" />
+      <div className="flex shrink-0 items-center gap-1.5">
+        {isDismissed ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onRestore?.(project)}
+            disabled={isInitializing}
+            className="h-7 text-[11px]"
+          >
+            Restore
+          </Button>
         ) : (
-          <FolderPlusIcon className="size-3" />
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onDismiss?.(project)}
+            disabled={isInitializing}
+            className="h-7 text-[11px]"
+          >
+            Dismiss
+          </Button>
         )}
-        Initialize
-      </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onInitialize(project)}
+          disabled={isInitializing}
+          className="h-7 shrink-0 gap-1.5 text-[11px]"
+        >
+          {isInitializing ? (
+            <LoaderIcon className="size-3 animate-spin" />
+          ) : (
+            <FolderPlusIcon className="size-3" />
+          )}
+          Initialize
+        </Button>
+      </div>
     </div>
   );
 });
@@ -367,9 +402,11 @@ function PodiumRouteView() {
   const defaultThreadEnvMode = useSettings((s) => s.defaultThreadEnvMode);
   const podiumScanRootOverride = useSettings((s) => s.podiumScanRootOverride);
   const externalIntakeRoots = useSettings((s) => s.externalIntakeRoots);
+  const dismissedPaths = useSettings((s) => s.dismissedPaths);
   const { updateSettings } = useUpdateSettings();
   const { handleNewThread } = useHandleNewThread();
   const intakeProjectFromPath = usePodiumStore((s) => s.intakeProjectFromPath);
+  const intakeProjectFromGitUrl = usePodiumStore((s) => s.intakeProjectFromGitUrl);
   const intakeStatus = usePodiumStore((s) => s.intakeStatus);
 
   const scanWarnings = usePodiumStore(useShallow((s) => s.scanWarnings));
@@ -378,9 +415,47 @@ function PodiumRouteView() {
   const [initializingPath, setInitializingPath] = useState<string | null>(null);
   const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [dismissedWarnings, setDismissedWarnings] = useState(false);
+  const [showDismissedProjects, setShowDismissedProjects] = useState(false);
+  const [showAllDiscoveredProjects, setShowAllDiscoveredProjects] = useState(false);
+  const [showAllDismissedProjects, setShowAllDismissedProjects] = useState(false);
+
+  const { visibleProjects: visibleDiscoveredProjects, dismissedProjects: dismissedDiscovered } =
+    useMemo(
+      () => partitionDiscoveredProjects(discovered, dismissedPaths),
+      [discovered, dismissedPaths],
+    );
+  const discoveredPreview = useMemo(
+    () => resolveProjectListPreview(visibleDiscoveredProjects, showAllDiscoveredProjects),
+    [showAllDiscoveredProjects, visibleDiscoveredProjects],
+  );
+  const dismissedPreview = useMemo(
+    () => resolveProjectListPreview(dismissedDiscovered, showAllDismissedProjects),
+    [dismissedDiscovered, showAllDismissedProjects],
+  );
+
+  const restoreDismissedPath = useCallback(
+    (projectPath: string) => {
+      const normalizedPath = normalizeCwd(projectPath);
+      updateSettings({
+        dismissedPaths: dismissedPaths.filter((path) => normalizeCwd(path) !== normalizedPath),
+      });
+    },
+    [dismissedPaths, updateSettings],
+  );
+
+  const dismissDiscoveredProject = useCallback(
+    (projectPath: string) => {
+      const normalizedPath = normalizeCwd(projectPath);
+      if (dismissedPaths.some((path) => normalizeCwd(path) === normalizedPath)) {
+        return;
+      }
+      updateSettings({ dismissedPaths: [...dismissedPaths, projectPath] });
+    },
+    [dismissedPaths, updateSettings],
+  );
 
   const handleIntake = useCallback(
-    async (rawPath: string) => {
+    async (request: PodiumIntakeRequest) => {
       if (!activeEnvironmentId) {
         toastManager.add({
           type: "error",
@@ -435,7 +510,11 @@ function PodiumRouteView() {
         newProjectId,
       };
 
-      await intakeProjectFromPath(rawPath, deps);
+      if (request.kind === "gitUrl") {
+        await intakeProjectFromGitUrl(request.value, deps);
+      } else {
+        await intakeProjectFromPath(request.value, deps);
+      }
 
       const state = usePodiumStore.getState();
       if (state.intakeError) {
@@ -451,6 +530,7 @@ function PodiumRouteView() {
       defaultThreadEnvMode,
       externalIntakeRoots,
       handleNewThread,
+      intakeProjectFromGitUrl,
       intakeProjectFromPath,
       orchestrationProjects,
       rootDir,
@@ -569,6 +649,7 @@ function PodiumRouteView() {
         await initializeFactory(project.path, defaultConfigFor(project), undefined, {
           autoDetectType: true,
         });
+        restoreDismissedPath(project.path);
         await refreshWithOverride();
       } catch (error) {
         toastManager.add({
@@ -580,7 +661,7 @@ function PodiumRouteView() {
         setInitializingPath(null);
       }
     },
-    [initializeFactory, refreshWithOverride],
+    [initializeFactory, refreshWithOverride, restoreDismissedPath],
   );
 
   const dispatchGap = useCallback(
@@ -777,24 +858,100 @@ function PodiumRouteView() {
             </section>
           ) : null}
 
-          {discovered.length > 0 ? (
+          {visibleDiscoveredProjects.length > 0 || dismissedDiscovered.length > 0 ? (
             <section className="space-y-2">
               <div className="flex items-center justify-between">
                 <h2 className="text-[10px] font-semibold tracking-widest text-muted-foreground/50 uppercase">
                   Discovered
                 </h2>
-                <span className="text-[10px] text-muted-foreground/40">{discovered.length}</span>
+                <div className="flex items-center gap-2">
+                  {dismissedDiscovered.length > 0 ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowDismissedProjects((value) => !value)}
+                      className="h-6 px-2 text-[10px]"
+                    >
+                      {showDismissedProjects ? "Hide" : "Show"} dismissed (
+                      {dismissedDiscovered.length})
+                    </Button>
+                  ) : null}
+                  {discoveredPreview.hiddenCount > 0 ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowAllDiscoveredProjects((value) => !value)}
+                      className="h-6 px-2 text-[10px]"
+                    >
+                      {showAllDiscoveredProjects
+                        ? `Show first ${DISCOVERED_PROJECTS_PREVIEW_LIMIT}`
+                        : `Show all (${discoveredPreview.totalCount})`}
+                    </Button>
+                  ) : null}
+                  <span className="text-[10px] text-muted-foreground/40">
+                    {visibleDiscoveredProjects.length}
+                  </span>
+                </div>
               </div>
               <div className="space-y-1.5">
-                {discovered.map((project) => (
+                {visibleDiscoveredProjects.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border/40 px-3 py-3 text-[11px] text-muted-foreground/50">
+                    All discovered projects are currently dismissed.
+                  </div>
+                ) : null}
+                {discoveredPreview.visibleProjects.map((project) => (
                   <DiscoveredRow
                     key={project.path}
                     project={project}
                     onInitialize={handleInitialize}
+                    onDismiss={(nextProject) => dismissDiscoveredProject(nextProject.path)}
                     isInitializing={initializingPath === project.path}
                   />
                 ))}
               </div>
+              {discoveredPreview.hiddenCount > 0 && !showAllDiscoveredProjects ? (
+                <p className="text-[10px] text-muted-foreground/40">
+                  Showing first {DISCOVERED_PROJECTS_PREVIEW_LIMIT} discovered projects. Expand to
+                  see {discoveredPreview.hiddenCount} more.
+                </p>
+              ) : null}
+              {showDismissedProjects && dismissedDiscovered.length > 0 ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <p className="text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">
+                      Dismissed
+                    </p>
+                    {dismissedPreview.hiddenCount > 0 ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setShowAllDismissedProjects((value) => !value)}
+                        className="h-6 px-2 text-[10px]"
+                      >
+                        {showAllDismissedProjects
+                          ? `Show first ${DISCOVERED_PROJECTS_PREVIEW_LIMIT}`
+                          : `Show all (${dismissedPreview.totalCount})`}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {dismissedPreview.visibleProjects.map((project) => (
+                    <DiscoveredRow
+                      key={`dismissed-${project.path}`}
+                      project={project}
+                      onInitialize={handleInitialize}
+                      onRestore={(nextProject) => restoreDismissedPath(nextProject.path)}
+                      isInitializing={initializingPath === project.path}
+                      isDismissed
+                    />
+                  ))}
+                  {dismissedPreview.hiddenCount > 0 && !showAllDismissedProjects ? (
+                    <p className="text-[10px] text-muted-foreground/40">
+                      Showing first {DISCOVERED_PROJECTS_PREVIEW_LIMIT} dismissed projects. Expand
+                      to see {dismissedPreview.hiddenCount} more.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               <p className="pt-1 text-[10px] text-muted-foreground/40">
                 Set ATTACCA_PODIUM_EXCLUDE (comma-separated) to hide noisy directories.
               </p>

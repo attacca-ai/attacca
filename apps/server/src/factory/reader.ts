@@ -6,7 +6,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join } from "node:path";
 import YAML from "yaml";
 import {
   FACTORY_DIR,
@@ -86,8 +86,8 @@ function readSessions(factoryPath: string): SessionLog[] {
   try {
     const files = readdirSync(progressDir)
       .filter((f) => f.startsWith("session-") && f.endsWith(".json"))
-      .sort()
-      .reverse()
+      .toSorted()
+      .toReversed()
       .slice(0, 10); // Last 10 sessions
 
     return files

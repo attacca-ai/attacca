@@ -18,7 +18,12 @@ import {
 } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { GitCommandError, type GitBranch } from "@t3tools/contracts";
+import {
+  GitCommandError,
+  type GitBranch,
+  type GitCloneRepositoryInput,
+  type GitCloneRepositoryResult,
+} from "@t3tools/contracts";
 import { dedupeRemoteBranchesWithLocalMatches } from "@t3tools/shared/git";
 import { compactTraceAttributes } from "../../observability/Attributes.ts";
 import { gitCommandDuration, gitCommandsTotal, withMetrics } from "../../observability/Metrics.ts";
@@ -36,6 +41,7 @@ import {
   parseRemoteNamesInGitOrder,
   parseRemoteRefWithRemoteNames,
 } from "../remoteRefs.ts";
+import { resolveCloneTargetPath } from "../cloneTarget.ts";
 import { ServerConfig } from "../../config.ts";
 import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 
@@ -2159,6 +2165,79 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       fallbackErrorMessage: "git init failed",
     }).pipe(Effect.asVoid);
 
+  const cloneRepository: GitCoreShape["cloneRepository"] = Effect.fn("cloneRepository")(function* (
+    input: GitCloneRepositoryInput,
+  ) {
+    const destinationParent = path.resolve(input.destinationParent);
+    const parentStat = yield* fileSystem.stat(destinationParent).pipe(
+      Effect.mapError(
+        (cause) =>
+          new GitCommandError({
+            operation: "GitCore.cloneRepository",
+            command: "git clone",
+            cwd: destinationParent,
+            detail: `Destination parent ${destinationParent} could not be accessed`,
+            cause,
+          }),
+      ),
+    );
+
+    if (parentStat.type !== "Directory") {
+      return yield* new GitCommandError({
+        operation: "GitCore.cloneRepository",
+        command: "git clone",
+        cwd: destinationParent,
+        detail: `Destination parent ${destinationParent} is not a directory`,
+      });
+    }
+
+    const { directoryName, projectPath } = yield* Effect.try({
+      try: () =>
+        resolveCloneTargetPath({
+          destinationParent,
+          url: input.url,
+          directoryName: input.directoryName,
+        }),
+      catch: (cause) =>
+        new GitCommandError({
+          operation: "GitCore.cloneRepository",
+          command: "git clone",
+          cwd: destinationParent,
+          detail:
+            cause instanceof Error ? cause.message : "Could not derive a clone target directory",
+          cause,
+        }),
+    });
+    const targetExists = yield* fileSystem.stat(projectPath).pipe(
+      Effect.map(() => true),
+      Effect.catch(() => Effect.succeed(false)),
+    );
+
+    if (targetExists) {
+      return yield* new GitCommandError({
+        operation: "GitCore.cloneRepository",
+        command: "git clone",
+        cwd: destinationParent,
+        detail: `Destination ${projectPath} already exists`,
+      });
+    }
+
+    yield* executeGit(
+      "GitCore.cloneRepository",
+      destinationParent,
+      ["clone", "--", input.url, directoryName],
+      {
+        timeoutMs: 120_000,
+        fallbackErrorMessage: "git clone failed",
+      },
+    );
+
+    return {
+      directoryName,
+      projectPath,
+    } satisfies GitCloneRepositoryResult;
+  });
+
   const listLocalBranchNames: GitCoreShape["listLocalBranchNames"] = (cwd) =>
     runGitStdout("GitCore.listLocalBranchNames", cwd, [
       "branch",
@@ -2199,6 +2278,7 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     createBranch,
     checkoutBranch,
     initRepo,
+    cloneRepository,
     listLocalBranchNames,
   } satisfies GitCoreShape;
 });

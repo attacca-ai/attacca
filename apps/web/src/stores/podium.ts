@@ -1,9 +1,9 @@
 /**
- * Podium store — cross-project factory view.
+ * Podium store: cross-project factory view.
  *
  * Holds the latest scan result keyed by root directory. Kept separate from
- * the factory store so the two concerns don't contaminate each other: factory
- * store is per-project state, podium store is cross-project discovery.
+ * the factory store so the two concerns do not contaminate each other:
+ * factory store is per-project state, podium store is cross-project discovery.
  *
  * The root directory is resolved server-side via factory.scanProjects (which
  * falls back to ATTACCA_PODIUM_ROOT or ~/projects when the client passes no
@@ -16,6 +16,7 @@ import {
   type EnvironmentId,
   type FactoryConfig,
   type ProjectId,
+  type ProjectType,
   type ScannedProject,
   type ScopedProjectRef,
 } from "@t3tools/contracts";
@@ -31,6 +32,14 @@ export function normalizeCwd(value: string): string {
   return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
+function compareProjectSlug(a: ScannedProject, b: ScannedProject): number {
+  return a.slug.localeCompare(b.slug);
+}
+
+function getProjectNameFromPath(rawPath: string): string {
+  return rawPath.split(/[/\\]/).findLast((part) => part.length > 0) ?? rawPath;
+}
+
 function getParentDir(rawPath: string): string {
   const normalized = rawPath.replace(/\\/g, "/").replace(/\/+$/, "");
   const lastSlash = normalized.lastIndexOf("/");
@@ -39,13 +48,32 @@ function getParentDir(rawPath: string): string {
 
 function isPathUnderRoots(normalizedPath: string, roots: ReadonlyArray<string>): boolean {
   return roots.some((root) => {
-    const nr = normalizeCwd(root);
-    return normalizedPath === nr || normalizedPath.startsWith(nr + "/");
+    const normalizedRoot = normalizeCwd(root);
+    return normalizedPath === normalizedRoot || normalizedPath.startsWith(normalizedRoot + "/");
   });
 }
 
+export function buildIntakePresetPrompt(
+  projectName: string,
+  projectType: ProjectType | null,
+): string {
+  if (projectType === "brownfield") {
+    return [
+      `Project: ${projectName}.`,
+      "This project already has code on disk. Map the existing system before planning changes.",
+      "Start with /attacca-forge:codebase-discovery and capture the findings in the .factory docs.",
+    ].join("\n\n");
+  }
+
+  return [
+    `Project: ${projectName}.`,
+    "This project is effectively greenfield. Draft the initial specification and execution plan before implementation work begins.",
+    "Start with /attacca-forge:spec-writer and use it to seed the .factory project docs.",
+  ].join("\n\n");
+}
+
 // ---------------------------------------------------------------------------
-// Intake deps — things only available in component context
+// Intake deps: things only available in component context
 // ---------------------------------------------------------------------------
 
 export interface IntakeDeps {
@@ -76,6 +104,110 @@ export interface IntakeDeps {
   readonly newProjectId: () => ProjectId;
 }
 
+export interface PodiumIntakeRequest {
+  readonly kind: "path" | "gitUrl";
+  readonly value: string;
+}
+
+function getAllowedRootsForIntake(deps: IntakeDeps): ReadonlyArray<string> {
+  return deps.podiumScanRoot
+    ? [...deps.externalIntakeRoots, deps.podiumScanRoot]
+    : [...deps.externalIntakeRoots];
+}
+
+async function performPathIntake(rawPath: string, deps: IntakeDeps): Promise<void> {
+  const trimmed = rawPath.trim();
+  if (!trimmed) return;
+
+  const wantedCwd = normalizeCwd(trimmed);
+  const client = getWsRpcClient();
+  const initialSummary = await client.factory.readSummary({ projectPath: trimmed });
+  const projectName = initialSummary.config?.display_name ?? getProjectNameFromPath(trimmed);
+
+  const existing = deps.orchestrationProjects.find(
+    (project) => normalizeCwd(project.cwd) === wantedCwd,
+  );
+  if (existing && initialSummary.config) {
+    const ref = deps.scopeProjectRef(existing.environmentId, existing.id);
+    await deps.handleNewThread(ref, {
+      envMode: deps.defaultThreadEnvMode,
+      presetPrompt: buildIntakePresetPrompt(projectName, initialSummary.config.type),
+    });
+    return;
+  }
+
+  const allRoots = getAllowedRootsForIntake(deps);
+  if (!isPathUnderRoots(wantedCwd, allRoots)) {
+    const parentDir = getParentDir(trimmed);
+    const confirmed = await deps.confirm(
+      `Add "${parentDir}" to intake roots? Attacca will be able to write .factory/ metadata in any project under this directory.`,
+    );
+    if (!confirmed) {
+      throw new Error("Intake cancelled");
+    }
+    deps.updateSettings({ externalIntakeRoots: [...deps.externalIntakeRoots, parentDir] });
+  }
+
+  const projectId = existing?.id ?? deps.newProjectId();
+  if (!existing) {
+    await deps.dispatchProjectCreate({
+      projectId,
+      title: projectName,
+      workspaceRoot: trimmed,
+    });
+  }
+
+  const currentRoots = getAllowedRootsForIntake(deps);
+  const parentDir = getParentDir(trimmed);
+  const rootsForRpc = isPathUnderRoots(normalizeCwd(trimmed), currentRoots)
+    ? currentRoots
+    : [...currentRoots, parentDir];
+
+  const config: FactoryConfig = {
+    version: FACTORY_PROTOCOL_VERSION,
+    name: projectName,
+    display_name: projectName,
+    type: "greenfield",
+    trust_tier: 2,
+    phase: "IDEA",
+    track: "software",
+  };
+  await client.factory.initialize({
+    projectPath: trimmed,
+    config,
+    autoDetectType: true,
+    allowedRoots: rootsForRpc,
+  });
+
+  const summary =
+    initialSummary.config !== null
+      ? initialSummary
+      : await client.factory.readSummary({ projectPath: trimmed });
+  const presetPrompt = buildIntakePresetPrompt(projectName, summary.config?.type ?? null);
+
+  const ref = deps.scopeProjectRef(existing?.environmentId ?? deps.activeEnvironmentId, projectId);
+  await deps.handleNewThread(ref, {
+    envMode: deps.defaultThreadEnvMode,
+    presetPrompt,
+  });
+}
+
+async function performGitUrlIntake(rawUrl: string, deps: IntakeDeps): Promise<void> {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return;
+  if (!deps.podiumScanRoot.trim()) {
+    throw new Error("Podium root is unavailable. Refresh Podium and try again.");
+  }
+
+  const cloneResult = await getWsRpcClient().git.cloneRepository({
+    url: trimmed,
+    destinationParent: deps.podiumScanRoot,
+    allowedRoots: getAllowedRootsForIntake(deps),
+  });
+
+  await performPathIntake(cloneResult.projectPath, deps);
+}
+
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
@@ -83,14 +215,6 @@ export interface IntakeDeps {
 export interface ScanOptions {
   readonly overrideRoot?: string | undefined;
   readonly externalRoots?: ReadonlyArray<string> | undefined;
-}
-
-/** Retained across calls so `refresh()` can replay the last scan config. */
-let _lastScanOptions: ScanOptions | null = null;
-
-function formatRejectedScanWarning(root: string, cause: unknown): string {
-  const message = cause instanceof Error ? cause.message.trim() : "";
-  return message.length > 0 ? `Could not scan ${root} (${message}).` : `Could not scan ${root}.`;
 }
 
 interface PodiumState {
@@ -109,7 +233,33 @@ interface PodiumState {
   readonly refresh: () => Promise<ReadonlyArray<ScannedProject>>;
   readonly setSelectedProjectPath: (projectPath: string | null) => void;
   readonly intakeProjectFromPath: (rawPath: string, deps: IntakeDeps) => Promise<void>;
+  readonly intakeProjectFromGitUrl: (rawUrl: string, deps: IntakeDeps) => Promise<void>;
 }
+
+function formatRejectedScanWarning(root: string, cause: unknown): string {
+  const message = cause instanceof Error ? cause.message.trim() : "";
+  return message.length > 0 ? `Could not scan ${root} (${message}).` : `Could not scan ${root}.`;
+}
+
+async function runIntakeOperation(
+  get: () => PodiumState,
+  set: (partial: Partial<PodiumState>) => void,
+  operation: () => Promise<void>,
+): Promise<void> {
+  if (get().intakeStatus === "loading") return;
+
+  set({ intakeStatus: "loading", intakeError: null });
+  try {
+    await operation();
+    set({ intakeStatus: "idle", intakeError: null });
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : "Intake failed";
+    set({ intakeStatus: "error", intakeError: message });
+  }
+}
+
+/** Retained across calls so refresh() can replay the last scan config. */
+let _lastScanOptions: ScanOptions | null = null;
 
 export const usePodiumStore = create<PodiumState>((set, get) => ({
   rootDir: "",
@@ -132,8 +282,6 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
 
     set({ status: "loading", error: null, scanWarnings: [] });
     try {
-      // Resolve the root source tag from the server on the first call so the
-      // UI can show "from env var" vs "default" without a second round-trip.
       let rootSource = get().rootSource;
       if (rootSource === null && overrideRoot === undefined) {
         const rootInfo = await client.factory.getPodiumRoot();
@@ -142,7 +290,6 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
         rootSource = "override";
       }
 
-      // ── Primary scan ────────────────────────────────────────────
       const primaryResult = await client.factory.scanProjects(
         overrideRoot !== undefined ? { rootDir: overrideRoot } : {},
       );
@@ -151,13 +298,11 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
       const scanRoots: string[] = [primaryRootDir];
       const warnings: string[] = primaryResult.warning ? [primaryResult.warning] : [];
 
-      // Dedup map — primary projects get first-writer advantage
       const seen = new Map<string, ScannedProject>();
-      for (const p of primaryResult.projects) {
-        seen.set(normalizeCwd(p.path), p);
+      for (const project of primaryResult.projects) {
+        seen.set(normalizeCwd(project.path), project);
       }
 
-      // ── External root scans (parallel) ──────────────────────────
       const normalizedPrimary = normalizeCwd(primaryRootDir);
       const uniqueExternalRoots = externalRoots.filter(
         (root) => normalizeCwd(root) !== normalizedPrimary,
@@ -183,18 +328,16 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
             continue;
           }
 
-          for (const p of result.value.projects) {
-            const key = normalizeCwd(p.path);
+          for (const project of result.value.projects) {
+            const key = normalizeCwd(project.path);
             if (!seen.has(key)) {
-              seen.set(key, p);
+              seen.set(key, project);
             }
-            // Already seen from primary or earlier root — skip (first-writer wins)
           }
         }
       }
 
       const mergedProjects = Array.from(seen.values());
-
       set({
         rootDir: primaryRootDir,
         rootSource,
@@ -219,100 +362,20 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
     set({ selectedProjectPath: projectPath });
   },
 
-  intakeProjectFromPath: async (rawPath, deps) => {
-    const trimmed = rawPath.trim();
-    if (!trimmed) return;
-    if (get().intakeStatus === "loading") return;
+  intakeProjectFromPath: async (rawPath, deps) =>
+    runIntakeOperation(get, set, () => performPathIntake(rawPath, deps)),
 
-    set({ intakeStatus: "loading", intakeError: null });
-
-    try {
-      const wantedCwd = normalizeCwd(trimmed);
-
-      // ── Duplicate check ──────────────────────────────────────
-      const existing = deps.orchestrationProjects.find((p) => normalizeCwd(p.cwd) === wantedCwd);
-      if (existing) {
-        const ref = deps.scopeProjectRef(existing.environmentId, existing.id);
-        await deps.handleNewThread(ref, { envMode: deps.defaultThreadEnvMode });
-        set({ intakeStatus: "idle" });
-        return;
-      }
-
-      // ── Allowlist check ──────────────────────────────────────
-      const allRoots = deps.podiumScanRoot
-        ? [...deps.externalIntakeRoots, deps.podiumScanRoot]
-        : [...deps.externalIntakeRoots];
-
-      if (!isPathUnderRoots(wantedCwd, allRoots)) {
-        const parentDir = getParentDir(trimmed);
-        const confirmed = await deps.confirm(
-          `Add "${parentDir}" to intake roots? Attacca will be able to write .factory/ metadata in any project under this directory.`,
-        );
-        if (!confirmed) {
-          set({ intakeStatus: "idle", intakeError: "Intake cancelled" });
-          return;
-        }
-        const updatedRoots = [...deps.externalIntakeRoots, parentDir];
-        deps.updateSettings({ externalIntakeRoots: updatedRoots });
-      }
-
-      // ── project.create ───────────────────────────────────────
-      const projectId = deps.newProjectId();
-      const slug = trimmed.split(/[/\\]/).findLast((part) => part.length > 0) ?? trimmed;
-      await deps.dispatchProjectCreate({
-        projectId,
-        title: slug,
-        workspaceRoot: trimmed,
-      });
-
-      // ── factory.initialize ───────────────────────────────────
-      const client = getWsRpcClient();
-      const currentRoots = deps.podiumScanRoot
-        ? [...deps.externalIntakeRoots, deps.podiumScanRoot]
-        : [...deps.externalIntakeRoots];
-      // Include the parent we may have just added
-      const parentDir = getParentDir(trimmed);
-      const rootsForRpc = isPathUnderRoots(normalizeCwd(trimmed), currentRoots)
-        ? currentRoots
-        : [...currentRoots, parentDir];
-
-      const config: FactoryConfig = {
-        version: FACTORY_PROTOCOL_VERSION,
-        name: slug,
-        display_name: slug,
-        type: "greenfield",
-        trust_tier: 2,
-        phase: "IDEA",
-        track: "software",
-      };
-      await client.factory.initialize({
-        projectPath: trimmed,
-        config,
-        autoDetectType: true,
-        allowedRoots: rootsForRpc,
-      });
-
-      // ── Open draft thread ────────────────────────────────────
-      const ref = deps.scopeProjectRef(deps.activeEnvironmentId, projectId);
-      await deps.handleNewThread(ref, { envMode: deps.defaultThreadEnvMode });
-
-      set({ intakeStatus: "idle", intakeError: null });
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Intake failed";
-      set({ intakeStatus: "error", intakeError: message });
-    }
-  },
+  intakeProjectFromGitUrl: async (rawUrl, deps) =>
+    runIntakeOperation(get, set, () => performGitUrlIntake(rawUrl, deps)),
 }));
 
 // ---------------------------------------------------------------------------
 // Selectors
 // ---------------------------------------------------------------------------
 
-// STALLED_THRESHOLD_MS imported from contracts
-
 export function selectTrackedProjects(state: PodiumState): ReadonlyArray<ScannedProject> {
   return state.projects
-    .filter((p) => p.hasFactory)
+    .filter((project) => project.hasFactory)
     .toSorted((a, b) => {
       const aTime = a.lastActivity ? Date.parse(a.lastActivity) : 0;
       const bTime = b.lastActivity ? Date.parse(b.lastActivity) : 0;
@@ -321,20 +384,40 @@ export function selectTrackedProjects(state: PodiumState): ReadonlyArray<Scanned
 }
 
 export function selectDiscoveredProjects(state: PodiumState): ReadonlyArray<ScannedProject> {
-  return state.projects
-    .filter((p) => !p.hasFactory)
-    .toSorted((a, b) => a.slug.localeCompare(b.slug));
+  return state.projects.filter((project) => !project.hasFactory).toSorted(compareProjectSlug);
+}
+
+export function partitionDiscoveredProjects(
+  discoveredProjects: ReadonlyArray<ScannedProject>,
+  dismissedPaths: ReadonlyArray<string>,
+): {
+  readonly visibleProjects: ReadonlyArray<ScannedProject>;
+  readonly dismissedProjects: ReadonlyArray<ScannedProject>;
+} {
+  const dismissed = new Set(dismissedPaths.map(normalizeCwd));
+  const visibleProjects: ScannedProject[] = [];
+  const dismissedProjects: ScannedProject[] = [];
+
+  for (const project of discoveredProjects) {
+    if (dismissed.has(normalizeCwd(project.path))) {
+      dismissedProjects.push(project);
+    } else {
+      visibleProjects.push(project);
+    }
+  }
+
+  return {
+    visibleProjects: visibleProjects.toSorted(compareProjectSlug),
+    dismissedProjects: dismissedProjects.toSorted(compareProjectSlug),
+  };
 }
 
 export function selectStalledProjects(state: PodiumState): ReadonlyArray<ScannedProject> {
   const now = Date.now();
-  return selectTrackedProjects(state).filter((p) => {
-    if (p.gaps.length > 0) return true;
-    // Missing or unparseable lastActivity is treated as "don't know" — not
-    // stalled. Otherwise freshly-initialized projects and legacy configs
-    // would appear permanently stalled, contradicting spec scenario 1.
-    if (!p.lastActivity) return false;
-    const last = Date.parse(p.lastActivity);
+  return selectTrackedProjects(state).filter((project) => {
+    if (project.gaps.length > 0) return true;
+    if (!project.lastActivity) return false;
+    const last = Date.parse(project.lastActivity);
     if (!Number.isFinite(last)) return false;
     return now - last > STALLED_THRESHOLD_MS;
   });
@@ -342,13 +425,12 @@ export function selectStalledProjects(state: PodiumState): ReadonlyArray<Scanned
 
 const GAP_SEVERITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
-/** Sort projects by their highest-severity gap (worst first). */
 export function selectProjectsByGapSeverity(state: PodiumState): ReadonlyArray<ScannedProject> {
   return selectTrackedProjects(state)
-    .filter((p) => p.gaps.length > 0)
+    .filter((project) => project.gaps.length > 0)
     .toSorted((a, b) => {
-      const aMax = Math.min(...a.gaps.map((g) => GAP_SEVERITY_ORDER[g.severity] ?? 3));
-      const bMax = Math.min(...b.gaps.map((g) => GAP_SEVERITY_ORDER[g.severity] ?? 3));
+      const aMax = Math.min(...a.gaps.map((gap) => GAP_SEVERITY_ORDER[gap.severity] ?? 3));
+      const bMax = Math.min(...b.gaps.map((gap) => GAP_SEVERITY_ORDER[gap.severity] ?? 3));
       if (aMax !== bMax) return aMax - bMax;
       return b.gaps.length - a.gaps.length;
     });

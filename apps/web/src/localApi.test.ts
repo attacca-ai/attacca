@@ -567,6 +567,7 @@ describe("wsApi", () => {
       defaultMode: "stand",
       podiumScanRootOverride: "",
       externalIntakeRoots: [],
+      dismissedPaths: [],
     });
     await api.persistence.getSavedEnvironmentRegistry();
     await api.persistence.setSavedEnvironmentRegistry([]);
@@ -585,6 +586,11 @@ describe("wsApi", () => {
       sidebarProjectSortOrder: "manual",
       sidebarThreadSortOrder: "created_at",
       timestampFormat: "24-hour",
+      attaccaUser: "",
+      defaultMode: "stand",
+      podiumScanRootOverride: "",
+      externalIntakeRoots: [],
+      dismissedPaths: [],
     });
     expect(getSavedEnvironmentRegistry).toHaveBeenCalledWith();
     expect(setSavedEnvironmentRegistry).toHaveBeenCalledWith([]);
@@ -608,6 +614,7 @@ describe("wsApi", () => {
       defaultMode: "stand",
       podiumScanRootOverride: "",
       externalIntakeRoots: [],
+      dismissedPaths: [],
     });
     await api.persistence.setSavedEnvironmentRegistry([
       {
@@ -631,6 +638,11 @@ describe("wsApi", () => {
       sidebarProjectSortOrder: "manual",
       sidebarThreadSortOrder: "created_at",
       timestampFormat: "24-hour",
+      attaccaUser: "",
+      defaultMode: "stand",
+      podiumScanRootOverride: "",
+      externalIntakeRoots: [],
+      dismissedPaths: [],
     });
     await expect(api.persistence.getSavedEnvironmentRegistry()).resolves.toEqual([
       {

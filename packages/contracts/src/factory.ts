@@ -332,11 +332,11 @@ export type FactoryRegenerateClaudeMdResult = typeof FactoryRegenerateClaudeMdRe
  * `externalIntakeRoots` client setting on every write RPC call. Absent or
  * empty means "no extra roots, write must stay inside the scan root".
  */
-const AllowedRoots = Schema.optional(Schema.Array(Schema.String));
+export const FactoryAllowedRoots = Schema.optional(Schema.Array(Schema.String));
 
 export const FactoryProjectPathInput = Schema.Struct({
   projectPath: Schema.String,
-  allowedRoots: AllowedRoots,
+  allowedRoots: FactoryAllowedRoots,
 });
 export type FactoryProjectPathInput = typeof FactoryProjectPathInput.Type;
 
@@ -350,21 +350,21 @@ export const FactoryInitializeInput = Schema.Struct({
   projectPath: Schema.String,
   config: FactoryConfig,
   autoDetectType: Schema.optional(Schema.Boolean),
-  allowedRoots: AllowedRoots,
+  allowedRoots: FactoryAllowedRoots,
 });
 export type FactoryInitializeInput = typeof FactoryInitializeInput.Type;
 
 export const FactoryWriteQueueInput = Schema.Struct({
   projectPath: Schema.String,
   queue: WorkQueue,
-  allowedRoots: AllowedRoots,
+  allowedRoots: FactoryAllowedRoots,
 });
 export type FactoryWriteQueueInput = typeof FactoryWriteQueueInput.Type;
 
 export const FactoryWriteSessionLogInput = Schema.Struct({
   projectPath: Schema.String,
   session: SessionLog,
-  allowedRoots: AllowedRoots,
+  allowedRoots: FactoryAllowedRoots,
 });
 export type FactoryWriteSessionLogInput = typeof FactoryWriteSessionLogInput.Type;
 
@@ -375,7 +375,7 @@ export type FactoryWriteSessionLogInput = typeof FactoryWriteSessionLogInput.Typ
 export const DispatchWorkPackageInput = Schema.Struct({
   projectPath: Schema.String,
   gap: Gap,
-  allowedRoots: AllowedRoots,
+  allowedRoots: FactoryAllowedRoots,
 });
 export type DispatchWorkPackageInput = typeof DispatchWorkPackageInput.Type;
 

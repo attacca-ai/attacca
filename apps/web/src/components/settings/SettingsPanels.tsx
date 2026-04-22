@@ -1494,6 +1494,7 @@ export function StandSettingsPanel() {
   const defaultMode = useSettings((s) => s.defaultMode);
   const podiumScanRootOverride = useSettings((s) => s.podiumScanRootOverride);
   const externalIntakeRoots = useSettings((s) => s.externalIntakeRoots);
+  const dismissedPaths = useSettings((s) => s.dismissedPaths);
   const { updateSettings } = useUpdateSettings();
 
   return (
@@ -1575,6 +1576,39 @@ export function StandSettingsPanel() {
                 onClick={() => {
                   updateSettings({
                     externalIntakeRoots: externalIntakeRoots.filter((r) => r !== root),
+                  });
+                }}
+              >
+                <XIcon className="size-3" />
+              </Button>
+            </div>
+          ))
+        )}
+      </SettingsSection>
+
+      <SettingsSection title="Dismissed discovered projects">
+        {dismissedPaths.length === 0 ? (
+          <div className="px-4 py-3 text-xs text-muted-foreground sm:px-5">
+            No discovered projects are currently dismissed in Podium.
+          </div>
+        ) : (
+          dismissedPaths.map((path) => (
+            <div
+              key={path}
+              className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 first:border-t-0 sm:px-5"
+            >
+              <code className="min-w-0 truncate text-xs text-foreground/80">{path}</code>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 shrink-0 p-0"
+                aria-label={`Restore ${path}`}
+                onClick={() => {
+                  updateSettings({
+                    dismissedPaths: dismissedPaths.filter(
+                      (dismissedPath) => dismissedPath !== path,
+                    ),
                   });
                 }}
               >

@@ -69,6 +69,15 @@ export const ClientSettingsSchema = Schema.Struct({
   externalIntakeRoots: Schema.Array(Schema.String).pipe(
     Schema.withDecodingDefault(Effect.succeed([] as ReadonlyArray<string>)),
   ),
+  /**
+   * Absolute project paths the user has dismissed from the Podium
+   * Discovered list. This is client-only UI state: the scanner still
+   * returns these projects, but the dashboard hides them unless the
+   * user opts to show dismissed entries again.
+   */
+  dismissedPaths: Schema.Array(Schema.String).pipe(
+    Schema.withDecodingDefault(Effect.succeed([] as ReadonlyArray<string>)),
+  ),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 

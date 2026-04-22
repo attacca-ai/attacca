@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { NonNegativeInt, PositiveInt, ThreadId, TrimmedNonEmptyString } from "./baseSchemas";
+import { FactoryAllowedRoots, FactoryPathError } from "./factory";
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 const GIT_LIST_BRANCHES_MAX_LIMIT = 200;
@@ -189,6 +190,14 @@ export const GitInitInput = Schema.Struct({
 });
 export type GitInitInput = typeof GitInitInput.Type;
 
+export const GitCloneRepositoryInput = Schema.Struct({
+  url: TrimmedNonEmptyStringSchema,
+  destinationParent: TrimmedNonEmptyStringSchema,
+  directoryName: Schema.optional(TrimmedNonEmptyStringSchema),
+  allowedRoots: FactoryAllowedRoots,
+});
+export type GitCloneRepositoryInput = typeof GitCloneRepositoryInput.Type;
+
 // RPC Results
 
 const GitStatusPr = Schema.Struct({
@@ -320,6 +329,12 @@ export const GitPullResult = Schema.Struct({
 });
 export type GitPullResult = typeof GitPullResult.Type;
 
+export const GitCloneRepositoryResult = Schema.Struct({
+  directoryName: TrimmedNonEmptyStringSchema,
+  projectPath: TrimmedNonEmptyStringSchema,
+});
+export type GitCloneRepositoryResult = typeof GitCloneRepositoryResult.Type;
+
 // RPC / domain errors
 export class GitCommandError extends Schema.TaggedErrorClass<GitCommandError>()("GitCommandError", {
   operation: Schema.String,
@@ -373,6 +388,9 @@ export const GitManagerServiceError = Schema.Union([
   TextGenerationError,
 ]);
 export type GitManagerServiceError = typeof GitManagerServiceError.Type;
+
+export const GitCloneRepositoryError = Schema.Union([GitCommandError, FactoryPathError]);
+export type GitCloneRepositoryError = typeof GitCloneRepositoryError.Type;
 
 const GitActionProgressBase = Schema.Struct({
   actionId: TrimmedNonEmptyStringSchema,

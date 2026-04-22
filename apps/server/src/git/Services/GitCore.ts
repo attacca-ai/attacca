@@ -9,6 +9,8 @@
 import { Context } from "effect";
 import type { Effect } from "effect";
 import type {
+  GitCloneRepositoryInput,
+  GitCloneRepositoryResult,
   GitCheckoutInput,
   GitCheckoutResult,
   GitCreateBranchInput,
@@ -300,6 +302,13 @@ export interface GitCoreShape {
    * Initialize a repository in the provided directory.
    */
   readonly initRepo: (input: GitInitInput) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Clone a repository into the provided destination parent directory.
+   */
+  readonly cloneRepository: (
+    input: GitCloneRepositoryInput,
+  ) => Effect.Effect<GitCloneRepositoryResult, GitCommandError>;
 
   /**
    * List local branch names (short format).
