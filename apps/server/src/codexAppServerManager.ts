@@ -309,6 +309,11 @@ function mapCodexRuntimeMode(runtimeMode: RuntimeMode): {
         approvalPolicy: "never",
         sandbox: "danger-full-access",
       };
+    case "read-only":
+      return {
+        approvalPolicy: "never",
+        sandbox: "read-only",
+      };
   }
 }
 

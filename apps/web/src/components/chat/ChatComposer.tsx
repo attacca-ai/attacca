@@ -86,6 +86,7 @@ import { toastManager } from "../ui/toast";
 import {
   BotIcon,
   CircleAlertIcon,
+  EyeIcon,
   ListTodoIcon,
   type LucideIcon,
   LockIcon,
@@ -123,6 +124,11 @@ const runtimeModeConfig: Record<
     label: "Full access",
     description: "Allow commands and edits without prompts.",
     icon: LockOpenIcon,
+  },
+  "read-only": {
+    label: "Read-only",
+    description: "Inspect only; block all writes and skip approval prompts.",
+    icon: EyeIcon,
   },
 };
 
