@@ -568,6 +568,7 @@ describe("wsApi", () => {
       podiumScanRootOverride: "",
       externalIntakeRoots: [],
       dismissedPaths: [],
+      arcoSessionId: null,
     });
     await api.persistence.getSavedEnvironmentRegistry();
     await api.persistence.setSavedEnvironmentRegistry([]);
@@ -591,6 +592,7 @@ describe("wsApi", () => {
       podiumScanRootOverride: "",
       externalIntakeRoots: [],
       dismissedPaths: [],
+      arcoSessionId: null,
     });
     expect(getSavedEnvironmentRegistry).toHaveBeenCalledWith();
     expect(setSavedEnvironmentRegistry).toHaveBeenCalledWith([]);
@@ -615,6 +617,7 @@ describe("wsApi", () => {
       podiumScanRootOverride: "",
       externalIntakeRoots: [],
       dismissedPaths: [],
+      arcoSessionId: null,
     });
     await api.persistence.setSavedEnvironmentRegistry([
       {
@@ -643,6 +646,7 @@ describe("wsApi", () => {
       podiumScanRootOverride: "",
       externalIntakeRoots: [],
       dismissedPaths: [],
+      arcoSessionId: null,
     });
     await expect(api.persistence.getSavedEnvironmentRegistry()).resolves.toEqual([
       {

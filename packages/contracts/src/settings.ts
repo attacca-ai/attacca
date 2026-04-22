@@ -78,6 +78,16 @@ export const ClientSettingsSchema = Schema.Struct({
   dismissedPaths: Schema.Array(Schema.String).pipe(
     Schema.withDecodingDefault(Effect.succeed([] as ReadonlyArray<string>)),
   ),
+  /**
+   * Persisted Codex thread/session id for the singleton Arco thread.
+   * `null` means no Arco session has been created yet (or the operator
+   * cleared it via the "Restart Arco session" settings action). When
+   * set, `/arco` resumes the existing Codex thread instead of starting
+   * a new one.
+   */
+  arcoSessionId: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null as string | null)),
+  ),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
