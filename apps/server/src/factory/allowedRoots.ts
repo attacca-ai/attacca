@@ -1,5 +1,5 @@
 import { homedir, platform as osPlatform } from "node:os";
-import { isAbsolute, join, resolve, sep } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { FactoryPathError, type PodiumRootResult } from "@t3tools/contracts";
 
 /**
@@ -18,7 +18,7 @@ export function resolvePodiumRoot(): PodiumRootResult {
 const PATH_CASE_SENSITIVE = osPlatform() !== "win32" && osPlatform() !== "darwin";
 
 function normalizePathForCompare(value: string): string {
-  const absolute = isAbsolute(value) ? resolve(value) : resolve(value);
+  const absolute = resolve(value);
   const trimmed = absolute.replace(/[\\/]+$/, "");
   return PATH_CASE_SENSITIVE ? trimmed : trimmed.toLowerCase();
 }
