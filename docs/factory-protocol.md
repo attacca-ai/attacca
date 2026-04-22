@@ -28,17 +28,17 @@ All types are defined in `packages/contracts/src/factory.ts` and exported from `
 
 ## Ownership
 
-| File | Writer | Reader |
-|------|--------|--------|
-| config.yaml | Forge, Stand, Podium | All |
-| CLAUDE.md | Stand (auto-gen) | Agent |
-| context.md | Developer, Forge | All |
-| status.json | Stand, Podium | Podium, Arco |
-| spec.md | Forge, Developer | Podium, Stand, Agent |
-| queue.json | Podium | Stand |
-| sync-status.json | Podium, Stand | Podium, Stand |
-| progress/* | Stand | Podium, Arco |
-| decisions/* | Developer, Agent | All |
+| File             | Writer               | Reader               |
+| ---------------- | -------------------- | -------------------- |
+| config.yaml      | Forge, Stand, Podium | All                  |
+| CLAUDE.md        | Stand (auto-gen)     | Agent                |
+| context.md       | Developer, Forge     | All                  |
+| status.json      | Stand, Podium        | Podium, Arco         |
+| spec.md          | Forge, Developer     | Podium, Stand, Agent |
+| queue.json       | Podium               | Stand                |
+| sync-status.json | Podium, Stand        | Podium, Stand        |
+| progress/\*      | Stand                | Podium, Arco         |
+| decisions/\*     | Developer, Agent     | All                  |
 
 ## Full specification
 

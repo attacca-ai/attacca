@@ -1,6 +1,6 @@
 # C5 — Multi-root scanning (spec v0)
 
-**Status**: draft for review
+**Status**: implemented on `feature/gap-dispatch`
 **Date**: 2026-04-11
 **Supersedes**: the C5 line item in `docs/phase-2-followups.md`.
 **Relates to**: `docs/c3-external-intake-spec.md`, `docs/phase-2-podium-spec.md`, `docs/factory-protocol.md`.
@@ -39,6 +39,7 @@ Two options were considered:
 ### D3. Deduplication by normalized absolute path
 
 The same project directory could appear under multiple roots if:
+
 - The user's primary scan root is `~/projects` and they also have `~/projects` in `externalIntakeRoots` (redundant but plausible after a settings edit).
 - A symlink or junction makes the same directory reachable from two roots.
 
@@ -106,6 +107,7 @@ Explicitly not building:
 **Given** the primary scan root is `C:\Users\jhon1\projects` (3 projects, 2 with `.factory/`) and `externalIntakeRoots` is `["D:\\repos"]` (2 projects, both with `.factory/`)
 **When** the user opens Podium or clicks Refresh
 **Then**:
+
 1. The client calls `factory.scanProjects({ rootDir: "C:\\Users\\jhon1\\projects" })` and `factory.scanProjects({ rootDir: "D:\\repos" })` in parallel.
 2. Both calls succeed.
 3. The store merges results: 4 tracked projects (sorted by `lastActivity DESC`), 1 discovered project (sorted alphabetically).
@@ -117,6 +119,7 @@ Explicitly not building:
 **Given** the primary scan root is `~/projects` (works fine) and `externalIntakeRoots` is `["Z:\\network-drive"]` (offline)
 **When** the user clicks Refresh
 **Then**:
+
 1. `scanProjects({ rootDir: "~/projects" })` succeeds with 5 projects.
 2. `scanProjects({ rootDir: "Z:\\network-drive" })` returns `[]` (the scanner's existing behavior for unreachable directories).
 3. The store sets `scanWarnings: ["Could not scan Z:\\network-drive"]`.
@@ -129,6 +132,7 @@ Explicitly not building:
 **Given** the primary scan root is `~/projects` which contains `~/projects/acme-api`, and `externalIntakeRoots` is `["~/projects"]` (user accidentally added it)
 **When** the user clicks Refresh
 **Then**:
+
 1. Both scan calls return `acme-api` at `~/projects/acme-api`.
 2. Dedup by normalized path keeps the instance from the primary root scan.
 3. `acme-api` appears exactly once in the dashboard.
@@ -138,6 +142,7 @@ Explicitly not building:
 **Given** the user just intake'd a project at `D:\repos\widget-service` via C3, which added `D:\repos` to `externalIntakeRoots`
 **When** the user navigates back to Podium (or the intake flow triggers a refresh)
 **Then**:
+
 1. The scan includes `D:\repos` as an additional root.
 2. `widget-service` appears in the Tracked section (it has `.factory/` from the intake flow).
 3. Any other projects under `D:\repos` also appear (as Tracked if they have `.factory/`, Discovered otherwise).
@@ -153,9 +158,10 @@ Explicitly not building:
 **Given** the primary scan root is `~/projects` (empty directory, no subdirectories) and `externalIntakeRoots` is `["D:\\repos"]` (3 projects)
 **When** the user opens Podium
 **Then**:
+
 1. Primary scan returns `[]`.
 2. External scan returns 3 projects.
-3. Dashboard renders 3 projects. No empty-state screen — the empty state only shows when *all* roots return zero projects combined.
+3. Dashboard renders 3 projects. No empty-state screen — the empty state only shows when _all_ roots return zero projects combined.
 
 ### v0 Scenario 7 — All roots return zero projects
 

@@ -34,10 +34,7 @@ import { useStore } from "../store";
 import { useUiStateStore } from "../uiStateStore";
 import { syncBrowserChromeTheme } from "../hooks/useTheme";
 import { useTerminalStateStore } from "../terminalStateStore";
-import {
-  bootstrapAttaccaUserIfMissing,
-  migrateLocalSettingsToServer,
-} from "../hooks/useSettings";
+import { bootstrapAttaccaUserIfMissing, migrateLocalSettingsToServer } from "../hooks/useSettings";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 import { projectQueryKeys } from "../lib/projectReactQuery";
 import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";

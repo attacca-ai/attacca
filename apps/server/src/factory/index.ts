@@ -1,4 +1,5 @@
 export { readFactoryDirectory, readFactorySummary, hasFactoryDir } from "./reader";
+export { detectProjectType } from "./projectType";
 export {
   ensureFactoryDir,
   writeConfig,

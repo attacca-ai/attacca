@@ -39,7 +39,6 @@ import {
   selectTrackedProjects,
   usePodiumStore,
   type IntakeDeps,
-  type ScanOptions,
 } from "../stores/podium";
 import { useUiStateStore } from "../uiStateStore";
 import { getWsRpcClient } from "../rpc/wsRpcClient";
@@ -70,6 +69,18 @@ function formatRelativeTime(iso: string | null): string {
   if (days < 30) return `${days}d ago`;
   const months = Math.floor(days / 30);
   return `${months}mo ago`;
+}
+
+function buildGapDispatchPrompt(project: ScannedProject, gap: Gap, workItemTitle: string): string {
+  const lines = [
+    `Project: ${project.displayName || project.slug}.`,
+    gap.message,
+    `The work queue has a pending item: "${workItemTitle}".`,
+  ];
+  if (gap.suggestedSkill) {
+    lines.push(`Consider using /${gap.suggestedSkill} to address it.`);
+  }
+  return lines.join("\n\n");
 }
 
 function ProjectBadges({
@@ -109,8 +120,15 @@ function ProjectBadges({
           }}
           className="inline-flex items-center gap-0.5"
         >
-          <Badge variant="secondary" className="bg-amber-500/10 px-1.5 py-0 text-[10px] text-amber-400 hover:bg-amber-500/20 transition-colors">
-            {gapsExpanded ? <ChevronDownIcon className="mr-0.5 size-2.5" /> : <ChevronRightIcon className="mr-0.5 size-2.5" />}
+          <Badge
+            variant="secondary"
+            className="bg-amber-500/10 px-1.5 py-0 text-[10px] text-amber-400 hover:bg-amber-500/20 transition-colors"
+          >
+            {gapsExpanded ? (
+              <ChevronDownIcon className="mr-0.5 size-2.5" />
+            ) : (
+              <ChevronRightIcon className="mr-0.5 size-2.5" />
+            )}
             {project.gapCount} {project.gapCount === 1 ? "gap" : "gaps"}
           </Badge>
         </button>
@@ -143,7 +161,10 @@ function GapRow({
     <div className="flex items-start justify-between gap-2 rounded border border-border/30 bg-background/50 px-2.5 py-1.5">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <Badge variant="secondary" className={cn("px-1 py-0 text-[9px]", SEVERITY_COLORS[gap.severity])}>
+          <Badge
+            variant="secondary"
+            className={cn("px-1 py-0 text-[9px]", SEVERITY_COLORS[gap.severity])}
+          >
             {gap.severity}
           </Badge>
           <span className="text-[10px] font-medium text-foreground/70">{gap.category}</span>
@@ -167,7 +188,11 @@ function GapRow({
           className="h-6 gap-1 px-1.5 text-[10px]"
           title="Add to work queue"
         >
-          {isDispatching ? <LoaderIcon className="size-3 animate-spin" /> : <SendIcon className="size-3" />}
+          {isDispatching ? (
+            <LoaderIcon className="size-3 animate-spin" />
+          ) : (
+            <SendIcon className="size-3" />
+          )}
           Dispatch
         </Button>
         <Button
@@ -238,9 +263,7 @@ const TrackedRow = memo(function TrackedRow({
     <div
       className={cn(
         "flex w-full flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-left transition-colors",
-        emphasized
-          ? "border-amber-500/40 bg-amber-500/5"
-          : "border-border/50 bg-card/40",
+        emphasized ? "border-amber-500/40 bg-amber-500/5" : "border-border/50 bg-card/40",
       )}
     >
       <button
@@ -256,7 +279,9 @@ const TrackedRow = memo(function TrackedRow({
             <p className="truncate text-[13px] font-medium text-foreground/90">
               {project.displayName}
             </p>
-            <p className="truncate font-mono text-[10px] text-muted-foreground/50">{project.path}</p>
+            <p className="truncate font-mono text-[10px] text-muted-foreground/50">
+              {project.path}
+            </p>
           </div>
           <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground/60">
             {isOpening ? <LoaderIcon className="size-3 animate-spin" /> : null}
@@ -346,7 +371,6 @@ function PodiumRouteView() {
   const { handleNewThread } = useHandleNewThread();
   const intakeProjectFromPath = usePodiumStore((s) => s.intakeProjectFromPath);
   const intakeStatus = usePodiumStore((s) => s.intakeStatus);
-  const intakeError = usePodiumStore((s) => s.intakeError);
 
   const scanWarnings = usePodiumStore(useShallow((s) => s.scanWarnings));
   const scanRoots = usePodiumStore(useShallow((s) => s.scanRoots));
@@ -446,7 +470,7 @@ function PodiumRouteView() {
   }, [status, scan, podiumScanRootOverride, externalIntakeRoots]);
 
   const handleOpenProject = useCallback(
-    async (project: ScannedProject) => {
+    async (project: ScannedProject, presetPrompt?: string) => {
       if (openingPath) return;
       setOpeningPath(project.path);
       usePodiumStore.getState().setSelectedProjectPath(project.path);
@@ -460,7 +484,10 @@ function PodiumRouteView() {
         if (match) {
           const projectRef = scopeProjectRef(match.environmentId, match.id);
           setProjectExpanded(scopedProjectKey(projectRef), true);
-          await handleNewThread(projectRef, { envMode: defaultThreadEnvMode });
+          await handleNewThread(projectRef, {
+            envMode: defaultThreadEnvMode,
+            ...(presetPrompt !== undefined ? { presetPrompt } : {}),
+          });
           return;
         }
 
@@ -502,7 +529,10 @@ function PodiumRouteView() {
         });
         const projectRef = scopeProjectRef(activeEnvironmentId, projectId);
         setProjectExpanded(scopedProjectKey(projectRef), true);
-        await handleNewThread(projectRef, { envMode: defaultThreadEnvMode });
+        await handleNewThread(projectRef, {
+          envMode: defaultThreadEnvMode,
+          ...(presetPrompt !== undefined ? { presetPrompt } : {}),
+        });
       } catch (cause) {
         toastManager.add({
           type: "error",
@@ -536,7 +566,9 @@ function PodiumRouteView() {
     async (project: ScannedProject) => {
       setInitializingPath(project.path);
       try {
-        await initializeFactory(project.path, defaultConfigFor(project));
+        await initializeFactory(project.path, defaultConfigFor(project), undefined, {
+          autoDetectType: true,
+        });
         await refreshWithOverride();
       } catch (error) {
         toastManager.add({
@@ -551,12 +583,13 @@ function PodiumRouteView() {
     [initializeFactory, refreshWithOverride],
   );
 
-  const handleDispatchGap = useCallback(
-    async (project: ScannedProject, gap: Gap): Promise<boolean> => {
+  const dispatchGap = useCallback(
+    async (project: ScannedProject, gap: Gap) => {
       try {
-        const allRoots = externalIntakeRoots.length > 0
-          ? [...externalIntakeRoots, rootDir].filter(Boolean)
-          : [rootDir].filter(Boolean);
+        const allRoots =
+          externalIntakeRoots.length > 0
+            ? [...externalIntakeRoots, rootDir].filter(Boolean)
+            : [rootDir].filter(Boolean);
         const result = await getWsRpcClient().factory.dispatchWorkPackage({
           projectPath: project.path,
           gap,
@@ -566,25 +599,34 @@ function PodiumRouteView() {
           type: "success",
           title: `Dispatched: ${result.workItem.title}`,
         });
-        return true;
+        return result.workItem;
       } catch (cause) {
         toastManager.add({
           type: "error",
           title: "Dispatch failed",
           description: cause instanceof Error ? cause.message : "Unknown error",
         });
-        return false;
+        return null;
       }
     },
     [externalIntakeRoots, rootDir],
   );
 
+  const handleDispatchGap = useCallback(
+    async (project: ScannedProject, gap: Gap): Promise<boolean> => {
+      const workItem = await dispatchGap(project, gap);
+      return workItem !== null;
+    },
+    [dispatchGap],
+  );
+
   const handleDispatchGapAndOpen = useCallback(
     async (project: ScannedProject, gap: Gap) => {
-      const ok = await handleDispatchGap(project, gap);
-      if (ok) await handleOpenProject(project);
+      const workItem = await dispatchGap(project, gap);
+      if (!workItem) return;
+      await handleOpenProject(project, buildGapDispatchPrompt(project, gap, workItem.title));
     },
-    [handleDispatchGap, handleOpenProject],
+    [dispatchGap, handleOpenProject],
   );
 
   const isLoading = status === "loading";
@@ -608,10 +650,7 @@ function PodiumRouteView() {
           <span className="text-[11px] text-muted-foreground/50">{rootDir}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <PodiumIntakePopover
-            onIntake={handleIntake}
-            isLoading={intakeStatus === "loading"}
-          />
+          <PodiumIntakePopover onIntake={handleIntake} isLoading={intakeStatus === "loading"} />
           <Button
             size="sm"
             variant="ghost"
@@ -672,12 +711,19 @@ function PodiumRouteView() {
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <FactoryIcon className="mb-2 size-6 text-muted-foreground/30" />
               <p className="text-[13px] text-muted-foreground/60">
-                No projects found{scanRoots.length > 1
-                  ? ` across ${scanRoots.length} scan roots`
-                  : <> at <code className="rounded bg-muted/30 px-1">{rootDir}</code></>}
+                No projects found
+                {scanRoots.length > 1 ? (
+                  ` across ${scanRoots.length} scan roots`
+                ) : (
+                  <>
+                    {" "}
+                    at <code className="rounded bg-muted/30 px-1">{rootDir}</code>
+                  </>
+                )}
               </p>
               <p className="mt-1 text-[11px] text-muted-foreground/40">
-                Check your scan root via the ATTACCA_PODIUM_ROOT env var or add intake roots in Settings.
+                Check your scan root via the ATTACCA_PODIUM_ROOT env var or add intake roots in
+                Settings.
               </p>
             </div>
           ) : null}
@@ -754,7 +800,6 @@ function PodiumRouteView() {
               </p>
             </section>
           ) : null}
-
         </div>
       </ScrollArea>
     </div>

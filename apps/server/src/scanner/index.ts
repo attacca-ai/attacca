@@ -56,6 +56,27 @@ function buildExcludeSet(): Set<string> {
 
 export type { ScannedProject };
 
+export interface ScanProjectsDetailedResult {
+  readonly projects: ReadonlyArray<ScannedProject>;
+  readonly warning: string | null;
+}
+
+function describeRootScanFailure(rootDir: string, cause?: unknown): string {
+  if (!cause) {
+    return `Could not scan ${rootDir} (directory not found).`;
+  }
+  const error = cause as NodeJS.ErrnoException;
+  switch (error.code) {
+    case "ENOENT":
+      return `Could not scan ${rootDir} (directory not found).`;
+    case "EACCES":
+    case "EPERM":
+      return `Could not scan ${rootDir} (permission denied).`;
+    default:
+      return `Could not scan ${rootDir}${error.message ? ` (${error.message})` : ""}.`;
+  }
+}
+
 /**
  * Infer basic project state from filesystem when no .factory/ exists.
  */
@@ -104,6 +125,23 @@ function fromFactory(
     repo: config?.repo ?? null,
     stack: config?.stack ? [...config.stack] : [],
   } satisfies ScannedProject;
+}
+
+export function scanProjectsDetailed(rootDir: string): ScanProjectsDetailedResult {
+  if (!existsSync(rootDir)) {
+    return { projects: [], warning: describeRootScanFailure(rootDir) };
+  }
+
+  try {
+    readdirSync(rootDir);
+  } catch (cause) {
+    return { projects: [], warning: describeRootScanFailure(rootDir, cause) };
+  }
+
+  return {
+    projects: scanProjects(rootDir),
+    warning: null,
+  };
 }
 
 /**
@@ -168,7 +206,7 @@ export function scanProjects(rootDir: string): ScannedProject[] {
   }
 
   // Sort: factory projects first, then by name
-  return projects.sort((a, b) => {
+  return projects.toSorted((a, b) => {
     if (a.hasFactory && !b.hasFactory) return -1;
     if (!a.hasFactory && b.hasFactory) return 1;
     return a.slug.localeCompare(b.slug);

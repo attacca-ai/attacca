@@ -88,16 +88,12 @@ export function analyzeGaps(
 
   // G1: missing_config — always applies
   if (config === null) {
-    gaps.push(
-      gap("missing_config", "high", "config.yaml does not exist or failed to parse."),
-    );
+    gaps.push(gap("missing_config", "high", "config.yaml does not exist or failed to parse."));
   }
 
   // G2: missing_status — always applies
   if (status === null) {
-    gaps.push(
-      gap("missing_status", "high", "status.json does not exist or failed to parse."),
-    );
+    gaps.push(gap("missing_status", "high", "status.json does not exist or failed to parse."));
   }
 
   // Remaining checks use config/status fields — if both are missing we can't
@@ -154,9 +150,7 @@ export function analyzeGaps(
   if (phaseAtLeast(phase, "BUILD")) {
     const progressDir = join(factoryPath, FACTORY_FILES.PROGRESS_DIR);
     if (!existsSync(progressDir) || isEmptyDir(progressDir)) {
-      gaps.push(
-        gap("no_session_logs", "low", "No session logs found in .factory/progress/."),
-      );
+      gaps.push(gap("no_session_logs", "low", "No session logs found in .factory/progress/."));
     }
   }
 
@@ -164,9 +158,7 @@ export function analyzeGaps(
   if (ACTIVE_PHASES.has(phase) && status?.last_activity) {
     const last = Date.parse(status.last_activity);
     if (Number.isFinite(last) && Date.now() - last > STALLED_THRESHOLD_MS) {
-      gaps.push(
-        gap("stale_activity", "low", "Last activity is older than 7 days."),
-      );
+      gaps.push(gap("stale_activity", "low", "Last activity is older than 7 days."));
     }
   }
 
@@ -243,4 +235,3 @@ function isEmptyDir(dirPath: string): boolean {
     return true;
   }
 }
-

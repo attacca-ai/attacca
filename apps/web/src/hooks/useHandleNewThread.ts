@@ -15,6 +15,14 @@ import { selectProjectsAcrossEnvironments, useStore } from "../store";
 import { createThreadSelectorByRef } from "../storeSelectors";
 import { resolveThreadRouteTarget } from "../threadRoutes";
 import { useUiStateStore } from "../uiStateStore";
+import { applyPresetPromptIfBlank } from "./useHandleNewThread.logic";
+
+interface NewThreadOptions {
+  branch?: string | null;
+  worktreePath?: string | null;
+  envMode?: DraftThreadEnvMode;
+  presetPrompt?: string | null;
+}
 
 function useNewThreadState() {
   const projects = useStore(useShallow((store) => selectProjectsAcrossEnvironments(store)));
@@ -25,21 +33,16 @@ function useNewThreadState() {
   }, [router]);
 
   return useCallback(
-    (
-      projectRef: ScopedProjectRef,
-      options?: {
-        branch?: string | null;
-        worktreePath?: string | null;
-        envMode?: DraftThreadEnvMode;
-      },
-    ): Promise<void> => {
+    (projectRef: ScopedProjectRef, options?: NewThreadOptions): Promise<void> => {
       const {
         getDraftSessionByLogicalProjectKey,
         getDraftSession,
         getDraftThread,
+        getComposerDraft,
         applyStickyState,
         setDraftThreadContext,
         setLogicalProjectDraftThreadId,
+        setPrompt,
       } = useComposerDraftStore.getState();
       const currentRouteTarget = getCurrentRouteTarget();
       const project = projects.find(
@@ -61,6 +64,12 @@ function useNewThreadState() {
         : null;
       if (storedDraftThread) {
         return (async () => {
+          applyPresetPromptIfBlank({
+            target: storedDraftThread.draftId,
+            presetPrompt: options?.presetPrompt,
+            getPrompt: (target) => getComposerDraft(target)?.prompt,
+            setPrompt,
+          });
           if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
             setDraftThreadContext(storedDraftThread.draftId, {
               ...(hasBranchOption ? { branch: options?.branch ?? null } : {}),
@@ -90,6 +99,12 @@ function useNewThreadState() {
         latestActiveDraftThread.logicalProjectKey === logicalProjectKey &&
         latestActiveDraftThread.promotedTo == null
       ) {
+        applyPresetPromptIfBlank({
+          target: currentRouteTarget.draftId,
+          presetPrompt: options?.presetPrompt,
+          getPrompt: (target) => getComposerDraft(target)?.prompt,
+          setPrompt,
+        });
         if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
           setDraftThreadContext(currentRouteTarget.draftId, {
             ...(hasBranchOption ? { branch: options?.branch ?? null } : {}),
@@ -122,6 +137,12 @@ function useNewThreadState() {
           runtimeMode: DEFAULT_RUNTIME_MODE,
         });
         applyStickyState(draftId);
+        applyPresetPromptIfBlank({
+          target: draftId,
+          presetPrompt: options?.presetPrompt,
+          getPrompt: (target) => getComposerDraft(target)?.prompt,
+          setPrompt,
+        });
 
         await router.navigate({
           to: "/draft/$draftId",

@@ -37,10 +37,7 @@ function getParentDir(rawPath: string): string {
   return lastSlash > 0 ? normalized.substring(0, lastSlash) : normalized;
 }
 
-function isPathUnderRoots(
-  normalizedPath: string,
-  roots: ReadonlyArray<string>,
-): boolean {
+function isPathUnderRoots(normalizedPath: string, roots: ReadonlyArray<string>): boolean {
   return roots.some((root) => {
     const nr = normalizeCwd(root);
     return normalizedPath === nr || normalizedPath.startsWith(nr + "/");
@@ -65,14 +62,17 @@ export interface IntakeDeps {
   }) => Promise<void>;
   readonly handleNewThread: (
     projectRef: ScopedProjectRef,
-    options?: { envMode?: "local" | "worktree" },
+    options?: { envMode?: "local" | "worktree"; presetPrompt?: string | null },
   ) => Promise<void>;
   readonly externalIntakeRoots: ReadonlyArray<string>;
   readonly podiumScanRoot: string;
   readonly updateSettings: (patch: { externalIntakeRoots: ReadonlyArray<string> }) => void;
   readonly defaultThreadEnvMode: "local" | "worktree";
   readonly confirm: (message: string) => Promise<boolean>;
-  readonly scopeProjectRef: (environmentId: EnvironmentId, projectId: ProjectId) => ScopedProjectRef;
+  readonly scopeProjectRef: (
+    environmentId: EnvironmentId,
+    projectId: ProjectId,
+  ) => ScopedProjectRef;
   readonly newProjectId: () => ProjectId;
 }
 
@@ -87,6 +87,11 @@ export interface ScanOptions {
 
 /** Retained across calls so `refresh()` can replay the last scan config. */
 let _lastScanOptions: ScanOptions | null = null;
+
+function formatRejectedScanWarning(root: string, cause: unknown): string {
+  const message = cause instanceof Error ? cause.message.trim() : "";
+  return message.length > 0 ? `Could not scan ${root} (${message}).` : `Could not scan ${root}.`;
+}
 
 interface PodiumState {
   readonly rootDir: string;
@@ -144,7 +149,7 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
 
       const primaryRootDir = primaryResult.rootDir;
       const scanRoots: string[] = [primaryRootDir];
-      const warnings: string[] = [];
+      const warnings: string[] = primaryResult.warning ? [primaryResult.warning] : [];
 
       // Dedup map — primary projects get first-writer advantage
       const seen = new Map<string, ScannedProject>();
@@ -160,9 +165,7 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
 
       if (uniqueExternalRoots.length > 0) {
         const results = await Promise.allSettled(
-          uniqueExternalRoots.map((root) =>
-            client.factory.scanProjects({ rootDir: root }),
-          ),
+          uniqueExternalRoots.map((root) => client.factory.scanProjects({ rootDir: root })),
         );
 
         for (let i = 0; i < results.length; i++) {
@@ -171,7 +174,12 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
           const result = results[i]!;
 
           if (result.status === "rejected") {
-            warnings.push(`Could not scan ${root}`);
+            warnings.push(formatRejectedScanWarning(root, result.reason));
+            continue;
+          }
+
+          if (result.value.warning) {
+            warnings.push(result.value.warning);
             continue;
           }
 
@@ -222,9 +230,7 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
       const wantedCwd = normalizeCwd(trimmed);
 
       // ── Duplicate check ──────────────────────────────────────
-      const existing = deps.orchestrationProjects.find(
-        (p) => normalizeCwd(p.cwd) === wantedCwd,
-      );
+      const existing = deps.orchestrationProjects.find((p) => normalizeCwd(p.cwd) === wantedCwd);
       if (existing) {
         const ref = deps.scopeProjectRef(existing.environmentId, existing.id);
         await deps.handleNewThread(ref, { envMode: deps.defaultThreadEnvMode });
@@ -252,7 +258,7 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
 
       // ── project.create ───────────────────────────────────────
       const projectId = deps.newProjectId();
-      const slug = trimmed.split(/[/\\]/).filter(Boolean).pop() ?? trimmed;
+      const slug = trimmed.split(/[/\\]/).findLast((part) => part.length > 0) ?? trimmed;
       await deps.dispatchProjectCreate({
         projectId,
         title: slug,
@@ -282,6 +288,7 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
       await client.factory.initialize({
         projectPath: trimmed,
         config,
+        autoDetectType: true,
         allowedRoots: rootsForRpc,
       });
 
@@ -291,8 +298,7 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
 
       set({ intakeStatus: "idle", intakeError: null });
     } catch (cause) {
-      const message =
-        cause instanceof Error ? cause.message : "Intake failed";
+      const message = cause instanceof Error ? cause.message : "Intake failed";
       set({ intakeStatus: "error", intakeError: message });
     }
   },
@@ -305,22 +311,19 @@ export const usePodiumStore = create<PodiumState>((set, get) => ({
 // STALLED_THRESHOLD_MS imported from contracts
 
 export function selectTrackedProjects(state: PodiumState): ReadonlyArray<ScannedProject> {
-  return [...state.projects]
+  return state.projects
     .filter((p) => p.hasFactory)
-    .sort((a, b) => {
+    .toSorted((a, b) => {
       const aTime = a.lastActivity ? Date.parse(a.lastActivity) : 0;
       const bTime = b.lastActivity ? Date.parse(b.lastActivity) : 0;
       return bTime - aTime;
     });
 }
 
-export function selectDiscoveredProjects(
-  state: PodiumState,
-): ReadonlyArray<ScannedProject> {
+export function selectDiscoveredProjects(state: PodiumState): ReadonlyArray<ScannedProject> {
   return state.projects
     .filter((p) => !p.hasFactory)
-    .slice()
-    .sort((a, b) => a.slug.localeCompare(b.slug));
+    .toSorted((a, b) => a.slug.localeCompare(b.slug));
 }
 
 export function selectStalledProjects(state: PodiumState): ReadonlyArray<ScannedProject> {
@@ -343,8 +346,7 @@ const GAP_SEVERITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 
 export function selectProjectsByGapSeverity(state: PodiumState): ReadonlyArray<ScannedProject> {
   return selectTrackedProjects(state)
     .filter((p) => p.gaps.length > 0)
-    .slice()
-    .sort((a, b) => {
+    .toSorted((a, b) => {
       const aMax = Math.min(...a.gaps.map((g) => GAP_SEVERITY_ORDER[g.severity] ?? 3));
       const bMax = Math.min(...b.gaps.map((g) => GAP_SEVERITY_ORDER[g.severity] ?? 3));
       if (aMax !== bMax) return aMax - bMax;

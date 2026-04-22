@@ -1,6 +1,6 @@
 # C4 — Gap analysis engine + work package dispatch (spec v0)
 
-**Status**: draft for review
+**Status**: implemented on `feature/gap-dispatch`
 **Date**: 2026-04-11
 **Supersedes**: the C4 line item in `docs/phase-2-followups.md`.
 **Relates to**: `docs/phase-2-podium-spec.md`, `docs/factory-protocol.md`, `packages/contracts/src/factory.ts`, `attacca-forge:harness-simulator` skill.
@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Podium v0 shows a `gapCount` badge on each tracked project, but the number comes directly from `status.json#gap_count` — a static field that nothing writes to automatically. The badge is decorative. There is no system that inspects a project's `.factory/` directory, compares what's there against what *should* be there for the project's current phase and trust tier, and produces a structured list of gaps. There is also no mechanism to turn a gap into actionable work — the user sees "3 gaps" but has no way to ask "which 3?" or "fix them."
+Podium v0 shows a `gapCount` badge on each tracked project, but the number comes directly from `status.json#gap_count` — a static field that nothing writes to automatically. The badge is decorative. There is no system that inspects a project's `.factory/` directory, compares what's there against what _should_ be there for the project's current phase and trust tier, and produces a structured list of gaps. There is also no mechanism to turn a gap into actionable work — the user sees "3 gaps" but has no way to ask "which 3?" or "fix them."
 
 C4 closes both halves:
 
@@ -26,22 +26,22 @@ A gap is a specific, testable deficiency in a project's `.factory/` state relati
 
 v0 gap categories (in priority order):
 
-| ID | Category | Condition | Applies when |
-|----|----------|-----------|-------------|
-| G1 | `missing_config` | `.factory/config.yaml` does not exist or fails to parse | Always |
-| G2 | `missing_status` | `.factory/status.json` does not exist or fails to parse | Always |
-| G3 | `missing_spec` | `.factory/spec.md` does not exist or is empty | Phase >= SPEC |
-| G4 | `missing_context` | `.factory/context.md` does not exist or is empty | Always |
-| G5 | `empty_queue` | `.factory/queue.json` does not exist or has zero pending items | Phase >= BUILD |
-| G6 | `no_session_logs` | `.factory/progress/` has zero session log files | Phase >= BUILD |
-| G7 | `stale_activity` | `status.json#last_activity` is older than 7 days | Phase is BUILD, TEST, or DEPLOY |
-| G8 | `missing_intent_contract` | `.factory/intent-contract.md` does not exist | trust_tier >= 3 |
-| G9 | `missing_scenarios` | `.factory/scenarios.md` does not exist or is empty | Phase >= SPEC and trust_tier >= 2 |
-| G10 | `incomplete_config` | `config.yaml` is missing `assigned_dev`, `stack`, or `repo` for a project in BUILD+ phase | Phase >= BUILD |
+| ID  | Category                  | Condition                                                                                 | Applies when                      |
+| --- | ------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------- |
+| G1  | `missing_config`          | `.factory/config.yaml` does not exist or fails to parse                                   | Always                            |
+| G2  | `missing_status`          | `.factory/status.json` does not exist or fails to parse                                   | Always                            |
+| G3  | `missing_spec`            | `.factory/spec.md` does not exist or is empty                                             | Phase >= SPEC                     |
+| G4  | `missing_context`         | `.factory/context.md` does not exist or is empty                                          | Always                            |
+| G5  | `empty_queue`             | `.factory/queue.json` does not exist or has zero pending items                            | Phase >= BUILD                    |
+| G6  | `no_session_logs`         | `.factory/progress/` has zero session log files                                           | Phase >= BUILD                    |
+| G7  | `stale_activity`          | `status.json#last_activity` is older than 7 days                                          | Phase is BUILD, TEST, or DEPLOY   |
+| G8  | `missing_intent_contract` | `.factory/intent-contract.md` does not exist                                              | trust_tier >= 3                   |
+| G9  | `missing_scenarios`       | `.factory/scenarios.md` does not exist or is empty                                        | Phase >= SPEC and trust_tier >= 2 |
+| G10 | `incomplete_config`       | `config.yaml` is missing `assigned_dev`, `stack`, or `repo` for a project in BUILD+ phase | Phase >= BUILD                    |
 
 **Why these and not more**: each gap maps to a concrete, observable filesystem condition. No heuristic code analysis, no LLM calls, no test-coverage parsing. Those are v1 territory. v0 gaps are cheap to compute (filesystem existence checks + JSON/YAML field reads) and unambiguous to resolve.
 
-**Why phase/tier gating**: requiring a spec for an IDEA-phase project is noise. The gap engine respects the project's declared lifecycle position — gaps are things that are *overdue*, not things that are *eventually needed*.
+**Why phase/tier gating**: requiring a spec for an IDEA-phase project is noise. The gap engine respects the project's declared lifecycle position — gaps are things that are _overdue_, not things that are _eventually needed_.
 
 ### D2. Where gap analysis runs: server-side, on scan
 
@@ -59,18 +59,18 @@ A work package is a `WorkItem` (already defined in `packages/contracts/src/facto
 
 Mapping from gap to work item:
 
-| Gap | WorkItem type | WorkItem title pattern | Suggested skill |
-|-----|---------------|----------------------|-----------------|
-| G1 | `spec_gap` | "Initialize .factory/config.yaml" | — (manual or re-init) |
-| G2 | `spec_gap` | "Create .factory/status.json" | — |
-| G3 | `spec_gap` | "Write project specification" | `attacca-forge:spec-writer` |
-| G4 | `spec_gap` | "Write project context document" | `attacca-forge:codebase-discovery` |
-| G5 | `enhancement` | "Populate work queue" | `attacca-forge:build-orchestrator` |
-| G6 | `enhancement` | "Start first work session" | — |
-| G7 | `enhancement` | "Resume stalled project" | — |
-| G8 | `spec_gap` | "Write intent contract" | `attacca-forge:intent-spec` |
-| G9 | `spec_gap` | "Write behavioral scenarios" | `attacca-forge:spec-architect` |
-| G10 | `enhancement` | "Complete project configuration" | — |
+| Gap | WorkItem type | WorkItem title pattern            | Suggested skill                    |
+| --- | ------------- | --------------------------------- | ---------------------------------- |
+| G1  | `spec_gap`    | "Initialize .factory/config.yaml" | — (manual or re-init)              |
+| G2  | `spec_gap`    | "Create .factory/status.json"     | —                                  |
+| G3  | `spec_gap`    | "Write project specification"     | `attacca-forge:spec-writer`        |
+| G4  | `spec_gap`    | "Write project context document"  | `attacca-forge:codebase-discovery` |
+| G5  | `enhancement` | "Populate work queue"             | `attacca-forge:build-orchestrator` |
+| G6  | `enhancement` | "Start first work session"        | —                                  |
+| G7  | `enhancement` | "Resume stalled project"          | —                                  |
+| G8  | `spec_gap`    | "Write intent contract"           | `attacca-forge:intent-spec`        |
+| G9  | `spec_gap`    | "Write behavioral scenarios"      | `attacca-forge:spec-architect`     |
+| G10 | `enhancement` | "Complete project configuration"  | —                                  |
 
 The `description` field on each work item includes the specific gap detail (e.g., "spec.md does not exist; this project is in SPEC phase and requires a specification"). The `spec_section` field is left null for v0 — it becomes meaningful when gap analysis can reference specific spec sections in v1.
 
@@ -81,7 +81,7 @@ The `description` field on each work item includes the specific gap detail (e.g.
 Dispatch has two modes, selectable per-action in the Podium UI:
 
 1. **Queue only** (default) — write the work item to `.factory/queue.json`. The item appears in the project's Stand queue panel. The assigned dev picks it up in their next session.
-2. **Queue + open thread** — write the work item to the queue *and* open a draft Stand thread with a preset prompt that addresses the gap. The preset prompt includes the gap description and, if a Forge skill is suggested, a `/skill-name` invocation.
+2. **Queue + open thread** — write the work item to the queue _and_ open a draft Stand thread with a preset prompt that addresses the gap. The preset prompt includes the gap description and, if a Forge skill is suggested, a `/skill-name` invocation.
 
 **Why queue-first**: dispatch should be a planning action, not an interruption. The operator triages gaps in Podium, queues work, and the developer processes the queue in Stand. Opening a thread is opt-in for when the operator wants to immediately start working on the gap themselves.
 
@@ -125,13 +125,14 @@ const Gap = Schema.Struct({
 ```
 
 Severity rules:
+
 - **high**: G1 (missing config), G2 (missing status) — the project is unreadable without these
 - **medium**: G3 (missing spec in SPEC+ phase), G8 (missing intent contract at tier 3+), G9 (missing scenarios)
 - **low**: G4, G5, G6, G7, G10 — important but not blocking
 
 ### D7. Relationship to attacca-forge skills
 
-The gap analyzer *suggests* skills but does not *invoke* them. The `suggestedSkill` field on a `Gap` is a hint that the dispatch UI uses to compose the preset prompt for the draft thread. The user (or agent) decides whether to actually run the skill.
+The gap analyzer _suggests_ skills but does not _invoke_ them. The `suggestedSkill` field on a `Gap` is a hint that the dispatch UI uses to compose the preset prompt for the draft thread. The user (or agent) decides whether to actually run the skill.
 
 **Why not auto-invoke**: skill invocation from the server side is not built yet (deferred in C3.6). Even when it is, auto-running a skill that generates a spec or rewrites context.md should require explicit user consent. The gap engine is a diagnostic, not an executor.
 
@@ -182,6 +183,7 @@ Explicitly not building:
 **Given** a tracked project at `D:\repos\acme-api` with `.factory/config.yaml` declaring `phase: SPEC`, `trust_tier: 2`, and no `.factory/spec.md` file on disk
 **When** the user opens Podium and the scan runs
 **Then** the project row shows a "1 gap" badge (amber). Clicking the badge expands the row to show:
+
 - Category: `missing_spec`
 - Severity: medium
 - Message: "spec.md does not exist. Projects in SPEC phase require a specification."
@@ -199,6 +201,7 @@ Explicitly not building:
 **Given** a project with a `missing_spec` gap and no existing `queue.json`
 **When** the user clicks "Dispatch" on the `missing_spec` gap row in Podium
 **Then**:
+
 1. Server creates `.factory/queue.json` with `version: 1`, `generated: <now>`, `generated_by: "podium-dispatch"`.
 2. The queue contains one item: `{ id: <uuid>, priority: "medium", title: "Write project specification", description: "spec.md does not exist. Projects in SPEC phase require a specification.", type: "spec_gap", status: "pending" }`.
 3. Podium shows a success toast: "Dispatched: Write project specification".
@@ -209,6 +212,7 @@ Explicitly not building:
 **Given** a project with a `missing_spec` gap
 **When** the user clicks "Dispatch + Open" on the gap row
 **Then**:
+
 1. The work item is written to `queue.json` (same as scenario 3).
 2. A draft Stand thread opens for the project.
 3. The thread's composer is pre-filled with: "This project needs a specification. The work queue has a pending item: 'Write project specification'. Consider using `/attacca-forge:spec-writer` to generate one."
@@ -219,6 +223,7 @@ Explicitly not building:
 **Given** a project in BUILD phase with: no `spec.md`, no session logs in `progress/`, and `config.yaml` missing `assigned_dev`
 **When** the scan runs
 **Then** the project shows "3 gaps" badge. Expanding shows three gap rows:
+
 1. `missing_spec` (medium) — "spec.md does not exist."
 2. `no_session_logs` (low) — "No session logs found in .factory/progress/."
 3. `incomplete_config` (low) — "config.yaml is missing assigned_dev for a BUILD-phase project."

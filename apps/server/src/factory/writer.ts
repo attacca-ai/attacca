@@ -19,6 +19,7 @@ import {
   type SessionLog,
 } from "@t3tools/contracts";
 
+import { detectProjectType } from "./projectType";
 import { readFactoryDirectory } from "./reader";
 
 // ---------------------------------------------------------------------------
@@ -26,8 +27,19 @@ import { readFactoryDirectory } from "./reader";
 // ---------------------------------------------------------------------------
 
 const CONFIG_FIELD_ORDER = [
-  "version", "name", "display_name", "type", "trust_tier", "phase", "track",
-  "stack", "repo", "assigned_dev", "created", "updated", "experience_level",
+  "version",
+  "name",
+  "display_name",
+  "type",
+  "trust_tier",
+  "phase",
+  "track",
+  "stack",
+  "repo",
+  "assigned_dev",
+  "created",
+  "updated",
+  "experience_level",
   "completed_phases",
 ];
 
@@ -165,7 +177,8 @@ export function generateClaudeMd(ctx: ClaudeMdContext): string {
   if (ctx.queueItems?.length) {
     lines.push("## Work Queue (This Session)");
     for (const item of ctx.queueItems) {
-      const prefix = item.priority === "high" ? "[HIGH]" : item.priority === "medium" ? "[MED]" : "[LOW]";
+      const prefix =
+        item.priority === "high" ? "[HIGH]" : item.priority === "medium" ? "[MED]" : "[LOW]";
       lines.push(`- ${prefix} ${item.title}`);
       if (item.description) lines.push(`  ${item.description}`);
     }
@@ -239,27 +252,35 @@ function getEscalationRules(tier: number): string {
 export function regenerateClaudeMd(projectPath: string): string {
   const directory = readFactoryDirectory(projectPath);
   if (!directory.exists || !directory.config) {
-    throw new Error(
-      `Cannot regenerate CLAUDE.md: no .factory/config.yaml at ${projectPath}`,
-    );
+    throw new Error(`Cannot regenerate CLAUDE.md: no .factory/config.yaml at ${projectPath}`);
   }
 
   const queueItems = directory.queue?.items
     .filter((item) => item.status !== "done")
     .slice(0, 20)
-    .map((item) => ({
-      priority: item.priority,
-      title: item.title,
-      ...(item.description !== undefined ? { description: item.description } : {}),
-    }));
+    .map((item) => {
+      const queueItem: NonNullable<ClaudeMdContext["queueItems"]>[number] = {
+        priority: item.priority,
+        title: item.title,
+      };
+      if (item.description !== undefined) {
+        queueItem.description = item.description;
+      }
+      return queueItem;
+    });
 
-  const recentSessions = directory.sessions.slice(0, 3).map((session) => ({
-    session_id: session.session_id,
-    ...(session.notes !== undefined ? { notes: session.notes } : {}),
-    ...(session.work_items_completed !== undefined
-      ? { work_items_completed: [...session.work_items_completed] }
-      : {}),
-  }));
+  const recentSessions = directory.sessions.slice(0, 3).map((session) => {
+    const recentSession: NonNullable<ClaudeMdContext["recentSessions"]>[number] = {
+      session_id: session.session_id,
+    };
+    if (session.notes !== undefined) {
+      recentSession.notes = session.notes;
+    }
+    if (session.work_items_completed !== undefined) {
+      recentSession.work_items_completed = [...session.work_items_completed];
+    }
+    return recentSession;
+  });
 
   const content = generateClaudeMd({
     config: directory.config,
@@ -278,28 +299,38 @@ export function regenerateClaudeMd(projectPath: string): string {
  * another Attacca instance, or the CLI) does not clobber user edits.
  * Only creates files that are *missing*.
  */
+interface InitializeFactoryOptions {
+  readonly autoDetectType?: boolean;
+}
+
 export function initializeFactory(
   projectPath: string,
   config: FactoryConfig,
+  options: InitializeFactoryOptions = {},
 ): void {
   const factoryPath = ensureFactoryDir(projectPath);
+  const requestedConfig = options.autoDetectType
+    ? { ...config, type: detectProjectType(projectPath) }
+    : config;
+  const existingDirectory = readFactoryDirectory(projectPath);
+  const effectiveConfig = existingDirectory.config ?? requestedConfig;
 
   const configPath = join(factoryPath, FACTORY_FILES.CONFIG);
   if (!existsSync(configPath)) {
-    writeConfig(projectPath, { ...config, version: FACTORY_PROTOCOL_VERSION });
+    writeConfig(projectPath, { ...effectiveConfig, version: FACTORY_PROTOCOL_VERSION });
   }
 
   const statusPath = join(factoryPath, FACTORY_FILES.STATUS);
   if (!existsSync(statusPath)) {
     const status: FactoryStatus = {
-      state: config.phase,
+      state: effectiveConfig.phase,
       health: "active",
-      track: config.track,
+      track: effectiveConfig.track,
       archived: false,
       completion_pct: 0,
       gap_count: 0,
       last_activity: new Date().toISOString(),
-      assigned_dev: config.assigned_dev,
+      assigned_dev: effectiveConfig.assigned_dev,
     };
     writeStatus(projectPath, status);
   }
@@ -307,12 +338,16 @@ export function initializeFactory(
   const contextPath = join(factoryPath, FACTORY_FILES.CONTEXT);
   if (!existsSync(contextPath)) {
     const contextContent = `# ${config.display_name} — Project Context\n\n## Architecture\n\n(Add architecture notes here)\n\n## Domain Notes\n\n(Add domain-specific context here)\n\n## Gotchas\n\n(Add known issues and workarounds here)\n`;
-    writeContextMd(projectPath, contextContent);
+    const effectiveContextContent = contextContent.replace(
+      `# ${config.display_name} â€” Project Context`,
+      `# ${effectiveConfig.display_name} - Project Context`,
+    );
+    writeContextMd(projectPath, effectiveContextContent);
   }
 
   const claudeMdPath = join(factoryPath, FACTORY_FILES.CLAUDE_MD);
   if (!existsSync(claudeMdPath)) {
-    const claudeMd = generateClaudeMd({ config });
+    const claudeMd = generateClaudeMd({ config: effectiveConfig });
     writeClaudeMd(projectPath, claudeMd);
   }
 }

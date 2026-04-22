@@ -57,10 +57,7 @@ function coerceVersion(raw: unknown): number {
   return 1;
 }
 
-function assertSupportedVersion(
-  config: { version?: unknown },
-  projectPath: string,
-): number {
+function assertSupportedVersion(config: { version?: unknown }, projectPath: string): number {
   const found = coerceVersion(config.version);
   if (found > FACTORY_PROTOCOL_VERSION) {
     throw new FactoryProtocolVersionError({
@@ -151,9 +148,10 @@ export function hasFactoryDir(projectPath: string): boolean {
 /**
  * Quick read: just config + status (for dashboard listing).
  */
-export function readFactorySummary(
-  projectPath: string,
-): { config: FactoryConfig | null; status: FactoryStatus | null } {
+export function readFactorySummary(projectPath: string): {
+  config: FactoryConfig | null;
+  status: FactoryStatus | null;
+} {
   const factoryPath = join(projectPath, FACTORY_DIR);
   return {
     config: readConfig(factoryPath, projectPath),

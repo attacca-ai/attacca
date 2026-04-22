@@ -779,11 +779,9 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             { "rpc.aggregate": "workspace" },
           ),
         [WS_METHODS.factoryRead]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.factoryRead,
-            readFactoryDirectoryEffect(input.projectPath),
-            { "rpc.aggregate": "factory" },
-          ),
+          observeRpcEffect(WS_METHODS.factoryRead, readFactoryDirectoryEffect(input.projectPath), {
+            "rpc.aggregate": "factory",
+          }),
         [WS_METHODS.factoryReadSummary]: (input) =>
           observeRpcEffect(
             WS_METHODS.factoryReadSummary,
@@ -793,7 +791,12 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
         [WS_METHODS.factoryInitialize]: (input) =>
           observeRpcEffect(
             WS_METHODS.factoryInitialize,
-            initializeFactoryEffect(input.projectPath, input.config, input.allowedRoots),
+            initializeFactoryEffect(
+              input.projectPath,
+              input.config,
+              input.allowedRoots,
+              input.autoDetectType,
+            ),
             { "rpc.aggregate": "factory" },
           ),
         [WS_METHODS.factoryWriteQueue]: (input) =>
