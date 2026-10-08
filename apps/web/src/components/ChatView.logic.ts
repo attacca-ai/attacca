@@ -38,6 +38,7 @@ export function buildLocalDraftThread(
     modelSelection: fallbackModelSelection,
     runtimeMode: draftThread.runtimeMode,
     interactionMode: draftThread.interactionMode,
+    scope: "standard",
     session: null,
     messages: [],
     error,

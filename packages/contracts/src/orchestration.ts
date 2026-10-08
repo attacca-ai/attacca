@@ -71,6 +71,20 @@ export const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
 export const ProviderInteractionMode = Schema.Literals(["default", "plan"]);
 export type ProviderInteractionMode = typeof ProviderInteractionMode.Type;
 export const DEFAULT_PROVIDER_INTERACTION_MODE: ProviderInteractionMode = "default";
+
+/**
+ * Thread scope. Distinguishes the standard user-facing chat flow from
+ * Arco (Phase 3), the singleton factory-operator surface bound to the
+ * Podium root rather than any single project. Extensible for future
+ * specialised surfaces.
+ *
+ * The reactor uses this at session-start time to enrich the Codex
+ * startSession call with scope-specific bootstrap (read-only sandbox,
+ * Podium cwd, custom developer instructions from `~/.attacca/arco-system.md`).
+ */
+export const ThreadScope = Schema.Literals(["standard", "arco"]);
+export type ThreadScope = typeof ThreadScope.Type;
+export const DEFAULT_THREAD_SCOPE: ThreadScope = "standard";
 export const ProviderRequestKind = Schema.Literals(["command", "file-read", "file-change"]);
 export type ProviderRequestKind = typeof ProviderRequestKind.Type;
 export const AssistantDeliveryMode = Schema.Literals(["buffered", "streaming"]);
@@ -285,6 +299,7 @@ export const OrchestrationThread = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
+  scope: ThreadScope.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_THREAD_SCOPE))),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
@@ -331,6 +346,7 @@ export const OrchestrationThreadShell = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
+  scope: ThreadScope.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_THREAD_SCOPE))),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
@@ -435,6 +451,7 @@ const ThreadCreateCommand = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
+  scope: ThreadScope.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_THREAD_SCOPE))),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   createdAt: IsoDateTime,
@@ -778,6 +795,7 @@ export const ThreadCreatedPayload = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
+  scope: ThreadScope.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_THREAD_SCOPE))),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   createdAt: IsoDateTime,

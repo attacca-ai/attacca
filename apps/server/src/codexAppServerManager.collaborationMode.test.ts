@@ -64,7 +64,6 @@ describe("buildCodexCollaborationMode", () => {
   it("falls back to the built-in default when customDeveloperInstructions is undefined", () => {
     const result = buildCodexCollaborationMode({
       interactionMode: "default",
-      customDeveloperInstructions: undefined,
     });
 
     expect(result?.settings.developer_instructions).toBe(

@@ -54,12 +54,17 @@ const DEFAULT_ARCO_PROMPT_FILENAME = "arco-system.md";
  * `~/.attacca/arco-system.md`. Accepts an explicit override (from the
  * `arcoSystemPromptPath` client setting, introduced in task 6) — when
  * provided it is returned verbatim, letting operators point Arco at a
- * shared prompt file.
+ * shared prompt file. The `ATTACCA_ARCO_PROMPT_PATH` env var overrides
+ * the default location when no explicit override is passed.
  */
 export function resolveArcoSystemPromptPath(override?: string | null): string {
   const trimmed = override?.trim();
   if (trimmed && trimmed.length > 0) {
     return trimmed;
+  }
+  const envOverride = process.env["ATTACCA_ARCO_PROMPT_PATH"]?.trim();
+  if (envOverride && envOverride.length > 0) {
+    return envOverride;
   }
   return join(homedir(), DEFAULT_ARCO_HOME_DIR, DEFAULT_ARCO_PROMPT_FILENAME);
 }

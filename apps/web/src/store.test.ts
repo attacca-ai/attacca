@@ -64,6 +64,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     codexThreadId: null,
     projectId: ProjectId.make("project-1"),
     title: "Thread",
+    scope: "standard",
     modelSelection: {
       provider: "codex",
       model: "gpt-5-codex",
@@ -120,6 +121,7 @@ function makeState(thread: Thread): AppState {
         modelSelection: thread.modelSelection,
         runtimeMode: thread.runtimeMode,
         interactionMode: thread.interactionMode,
+        scope: thread.scope,
         error: thread.error,
         createdAt: thread.createdAt,
         archivedAt: thread.archivedAt,
@@ -553,6 +555,7 @@ describe("incremental orchestration updates", () => {
         },
         runtimeMode: DEFAULT_RUNTIME_MODE,
         interactionMode: DEFAULT_INTERACTION_MODE,
+        scope: "standard",
         branch: null,
         worktreePath: null,
         createdAt: "2026-02-27T00:00:01.000Z",

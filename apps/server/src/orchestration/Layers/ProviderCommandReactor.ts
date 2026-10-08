@@ -15,6 +15,7 @@ import { isTemporaryWorktreeBranch, WORKTREE_BRANCH_PREFIX } from "@t3tools/shar
 import { Cache, Cause, Duration, Effect, Equal, Layer, Option, Schema, Stream } from "effect";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 
+import { loadArcoSystemPrompt } from "../../arco/prompt.ts";
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { GitStatusBroadcaster } from "../../git/Services/GitStatusBroadcaster.ts";
@@ -252,6 +253,21 @@ const make = Effect.gen(function* () {
       thread,
       projects: readModel.projects,
     });
+    // Arco threads (spec D2/D6) inject the operator-editable system prompt
+    // from ~/.attacca/arco-system.md as developer_instructions on every
+    // session start, so prompt edits take effect on the next restart.
+    const arcoDeveloperInstructions =
+      thread.scope === "arco"
+        ? yield* Effect.try({
+            try: () => loadArcoSystemPrompt().content,
+            catch: (cause) =>
+              new ProviderAdapterRequestError({
+                provider: preferredProvider,
+                method: "session.start",
+                detail: `Failed to load the Arco system prompt: ${cause instanceof Error ? cause.message : String(cause)}`,
+              }),
+          })
+        : undefined;
 
     const resolveActiveSession = (threadId: ThreadId) =>
       providerService
@@ -269,6 +285,9 @@ const make = Effect.gen(function* () {
         modelSelection: desiredModelSelection,
         ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
         runtimeMode: desiredRuntimeMode,
+        ...(arcoDeveloperInstructions !== undefined
+          ? { customDeveloperInstructions: arcoDeveloperInstructions }
+          : {}),
       });
 
     const bindSessionToThread = (session: ProviderSession) =>

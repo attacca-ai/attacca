@@ -15,6 +15,10 @@ function ChatIndexRouteView() {
       redirectedRef.current = true;
       void navigate({ to: "/podium", replace: true });
     }
+    if (defaultMode === "arco") {
+      redirectedRef.current = true;
+      void navigate({ to: "/arco", replace: true });
+    }
   }, [defaultMode, navigate]);
 
   return <NoActiveThreadState />;

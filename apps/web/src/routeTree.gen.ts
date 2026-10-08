@@ -18,6 +18,7 @@ import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as ChatPodiumRouteImport } from './routes/_chat.podium'
+import { Route as ChatArcoRouteImport } from './routes/_chat.arco'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
 
@@ -65,6 +66,11 @@ const ChatPodiumRoute = ChatPodiumRouteImport.update({
   path: '/podium',
   getParentRoute: () => ChatRoute,
 } as any)
+const ChatArcoRoute = ChatArcoRouteImport.update({
+  id: '/arco',
+  path: '/arco',
+  getParentRoute: () => ChatRoute,
+} as any)
 const ChatDraftDraftIdRoute = ChatDraftDraftIdRouteImport.update({
   id: '/draft/$draftId',
   path: '/draft/$draftId',
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/arco': typeof ChatArcoRoute
   '/podium': typeof ChatPodiumRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
@@ -92,6 +99,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/arco': typeof ChatArcoRoute
   '/podium': typeof ChatPodiumRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
@@ -106,6 +114,7 @@ export interface FileRoutesById {
   '/_chat': typeof ChatRouteWithChildren
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/_chat/arco': typeof ChatArcoRoute
   '/_chat/podium': typeof ChatPodiumRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
     | '/'
     | '/pair'
     | '/settings'
+    | '/arco'
     | '/podium'
     | '/settings/archived'
     | '/settings/connections'
@@ -132,6 +142,7 @@ export interface FileRouteTypes {
   to:
     | '/pair'
     | '/settings'
+    | '/arco'
     | '/podium'
     | '/settings/archived'
     | '/settings/connections'
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
     | '/_chat'
     | '/pair'
     | '/settings'
+    | '/_chat/arco'
     | '/_chat/podium'
     | '/settings/archived'
     | '/settings/connections'
@@ -226,6 +238,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatPodiumRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/arco': {
+      id: '/_chat/arco'
+      path: '/arco'
+      fullPath: '/arco'
+      preLoaderRoute: typeof ChatArcoRouteImport
+      parentRoute: typeof ChatRoute
+    }
     '/_chat/draft/$draftId': {
       id: '/_chat/draft/$draftId'
       path: '/draft/$draftId'
@@ -244,6 +263,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface ChatRouteChildren {
+  ChatArcoRoute: typeof ChatArcoRoute
   ChatPodiumRoute: typeof ChatPodiumRoute
   ChatIndexRoute: typeof ChatIndexRoute
   ChatEnvironmentIdThreadIdRoute: typeof ChatEnvironmentIdThreadIdRoute
@@ -251,6 +271,7 @@ interface ChatRouteChildren {
 }
 
 const ChatRouteChildren: ChatRouteChildren = {
+  ChatArcoRoute: ChatArcoRoute,
   ChatPodiumRoute: ChatPodiumRoute,
   ChatIndexRoute: ChatIndexRoute,
   ChatEnvironmentIdThreadIdRoute: ChatEnvironmentIdThreadIdRoute,

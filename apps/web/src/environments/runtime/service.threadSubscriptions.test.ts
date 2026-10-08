@@ -65,6 +65,7 @@ vi.mock("./connection", () => ({
 
 vi.mock("../../rpc/wsRpcClient", () => ({
   createWsRpcClient: mockCreateWsRpcClient,
+  setGlobalWsRpcClient: () => {},
 }));
 
 vi.mock("../../rpc/wsTransport", () => ({
@@ -103,6 +104,7 @@ function makeThreadShellSnapshot(params: {
         },
         runtimeMode: "full-access",
         interactionMode: "default",
+        scope: "standard",
         branch: null,
         worktreePath: null,
         latestTurn:

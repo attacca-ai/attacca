@@ -80,6 +80,7 @@ export interface WsRpcClient {
     readonly dispatchWorkPackage: RpcUnaryMethod<typeof WS_METHODS.factoryDispatchWorkPackage>;
     readonly scanProjects: RpcUnaryMethod<typeof WS_METHODS.factoryScanProjects>;
     readonly getPodiumRoot: RpcUnaryNoArgMethod<typeof WS_METHODS.factoryGetPodiumRoot>;
+    readonly arcoPrompt: RpcUnaryMethod<typeof WS_METHODS.factoryArcoPrompt>;
   };
   readonly filesystem: {
     readonly browse: RpcUnaryMethod<typeof WS_METHODS.filesystemBrowse>;
@@ -184,6 +185,8 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.factoryScanProjects](input)),
       getPodiumRoot: () =>
         transport.request((client) => client[WS_METHODS.factoryGetPodiumRoot]({})),
+      arcoPrompt: (input) =>
+        transport.request((client) => client[WS_METHODS.factoryArcoPrompt](input)),
     },
     filesystem: {
       browse: (input) => transport.request((client) => client[WS_METHODS.filesystemBrowse](input)),

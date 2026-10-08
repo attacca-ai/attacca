@@ -280,6 +280,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           },
           interactionMode: "default",
           runtimeMode: "full-access",
+          scope: "standard",
           branch: null,
           worktreePath: null,
           latestTurn: {
@@ -390,6 +391,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           },
           interactionMode: "default",
           runtimeMode: "full-access",
+          scope: "standard",
           branch: null,
           worktreePath: null,
           latestTurn: {

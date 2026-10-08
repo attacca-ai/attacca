@@ -116,6 +116,7 @@ export const WS_METHODS = {
   factoryDispatchWorkPackage: "factory.dispatchWorkPackage",
   factoryScanProjects: "factory.scanProjects",
   factoryGetPodiumRoot: "factory.getPodiumRoot",
+  factoryArcoPrompt: "factory.arcoPrompt",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -260,6 +261,20 @@ export const WsFactoryScanProjectsRpc = Rpc.make(WS_METHODS.factoryScanProjects,
 export const WsFactoryGetPodiumRootRpc = Rpc.make(WS_METHODS.factoryGetPodiumRoot, {
   payload: Schema.Struct({}),
   success: PodiumRootResult,
+});
+
+/**
+ * Arco system prompt maintenance (settings surface). "ensure" creates
+ * `~/.attacca/arco-system.md` from the default template when missing and
+ * reports its path; "restore" overwrites the file with the default.
+ */
+export const WsFactoryArcoPromptRpc = Rpc.make(WS_METHODS.factoryArcoPrompt, {
+  payload: Schema.Struct({
+    mode: Schema.Literals(["ensure", "restore"]),
+  }),
+  success: Schema.Struct({
+    path: Schema.String,
+  }),
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
@@ -474,6 +489,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsFactoryDispatchWorkPackageRpc,
   WsFactoryScanProjectsRpc,
   WsFactoryGetPodiumRootRpc,
+  WsFactoryArcoPromptRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsSubscribeGitStatusRpc,

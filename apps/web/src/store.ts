@@ -234,6 +234,7 @@ function mapThread(thread: OrchestrationThread, environmentId: EnvironmentId): T
     modelSelection: normalizeModelSelection(thread.modelSelection),
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
+    scope: thread.scope,
     session: thread.session ? mapSession(thread.session) : null,
     messages: thread.messages.map((message) => mapMessage(environmentId, message)),
     proposedPlans: thread.proposedPlans.map(mapProposedPlan),
@@ -268,6 +269,7 @@ function mapThreadShell(
     modelSelection: normalizeModelSelection(thread.modelSelection),
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
+    scope: thread.scope,
     error: sanitizeThreadErrorMessage(thread.session?.lastError),
     createdAt: thread.createdAt,
     archivedAt: thread.archivedAt,
@@ -316,6 +318,7 @@ function toThreadShell(thread: Thread): ThreadShell {
     modelSelection: thread.modelSelection,
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
+    scope: thread.scope,
     error: thread.error,
     createdAt: thread.createdAt,
     archivedAt: thread.archivedAt,
@@ -1251,6 +1254,7 @@ function applyEnvironmentOrchestrationEvent(
           modelSelection: event.payload.modelSelection,
           runtimeMode: event.payload.runtimeMode,
           interactionMode: event.payload.interactionMode,
+          scope: event.payload.scope,
           branch: event.payload.branch,
           worktreePath: event.payload.worktreePath,
           latestTurn: null,
@@ -1760,6 +1764,8 @@ export function selectThreadShellsAcrossEnvironments(state: AppState): ThreadShe
 export function selectSidebarThreadsAcrossEnvironments(state: AppState): SidebarThreadSummary[] {
   return getEnvironmentEntries(state).flatMap(([environmentId, environmentState]) =>
     environmentState.threadIds.flatMap((threadId) => {
+      // Arco's singleton thread is surfaced only via /arco (spec D1).
+      if (environmentState.threadShellById[threadId]?.scope === "arco") return [];
       const thread = environmentState.sidebarThreadSummaryById[threadId];
       return thread && thread.environmentId === environmentId ? [thread] : [];
     }),
@@ -1777,6 +1783,8 @@ export function selectSidebarThreadsForProjectRef(
   const environmentState = selectEnvironmentState(state, ref.environmentId);
   const threadIds = environmentState.threadIdsByProjectId[ref.projectId] ?? EMPTY_THREAD_IDS;
   return threadIds.flatMap((threadId) => {
+    // Arco's singleton thread is surfaced only via /arco (spec D1).
+    if (environmentState.threadShellById[threadId]?.scope === "arco") return [];
     const thread = environmentState.sidebarThreadSummaryById[threadId];
     return thread ? [thread] : [];
   });

@@ -295,6 +295,7 @@ describe("ProviderCommandReactor", () => {
         modelSelection: modelSelection,
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
         runtimeMode: "approval-required",
+        scope: "standard",
         branch: null,
         worktreePath: null,
         createdAt: now,
@@ -350,11 +351,68 @@ describe("ProviderCommandReactor", () => {
       },
       runtimeMode: "approval-required",
     });
+    expect(harness.startSession.mock.calls[0]?.[1]).not.toHaveProperty(
+      "customDeveloperInstructions",
+    );
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
     expect(thread?.session?.threadId).toBe("thread-1");
     expect(thread?.session?.runtimeMode).toBe("approval-required");
+  });
+
+  it("injects the Arco system prompt as developer instructions for arco-scoped threads", async () => {
+    const promptDir = fs.mkdtempSync(path.join(os.tmpdir(), "t3code-arco-prompt-"));
+    const promptPath = path.join(promptDir, "arco-system.md");
+    fs.writeFileSync(promptPath, "Arco test prompt", "utf-8");
+    process.env["ATTACCA_ARCO_PROMPT_PATH"] = promptPath;
+    try {
+      const harness = await createHarness();
+      const now = new Date().toISOString();
+
+      await Effect.runPromise(
+        harness.engine.dispatch({
+          type: "thread.create",
+          commandId: CommandId.make("cmd-arco-thread-create"),
+          threadId: ThreadId.make("thread-arco"),
+          projectId: asProjectId("project-1"),
+          title: "Arco",
+          modelSelection: { provider: "codex", model: "gpt-5-codex" },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "read-only",
+          scope: "arco",
+          branch: null,
+          worktreePath: null,
+          createdAt: now,
+        }),
+      );
+      await Effect.runPromise(
+        harness.engine.dispatch({
+          type: "thread.turn.start",
+          commandId: CommandId.make("cmd-arco-turn-start"),
+          threadId: ThreadId.make("thread-arco"),
+          message: {
+            messageId: asMessageId("arco-user-message-1"),
+            role: "user",
+            text: "what gap should I fix?",
+            attachments: [],
+          },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "read-only",
+          createdAt: now,
+        }),
+      );
+
+      await waitFor(() => harness.startSession.mock.calls.length === 1);
+      expect(harness.startSession.mock.calls[0]?.[0]).toEqual(ThreadId.make("thread-arco"));
+      expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
+        runtimeMode: "read-only",
+        customDeveloperInstructions: "Arco test prompt",
+      });
+    } finally {
+      delete process.env["ATTACCA_ARCO_PROMPT_PATH"];
+      fs.rmSync(promptDir, { recursive: true, force: true });
+    }
   });
 
   it("generates a thread title on the first turn", async () => {

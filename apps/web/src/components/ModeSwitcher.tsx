@@ -12,6 +12,7 @@ interface ModeSwitcherProps {
 
 function resolveCurrentMode(pathname: string): Mode {
   if (pathname === "/podium" || pathname.startsWith("/podium/")) return "podium";
+  if (pathname === "/arco" || pathname.startsWith("/arco/")) return "arco";
   return "stand";
 }
 
@@ -26,6 +27,10 @@ const ModeSwitcher = memo(function ModeSwitcher({ className }: ModeSwitcherProps
 
   const goPodium = useCallback(() => {
     void navigate({ to: "/podium" });
+  }, [navigate]);
+
+  const goArco = useCallback(() => {
+    void navigate({ to: "/arco" });
   }, [navigate]);
 
   return (
@@ -70,10 +75,14 @@ const ModeSwitcher = memo(function ModeSwitcher({ className }: ModeSwitcherProps
       <button
         type="button"
         role="tab"
-        aria-selected={false}
-        disabled
-        title="Coming in Phase 3"
-        className="flex cursor-not-allowed items-center justify-center gap-1 rounded px-1.5 py-1 font-medium text-muted-foreground/30"
+        aria-selected={mode === "arco"}
+        onClick={goArco}
+        className={cn(
+          "flex items-center justify-center gap-1 rounded px-1.5 py-1 font-medium transition-colors",
+          mode === "arco"
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground/70 hover:text-foreground/80",
+        )}
       >
         <BotIcon className="size-3" />
         Arco

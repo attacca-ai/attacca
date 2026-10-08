@@ -3,6 +3,7 @@ import {
   type AuthAccessStreamEvent,
   AuthSessionId,
   CommandId,
+  DEFAULT_THREAD_SCOPE,
   EventId,
   type OrchestrationCommand,
   type GitActionProgressEvent,
@@ -42,6 +43,7 @@ import {
   writeQueueEffect,
   writeSessionLogEffect,
 } from "./factory/FactoryRpc";
+import { ensureArcoSystemPrompt, restoreArcoSystemPrompt } from "./arco/prompt";
 import { GitCore } from "./git/Services/GitCore";
 import { GitManager } from "./git/Services/GitManager";
 import { GitStatusBroadcaster } from "./git/Services/GitStatusBroadcaster";
@@ -459,6 +461,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 modelSelection: bootstrap.createThread.modelSelection,
                 runtimeMode: bootstrap.createThread.runtimeMode,
                 interactionMode: bootstrap.createThread.interactionMode,
+                scope: DEFAULT_THREAD_SCOPE,
                 branch: bootstrap.createThread.branch,
                 worktreePath: bootstrap.createThread.worktreePath,
                 createdAt: bootstrap.createThread.createdAt,
@@ -840,6 +843,15 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
           observeRpcEffect(WS_METHODS.factoryGetPodiumRoot, getPodiumRootEffect(), {
             "rpc.aggregate": "factory",
           }),
+        [WS_METHODS.factoryArcoPrompt]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.factoryArcoPrompt,
+            Effect.sync(() => ({
+              path:
+                input.mode === "restore" ? restoreArcoSystemPrompt() : ensureArcoSystemPrompt(),
+            })),
+            { "rpc.aggregate": "factory" },
+          ),
         [WS_METHODS.shellOpenInEditor]: (input) =>
           observeRpcEffect(WS_METHODS.shellOpenInEditor, open.openInEditor(input), {
             "rpc.aggregate": "workspace",

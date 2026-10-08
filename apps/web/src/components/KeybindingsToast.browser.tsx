@@ -132,6 +132,7 @@ function createMinimalSnapshot(): OrchestrationReadModel {
           model: "gpt-5",
         },
         interactionMode: "default",
+        scope: "standard",
         runtimeMode: "full-access",
         branch: "main",
         worktreePath: null,

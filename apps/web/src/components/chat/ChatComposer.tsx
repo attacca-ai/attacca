@@ -1889,9 +1889,11 @@ export const ChatComposer = memo(
                       ? "Type your own answer, or leave this blank to use the selected option"
                       : showPlanFollowUpPrompt && activeProposedPlan
                         ? "Add feedback to refine the plan, or leave this blank to implement it"
-                        : phase === "disconnected"
-                          ? "Ask for follow-up changes or attach images"
-                          : "Ask anything, @tag files/folders, or use / to show available commands"
+                        : activeThread?.scope === "arco"
+                          ? "Ask Arco about your factory..."
+                          : phase === "disconnected"
+                            ? "Ask for follow-up changes or attach images"
+                            : "Ask anything, @tag files/folders, or use / to show available commands"
                 }
                 disabled={isConnecting || isComposerApprovalState}
               />
@@ -1932,7 +1934,13 @@ export const ChatComposer = memo(
                     onProviderModelChange={onProviderModelSelect}
                   />
 
-                  {isComposerFooterCompact ? (
+                  {activeThread?.scope === "arco" ? (
+                    // Arco is sandbox-enforced read-only (spec D4) — the
+                    // runtime/interaction mode controls stay locked.
+                    <span className="ml-1 shrink-0 rounded border border-border/60 bg-muted/20 px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
+                      Read-only
+                    </span>
+                  ) : isComposerFooterCompact ? (
                     <CompactComposerControlsMenu
                       activePlan={showPlanSidebarToggle}
                       interactionMode={interactionMode}

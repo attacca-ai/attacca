@@ -9,7 +9,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   PROVIDER_DISPLAY_NAMES,
   type DesktopUpdateChannel,
@@ -62,6 +62,7 @@ import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
+import { getWsRpcClient } from "../../rpc/wsRpcClient";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   SettingResetButton,
@@ -1486,7 +1487,7 @@ export function GeneralSettingsPanel() {
 const ATTACCA_MODE_LABELS = {
   stand: "Stand",
   podium: "Podium",
-  arco: "Arco (coming soon)",
+  arco: "Arco",
 } as const;
 
 export function StandSettingsPanel() {
@@ -1495,7 +1496,46 @@ export function StandSettingsPanel() {
   const podiumScanRootOverride = useSettings((s) => s.podiumScanRootOverride);
   const externalIntakeRoots = useSettings((s) => s.externalIntakeRoots);
   const dismissedPaths = useSettings((s) => s.dismissedPaths);
+  const arcoSessionId = useSettings((s) => s.arcoSessionId);
   const { updateSettings } = useUpdateSettings();
+  const [arcoPromptPath, setArcoPromptPath] = useState<string | null>(null);
+  const [arcoPromptBusy, setArcoPromptBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getWsRpcClient()
+      .factory.arcoPrompt({ mode: "ensure" })
+      .then((result) => {
+        if (!cancelled) setArcoPromptPath(result.path);
+      })
+      .catch(() => {
+        if (!cancelled) setArcoPromptPath(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const restoreArcoPrompt = useCallback(async () => {
+    setArcoPromptBusy(true);
+    try {
+      const result = await getWsRpcClient().factory.arcoPrompt({ mode: "restore" });
+      setArcoPromptPath(result.path);
+      toastManager.add({
+        type: "success",
+        title: "Arco prompt restored",
+        description: "The default system prompt was written. Restart Arco to apply it.",
+      });
+    } catch (cause) {
+      toastManager.add({
+        type: "error",
+        title: "Could not restore Arco prompt",
+        description: cause instanceof Error ? cause.message : "Unknown error",
+      });
+    } finally {
+      setArcoPromptBusy(false);
+    }
+  }, []);
 
   return (
     <SettingsPageContainer>
@@ -1533,9 +1573,7 @@ export function StandSettingsPanel() {
               <SelectPopup>
                 <SelectItem value="stand">{ATTACCA_MODE_LABELS.stand}</SelectItem>
                 <SelectItem value="podium">{ATTACCA_MODE_LABELS.podium}</SelectItem>
-                <SelectItem value="arco" disabled>
-                  {ATTACCA_MODE_LABELS.arco}
-                </SelectItem>
+                <SelectItem value="arco">{ATTACCA_MODE_LABELS.arco}</SelectItem>
               </SelectPopup>
             </Select>
           }
@@ -1550,6 +1588,36 @@ export function StandSettingsPanel() {
               placeholder="(server default)"
               className="w-72"
             />
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Arco">
+        <SettingsRow
+          title="Restart Arco session"
+          description="Ends the current Arco thread. The next visit to Arco starts a fresh session — use this after editing the system prompt so the change takes effect."
+          control={
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={arcoSessionId === null}
+              onClick={() => updateSettings({ arcoSessionId: null })}
+            >
+              Restart Arco session
+            </Button>
+          }
+        />
+        <SettingsRow
+          title="System prompt"
+          description={
+            arcoPromptPath
+              ? `Arco's developer instructions are loaded from ${arcoPromptPath} on every session start. Edit the file freely, then restart Arco.`
+              : "Arco's developer instructions live in ~/.attacca/arco-system.md. Edit the file freely, then restart Arco."
+          }
+          control={
+            <Button size="xs" variant="outline" disabled={arcoPromptBusy} onClick={restoreArcoPrompt}>
+              {arcoPromptBusy ? "Restoring..." : "Restore default prompt"}
+            </Button>
           }
         />
       </SettingsSection>

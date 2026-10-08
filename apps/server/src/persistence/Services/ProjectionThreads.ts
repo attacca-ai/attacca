@@ -14,6 +14,7 @@ import {
   ProviderInteractionMode,
   RuntimeMode,
   ThreadId,
+  ThreadScope,
   TurnId,
 } from "@t3tools/contracts";
 import { Option, Schema, Context } from "effect";
@@ -28,6 +29,7 @@ export const ProjectionThread = Schema.Struct({
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  scope: ThreadScope,
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
   latestTurnId: Schema.NullOr(TurnId),

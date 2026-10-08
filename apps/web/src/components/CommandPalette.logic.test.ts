@@ -20,6 +20,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     modelSelection: { provider: "codex", model: "gpt-5" },
     runtimeMode: "full-access",
     interactionMode: "default",
+    scope: "standard",
     session: null,
     messages: [],
     proposedPlans: [],

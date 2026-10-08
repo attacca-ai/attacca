@@ -3032,6 +3032,7 @@ export default function ChatView(props: ChatViewProps) {
         modelSelection: nextThreadModelSelection,
         runtimeMode,
         interactionMode: "default",
+        scope: "standard",
         branch: activeThreadBranch,
         worktreePath: activeThread.worktreePath,
         createdAt,
@@ -3208,6 +3209,10 @@ export default function ChatView(props: ChatViewProps) {
     return <NoActiveThreadState />;
   }
 
+  // Arco (spec D1/D3): a bare chat surface — no project header, git
+  // toolbar, or factory panel. The thread is sandbox-enforced read-only.
+  const isArcoThread = activeThread.scope === "arco";
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
       {/* Top bar */}
@@ -3223,6 +3228,15 @@ export default function ChatView(props: ChatViewProps) {
             : "py-2 sm:py-3",
         )}
       >
+        {isArcoThread ? (
+          <div className="flex h-full min-h-[36px] items-center gap-2">
+            <BotIcon className="size-4 text-muted-foreground/60" />
+            <span className="text-sm font-medium text-foreground">Arco</span>
+            <span className="rounded border border-border/60 bg-muted/20 px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
+              Scope: Arco
+            </span>
+          </div>
+        ) : (
         <ChatHeader
           activeThreadEnvironmentId={activeThread.environmentId}
           activeThreadId={activeThread.id}
@@ -3250,6 +3264,7 @@ export default function ChatView(props: ChatViewProps) {
           onToggleTerminal={toggleTerminalVisibility}
           onToggleDiff={onToggleDiff}
         />
+        )}
       </header>
 
       {/* Error banner */}
@@ -3306,7 +3321,12 @@ export default function ChatView(props: ChatViewProps) {
           </div>
 
           {/* Input bar */}
-          <div className={cn("px-3 pt-1.5 sm:px-5 sm:pt-2", isGitRepo ? "pb-1" : "pb-3 sm:pb-4")}>
+          <div
+            className={cn(
+              "px-3 pt-1.5 sm:px-5 sm:pt-2",
+              isGitRepo && !isArcoThread ? "pb-1" : "pb-3 sm:pb-4",
+            )}
+          >
             <ChatComposer
               ref={composerRef}
               composerDraftTarget={composerDraftTarget}
@@ -3375,7 +3395,7 @@ export default function ChatView(props: ChatViewProps) {
             />
           </div>
 
-          {isGitRepo && (
+          {isGitRepo && !isArcoThread && (
             <BranchToolbar
               environmentId={activeThread.environmentId}
               threadId={activeThread.id}
@@ -3440,7 +3460,7 @@ export default function ChatView(props: ChatViewProps) {
         ) : null}
 
         {/* Factory panel */}
-        {factoryPanelOpen ? (
+        {factoryPanelOpen && !isArcoThread ? (
           <FactoryPanel
             projectPath={activeProject?.cwd ?? null}
             onClose={() => setFactoryPanelOpen(false)}

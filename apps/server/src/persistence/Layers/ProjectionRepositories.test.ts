@@ -82,6 +82,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         },
         runtimeMode: "full-access",
         interactionMode: "default",
+        scope: "standard",
         branch: null,
         worktreePath: null,
         latestTurnId: null,
